@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+* {
+  font-family: 'Poppins', sans-serif;
+}
+
+:root {
+  --brand: #00aa13;
+  --brand-light: #e6f9e8;
+  --brand-dark: #008a0f;
+}
+
+body {
+  min-width: 320px;
+}
+
+@keyframes streakRing {
+  0%   { box-shadow: 0 0 0 0px rgba(0,170,19,0.45); }
+  70%  { box-shadow: 0 0 0 7px rgba(0,170,19,0); }
+  100% { box-shadow: 0 0 0 0px rgba(0,170,19,0); }
+}

@@ -2920,16 +2920,14 @@ function CalendarPage({ darkMode, onToggleDarkMode }) {
           </div>
         </div>
       )}
+      {showCalPlan && widgetSession && (
+        <SessionPlanModal
+          session={{ ...widgetSession, time: widgetSession.time, studio: widgetSession.studio || "Studio 1" }}
+          darkMode={darkMode}
+          onClose={() => setShowCalPlan(false)}
+        />
+      )}
     </div>
-
-    {/* Session plan modal */}
-    {showCalPlan && widgetSession && (
-      <SessionPlanModal
-        session={{ ...widgetSession, time: widgetSession.time, studio: widgetSession.studio || "Studio 1" }}
-        darkMode={darkMode}
-        onClose={() => setShowCalPlan(false)}
-      />
-    )}
   )
 }
 

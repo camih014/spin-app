@@ -1117,8 +1117,10 @@ function SessionPlanModal({ session, darkMode, onClose }) {
           <p className={`text-sm leading-relaxed ${muted} mb-5`}>{plan.overview}</p>
 
           {/* Workout bar chart */}
-          <div className="mb-5">
-            <WorkoutChart sessionName={session.name} darkMode={darkMode} />
+          <div className="mb-5 overflow-x-auto">
+            <div style={{ minWidth: 360 }}>
+              <WorkoutChart sessionName={session.name} darkMode={darkMode} />
+            </div>
           </div>
           {/* Zone analysis */}
           <div className="mb-5">
@@ -1196,41 +1198,42 @@ function HomePage({ darkMode, onToggleDarkMode }) {
       </div>
 
       {/* Next ride hero */}
-      <div className={`${card} mb-6 flex flex-col sm:flex-row items-start sm:items-center gap-4 md:gap-6`}>
-        <div className="flex-1 min-w-0">
-          <p className={`text-xs mb-1 ${muted}`}>Next ride</p>
-          <h2 className={`text-xl md:text-2xl font-bold mb-2 ${heading}`}>Power Ride</h2>
-          <p className={`text-sm mb-3 ${muted}`}>Today · 17:00 · 45 mins · Anna Banana</p>
-          <div className="flex items-center gap-2 mb-2 sm:mb-4">
-            <span className={`text-xs ${muted}`}>Studio 3</span>
-            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#00aa13]"><span className="w-1.5 h-1.5 rounded-full bg-[#00aa13] flex-shrink-0" />Booked</span>
+      <div className={`${card} mb-6 p-4 md:p-6`}>
+        <div className="flex items-start gap-4">
+          {/* Left: text */}
+          <div className="flex-1 min-w-0">
+            <p className={`text-xs mb-1 ${muted}`}>Next ride</p>
+            <h2 className={`text-xl font-bold mb-1.5 ${heading}`}>Power Ride</h2>
+            <p className={`text-sm mb-2 ${muted}`}>Today · 17:00 · 45 mins · Anna Banana</p>
+            <div className="flex items-center gap-2">
+              <span className={`text-xs ${muted}`}>Studio 3</span>
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#00aa13]"><span className="w-1.5 h-1.5 rounded-full bg-[#00aa13] flex-shrink-0" />Booked</span>
+            </div>
           </div>
-        </div>
 
-        {/* Instructor quote — centered between left details and right ring */}
-        <div className={`hidden lg:flex items-start gap-3 rounded-xl p-4 max-w-xs ${subtle}`}>
-          <div className="w-9 h-9 rounded-full bg-[#e6f9e8] flex-shrink-0 flex items-center justify-center text-xs font-medium text-[#00aa13]">AB</div>
-          <div>
-            <p className={`text-xs font-medium ${heading}`}>Anna says</p>
-            <p className={`text-xs italic mt-1 ${muted}`}>"{getInstructorQuote("Anna Banana", "Power Ride")}"</p>
-          </div>
-        </div>
-
-        {/* Intensity ring — flex-1 on lg balances with left so the middle quote is centred */}
-        <div className="flex-shrink-0 lg:flex-1 flex lg:justify-end">
-          <div className="flex flex-col items-center">
-            <div className="relative w-20 h-20 md:w-24 md:h-24">
-              <svg viewBox="0 0 80 80" className="w-20 h-20 md:w-24 md:h-24 -rotate-90">
+          {/* Right: intensity ring */}
+          <div className="flex-shrink-0 flex flex-col items-center">
+            <div className="relative w-16 h-16 md:w-20 md:h-20">
+              <svg viewBox="0 0 80 80" className="w-16 h-16 md:w-20 md:h-20 -rotate-90">
                 <circle cx="40" cy="40" r="32" fill="none" stroke={darkMode ? "#374151" : "#e5e7eb"} strokeWidth="6" />
                 <circle cx="40" cy="40" r="32" fill="none" stroke="#00aa13" strokeWidth="6"
                   strokeDasharray="201" strokeDashoffset="160" strokeLinecap="round" />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className={`text-sm font-bold ${heading}`}>Low</span>
-                <span className={`text-xs ${muted}`}>intensity</span>
+                <span className={`text-xs font-bold ${heading}`}>Low</span>
+                <span className={`text-[10px] ${muted}`}>intensity</span>
               </div>
             </div>
-            <p className={`text-xs mt-2 text-center ${muted}`}>Eee-easy! Great for recovery</p>
+            <p className={`text-[10px] mt-1 text-center ${muted} hidden sm:block`}>Easy · great for recovery</p>
+          </div>
+        </div>
+
+        {/* Instructor quote — visible sm+ */}
+        <div className={`hidden sm:flex items-start gap-3 rounded-xl p-3 mt-4 ${subtle}`}>
+          <div className="w-8 h-8 rounded-full bg-[#e6f9e8] flex-shrink-0 flex items-center justify-center text-xs font-medium text-[#00aa13]">AB</div>
+          <div>
+            <p className={`text-xs font-medium ${heading}`}>Anna says</p>
+            <p className={`text-xs italic mt-0.5 ${muted}`}>"{getInstructorQuote("Anna Banana", "Power Ride")}"</p>
           </div>
         </div>
       </div>

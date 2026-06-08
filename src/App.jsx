@@ -1,4 +1,4 @@
-import React, { useState } from "react"
+import React, { useState, useRef } from "react"
 import { Home, Calendar, BookOpen, Bike, Trophy, User, Settings, LogOut } from "lucide-react"
 
 // ─── DATA ───────────────────────────────────────────────────────────────────
@@ -1042,6 +1042,24 @@ function DarkModeToggle({ darkMode, onToggle }) {
 
 // ─── SESSION PLAN MODAL ──────────────────────────────────────────────────────
 
+function useDragToDismiss(onDismiss) {
+  const [dragY, setDragY] = useState(0)
+  const startY = useRef(null)
+  return {
+    dragY,
+    sheetStyle: {
+      transform: `translateY(${dragY}px)`,
+      transition: dragY === 0 ? "transform 0.3s cubic-bezier(0.32,0.72,0,1)" : "none",
+      maxHeight: "88vh",
+    },
+    handlers: {
+      onTouchStart: e => { startY.current = e.touches[0].clientY },
+      onTouchMove:  e => { setDragY(Math.max(0, e.touches[0].clientY - startY.current)) },
+      onTouchEnd:   ()  => { if (dragY > 72) { setDragY(0); onDismiss() } else setDragY(0) },
+    },
+  }
+}
+
 function SessionPlanModal({ session, darkMode, onClose }) {
   if (!session) return null
 
@@ -1850,6 +1868,7 @@ function SessionDonut({ sessionName, darkMode }) {
 function BookingsPage({ darkMode, onToggleDarkMode }) {
   const [selectedSession, setSelectedSession] = useState(null)
   const [selectedBike, setSelectedBike]       = useState(null)
+  const bookingDrag = useDragToDismiss(() => { setSelectedSession(null); setShowPlan(false) })
   const [bookedSessions, setBookedSessions]   = useState([])
   const [toast, setToast]                     = useState(null)
   const [showPlan, setShowPlan]               = useState(false)
@@ -2295,7 +2314,8 @@ function BookingsPage({ darkMode, onToggleDarkMode }) {
           {/* Backdrop */}
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => { setSelectedSession(null); setShowPlan(false) }} />
           {/* Sheet */}
-          <div className={`relative rounded-t-3xl flex flex-col overflow-hidden ${darkMode ? "bg-gray-900" : "bg-white"}`} style={{ maxHeight: "88vh" }}>
+          <div className={`relative rounded-t-3xl flex flex-col overflow-hidden ${darkMode ? "bg-gray-900" : "bg-white"}`}
+            style={bookingDrag.sheetStyle} {...bookingDrag.handlers}>
             {/* Drag handle */}
             <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
               <div className={`w-10 h-1 rounded-full ${darkMode ? "bg-gray-600" : "bg-gray-300"}`} />
@@ -3100,6 +3120,7 @@ function RidesPage({ darkMode, onToggleDarkMode }) {
   const [selectedRide, setSelectedRide]       = useState(ridesData[0])
   const [collectedStreaks, setCollectedStreaks] = useState(new Set())
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false)
+  const ridesDrag = useDragToDismiss(() => setMobileSheetOpen(false))
 
   function collectStreak(ride) {
     setCollectedStreaks(prev => new Set([...prev, ride.date + ride.name]))
@@ -3383,7 +3404,8 @@ function RidesPage({ darkMode, onToggleDarkMode }) {
       {mobileSheetOpen && selectedRide && (
         <div className="fixed inset-0 z-50 md:hidden flex flex-col justify-end">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setMobileSheetOpen(false)} />
-          <div className={`relative rounded-t-3xl flex flex-col overflow-hidden ${darkMode ? "bg-gray-900" : "bg-white"}`} style={{ maxHeight: "88vh" }}>
+          <div className={`relative rounded-t-3xl flex flex-col overflow-hidden ${darkMode ? "bg-gray-900" : "bg-white"}`}
+            style={ridesDrag.sheetStyle} {...ridesDrag.handlers}>
             <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
               <div className={`w-10 h-1 rounded-full ${darkMode ? "bg-gray-600" : "bg-gray-300"}`} />
             </div>

@@ -3167,10 +3167,11 @@ function generateRideData(ride) {
   })
 }
 
-function RideLineChart({ data, ride, darkMode }) {
+function RideLineChart({ data, ride, darkMode, pxWidth, hideLegend }) {
   const [hovIdx, setHovIdx] = useState(null)
   const W = 400, H = 190, ml = 4, mr = 4, mt = 6, mb = 18
   const cw = W - ml - mr, ch = H - mt - mb
+  const svgSize = pxWidth ? { width: pxWidth, height: pxWidth * H / W } : { width: "100%" }
 
   const cadMin = 45, cadMax = Math.max(ride.peakCadence + 5, 130)
   const normCad = v => Math.min(100, Math.max(0, (v - cadMin) / (cadMax - cadMin) * 100))
@@ -3192,7 +3193,7 @@ function RideLineChart({ data, ride, darkMode }) {
 
   return (
     <div className="relative select-none">
-      <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: "block", overflow: "visible" }}
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ display: "block", overflow: "visible", ...svgSize }}
         onMouseMove={e => {
           const rect = e.currentTarget.getBoundingClientRect()
           const frac = (e.clientX - rect.left) / rect.width
@@ -3232,13 +3233,78 @@ function RideLineChart({ data, ride, darkMode }) {
           <span style={{ color: "#00aa13" }}>●</span> {data[hovIdx].zoneAccuracy}% zone
         </div>
       )}
-      <div className="flex items-center gap-4 mt-2.5">
-        {[["#2888F8","Cadence"],["#fb7512","Resistance"],["#00aa13","Zone accuracy"]].map(([c,l]) => (
-          <div key={l} className="flex items-center gap-1.5">
-            <div className="w-4 rounded-full" style={{ height: 2, background: c }} />
-            <span className={`text-xs ${darkMode ? "text-gray-400" : "text-gray-500"}`}>{l}</span>
+      {!hideLegend && (
+        <div className="flex items-center gap-4 mt-2.5">
+          {[["#2888F8","Cadence"],["#fb7512","Resistance"],["#00aa13","Zone accuracy"]].map(([c,l]) => (
+            <div key={l} className="flex items-center gap-1.5">
+              <div className="w-4 rounded-full" style={{ height: 2, background: c }} />
+              <span className={`text-xs ${darkMode ? "text-gray-400" : "text-gray-500"}`}>{l}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function RideChartModal({ ride, darkMode, onClose }) {
+  const [zoom, setZoom] = useState(1)
+  const data = generateRideData(ride)
+  const heading = darkMode ? "text-white"    : "text-gray-900"
+  const muted   = darkMode ? "text-gray-400" : "text-gray-500"
+  const bg      = darkMode ? "bg-gray-900"   : "bg-white"
+  const border  = darkMode ? "border-gray-800" : "border-gray-100"
+
+  // Base width fills the modal; zoom multiplies it (chart scrolls horizontally when > container)
+  const baseW = 640
+  const chartW = Math.round(baseW * zoom)
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6">
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className={`relative ${bg} rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:max-w-3xl max-h-[92vh] flex flex-col overflow-hidden z-10`}
+        style={{ boxShadow: "0 32px 80px rgba(0,0,0,0.4)" }}>
+
+        {/* Header */}
+        <div className={`px-6 pt-6 pb-4 flex items-start justify-between border-b ${border} flex-shrink-0`}>
+          <div className="min-w-0 pr-4">
+            <p className="text-xs font-bold uppercase tracking-widest text-[#00aa13] mb-1">Ride Telemetry</p>
+            <h2 className={`text-xl font-bold leading-tight ${heading}`}>{ride.name}</h2>
+            <p className={`text-sm mt-0.5 ${muted}`}>{ride.date} · {ride.time} · {ride.instructor}</p>
           </div>
-        ))}
+          <button onClick={onClose}
+            className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors
+              ${darkMode ? "hover:bg-gray-800 text-gray-400" : "hover:bg-gray-100 text-gray-500"}`}>✕</button>
+        </div>
+
+        {/* Zoom controls */}
+        <div className={`px-6 py-3 flex items-center justify-between border-b ${border} flex-shrink-0`}>
+          <div className="flex items-center gap-4">
+            {[["#2888F8","Cadence"],["#fb7512","Resistance"],["#00aa13","Zone accuracy"]].map(([c,l]) => (
+              <div key={l} className="flex items-center gap-1.5">
+                <div className="w-4 rounded-full" style={{ height: 2, background: c }} />
+                <span className={`text-xs ${muted}`}>{l}</span>
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button onClick={() => setZoom(z => Math.max(1, +(z - 0.5).toFixed(1)))} disabled={zoom <= 1}
+              className={`w-8 h-8 rounded-lg flex items-center justify-center text-lg font-bold transition-colors
+                ${zoom <= 1 ? "opacity-30 cursor-not-allowed" : ""} ${darkMode ? "bg-gray-800 text-gray-300 hover:bg-gray-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>−</button>
+            <span className={`text-xs font-semibold w-10 text-center tabular-nums ${muted}`}>{zoom.toFixed(1)}×</span>
+            <button onClick={() => setZoom(z => Math.min(4, +(z + 0.5).toFixed(1)))} disabled={zoom >= 4}
+              className={`w-8 h-8 rounded-lg flex items-center justify-center text-lg font-bold transition-colors
+                ${zoom >= 4 ? "opacity-30 cursor-not-allowed" : ""} ${darkMode ? "bg-gray-800 text-gray-300 hover:bg-gray-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>+</button>
+          </div>
+        </div>
+
+        {/* Scrollable chart */}
+        <div className="overflow-auto flex-1 p-6">
+          <div style={{ width: chartW }}>
+            <RideLineChart data={data} ride={ride} darkMode={darkMode} pxWidth={chartW} hideLegend />
+          </div>
+          {zoom > 1 && <p className={`text-xs mt-3 text-center ${muted}`}>Scroll horizontally to pan across the session</p>}
+        </div>
       </div>
     </div>
   )
@@ -3306,6 +3372,7 @@ function RidesPage({ darkMode, onToggleDarkMode }) {
   const [selectedRide, setSelectedRide]       = useState(ridesData[0])
   const [collectedStreaks, setCollectedStreaks] = useState(new Set())
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false)
+  const [chartModalOpen, setChartModalOpen]   = useState(false)
   const ridesDrag = useDragToDismiss(() => setMobileSheetOpen(false))
 
   function collectStreak(ride) {
@@ -3532,7 +3599,14 @@ function RidesPage({ darkMode, onToggleDarkMode }) {
 
             {/* Session profile */}
             <div className={`p-5 border-b ${divider}`}>
-              <p className={`text-xs font-semibold uppercase tracking-widest mb-3 ${muted}`}>Session Profile</p>
+              <div className="flex items-center justify-between mb-3">
+                <p className={`text-xs font-semibold uppercase tracking-widest ${muted}`}>Session Profile</p>
+                <button onClick={() => setChartModalOpen(true)}
+                  className="text-xs font-semibold text-[#00aa13] hover:underline flex items-center gap-1">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+                  Expand
+                </button>
+              </div>
               <div className="flex items-end gap-0.5 h-20 mb-5">
                 {getIntensity(selectedRide.name).map((v, i) => {
                   const zone = getFTPZone(v)
@@ -3708,7 +3782,14 @@ function RidesPage({ darkMode, onToggleDarkMode }) {
               </div>
               {/* Session profile */}
               <div className={`p-5 border-b ${divider}`}>
-                <p className={`text-xs font-semibold uppercase tracking-widest mb-3 ${muted}`}>Session Profile</p>
+                <div className="flex items-center justify-between mb-3">
+                  <p className={`text-xs font-semibold uppercase tracking-widest ${muted}`}>Session Profile</p>
+                  <button onClick={() => setChartModalOpen(true)}
+                    className="text-xs font-semibold text-[#00aa13] hover:underline flex items-center gap-1">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+                    Expand
+                  </button>
+                </div>
                 <div className="flex items-end gap-0.5 h-12 mb-4">
                   {getIntensity(selectedRide.name).map((v, i) => {
                     const zone = getFTPZone(v)
@@ -3747,6 +3828,10 @@ function RidesPage({ darkMode, onToggleDarkMode }) {
             </div>
           </div>
         </div>
+      )}
+
+      {chartModalOpen && selectedRide && (
+        <RideChartModal ride={selectedRide} darkMode={darkMode} onClose={() => setChartModalOpen(false)} />
       )}
     </div>
   )

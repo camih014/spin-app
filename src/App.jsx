@@ -2905,7 +2905,7 @@ function CalendarPage({ darkMode, onToggleDarkMode }) {
               {mySessions.map((s, i) => (
                 <button key={i}
                   onClick={() => setWidgetIdx(i)}
-                  className={`flex items-center justify-between py-2.5 w-full text-left transition-colors rounded px-1 -mx-1
+                  className={`flex items-center justify-between py-2.5 w-full text-left transition-colors rounded-xl px-2 -mx-2
                     ${i === clampedIdx ? darkMode ? "bg-gray-800" : "bg-[#f0fdf4]" : ""}`}
                 >
                   <div className="flex items-center gap-3 min-w-0">

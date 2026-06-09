@@ -1219,20 +1219,12 @@ function DarkModeToggle({ darkMode, onToggle }) {
 
 // ─── SESSION PLAN MODAL ──────────────────────────────────────────────────────
 
-function Avatar({ name, size = 32, square = false, user = false }) {
-  const [err, setErr] = useState(false)
-  const seed    = user ? "eeniejim-camih" : name.toLowerCase().replace(/\s+/g, "-")
+function Avatar({ name, size = 32, square = false }) {
   const initials = name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()
-  const radius  = square ? Math.round(size * 0.28) : "50%"
-  const style   = { width: size, height: size, borderRadius: radius, flexShrink: 0, objectFit: "cover" }
-
-  if (!err) return (
-    <img src={`https://i.pravatar.cc/${size * 2}?u=${seed}`} alt={name}
-      onError={() => setErr(true)}
-      style={style} />
-  )
+  const radius   = square ? Math.round(size * 0.28) : "50%"
   return (
-    <div style={{ ...style, background: "#e6f9e8", display: "flex", alignItems: "center",
+    <div style={{ width: size, height: size, borderRadius: radius, flexShrink: 0,
+      background: "#e6f9e8", display: "flex", alignItems: "center",
       justifyContent: "center", fontSize: size * 0.32, fontWeight: 700, color: "#00aa13" }}>
       {initials}
     </div>

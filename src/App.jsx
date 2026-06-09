@@ -3175,18 +3175,33 @@ function RideLineChart({ data, ride, darkMode, pxWidth, hideLegend }) {
 
   const cadMin = 45, cadMax = Math.max(ride.peakCadence + 5, 130)
   const normCad = v => Math.min(100, Math.max(0, (v - cadMin) / (cadMax - cadMin) * 100))
-  function toPath(fn) {
-    return data.map((d, i) => {
-      const x = ml + (i / (data.length - 1)) * cw
-      const y = mt + (1 - fn(d) / 100) * ch
-      return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`
-    }).join(" ")
+  function pts(fn) {
+    return data.map((d, i) => ({
+      x: ml + (i / (data.length - 1)) * cw,
+      y: mt + (1 - fn(d) / 100) * ch,
+    }))
+  }
+  // Catmull-Rom → cubic bezier for a smooth, flowing line
+  function smooth(points) {
+    if (points.length < 2) return ""
+    const t = 0.166
+    let d = `M${points[0].x.toFixed(1)},${points[0].y.toFixed(1)}`
+    for (let i = 0; i < points.length - 1; i++) {
+      const p0 = points[i - 1] || points[i]
+      const p1 = points[i]
+      const p2 = points[i + 1]
+      const p3 = points[i + 2] || p2
+      const c1x = p1.x + (p2.x - p0.x) * t, c1y = p1.y + (p2.y - p0.y) * t
+      const c2x = p2.x - (p3.x - p1.x) * t, c2y = p2.y - (p3.y - p1.y) * t
+      d += ` C${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`
+    }
+    return d
   }
 
   const paths = {
-    cad:  toPath(d => normCad(d.cadence)),
-    res:  toPath(d => d.resistance),
-    zone: toPath(d => d.zoneAccuracy),
+    cad:  smooth(pts(d => normCad(d.cadence))),
+    res:  smooth(pts(d => d.resistance)),
+    zone: smooth(pts(d => d.zoneAccuracy)),
   }
   const hovX = hovIdx !== null ? ml + (hovIdx / (data.length - 1)) * cw : null
   const muted = darkMode ? "#4B5563" : "#E5E7EB"
@@ -3225,9 +3240,8 @@ function RideLineChart({ data, ride, darkMode, pxWidth, hideLegend }) {
       {hovIdx !== null && hovX !== null && (
         <div className={`absolute pointer-events-none text-xs px-2 py-1.5 rounded-lg whitespace-nowrap z-10
           ${darkMode ? "bg-gray-700 text-white" : "bg-gray-900 text-white"}`}
-          style={{ top: 0, left: `${(hovIdx / (data.length - 1)) * 100}%`,
-            transform: hovIdx < 5 ? "translate(4px,-100%)" : hovIdx > 39 ? "translate(-100%,-100%)" : "translate(-50%,-100%)",
-            marginTop: -4 }}>
+          style={{ top: 2, left: `${(hovIdx / (data.length - 1)) * 100}%`,
+            transform: hovIdx < 5 ? "translateX(4px)" : hovIdx > 39 ? "translateX(-100%)" : "translateX(-50%)" }}>
           <span style={{ color: "#2888F8" }}>●</span> {data[hovIdx].cadence} rpm &nbsp;
           <span style={{ color: "#fb7512" }}>●</span> {data[hovIdx].resistance}% resistance &nbsp;
           <span style={{ color: "#00aa13" }}>●</span> {data[hovIdx].zoneAccuracy}% zone
@@ -3248,16 +3262,11 @@ function RideLineChart({ data, ride, darkMode, pxWidth, hideLegend }) {
 }
 
 function RideChartModal({ ride, darkMode, onClose }) {
-  const [zoom, setZoom] = useState(1)
-  const data = generateRideData(ride)
+  const data    = generateRideData(ride)
   const heading = darkMode ? "text-white"    : "text-gray-900"
   const muted   = darkMode ? "text-gray-400" : "text-gray-500"
   const bg      = darkMode ? "bg-gray-900"   : "bg-white"
   const border  = darkMode ? "border-gray-800" : "border-gray-100"
-
-  // Base width fills the modal; zoom multiplies it (chart scrolls horizontally when > container)
-  const baseW = 640
-  const chartW = Math.round(baseW * zoom)
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6">
@@ -3277,33 +3286,20 @@ function RideChartModal({ ride, darkMode, onClose }) {
               ${darkMode ? "hover:bg-gray-800 text-gray-400" : "hover:bg-gray-100 text-gray-500"}`}>✕</button>
         </div>
 
-        {/* Zoom controls */}
-        <div className={`px-6 py-3 flex items-center justify-between border-b ${border} flex-shrink-0`}>
-          <div className="flex items-center gap-4">
-            {[["#2888F8","Cadence"],["#fb7512","Resistance"],["#00aa13","Zone accuracy"]].map(([c,l]) => (
-              <div key={l} className="flex items-center gap-1.5">
-                <div className="w-4 rounded-full" style={{ height: 2, background: c }} />
-                <span className={`text-xs ${muted}`}>{l}</span>
-              </div>
-            ))}
-          </div>
-          <div className="flex items-center gap-1.5">
-            <button onClick={() => setZoom(z => Math.max(1, +(z - 0.5).toFixed(1)))} disabled={zoom <= 1}
-              className={`w-8 h-8 rounded-lg flex items-center justify-center text-lg font-bold transition-colors
-                ${zoom <= 1 ? "opacity-30 cursor-not-allowed" : ""} ${darkMode ? "bg-gray-800 text-gray-300 hover:bg-gray-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>−</button>
-            <span className={`text-xs font-semibold w-10 text-center tabular-nums ${muted}`}>{zoom.toFixed(1)}×</span>
-            <button onClick={() => setZoom(z => Math.min(4, +(z + 0.5).toFixed(1)))} disabled={zoom >= 4}
-              className={`w-8 h-8 rounded-lg flex items-center justify-center text-lg font-bold transition-colors
-                ${zoom >= 4 ? "opacity-30 cursor-not-allowed" : ""} ${darkMode ? "bg-gray-800 text-gray-300 hover:bg-gray-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>+</button>
-          </div>
+        {/* Legend */}
+        <div className={`px-6 py-3 flex items-center gap-4 border-b ${border} flex-shrink-0`}>
+          {[["#2888F8","Cadence"],["#fb7512","Resistance"],["#00aa13","Zone accuracy"]].map(([c,l]) => (
+            <div key={l} className="flex items-center gap-1.5">
+              <div className="w-4 rounded-full" style={{ height: 2, background: c }} />
+              <span className={`text-xs ${muted}`}>{l}</span>
+            </div>
+          ))}
         </div>
 
-        {/* Scrollable chart */}
-        <div className="overflow-auto flex-1 p-6">
-          <div style={{ width: chartW }}>
-            <RideLineChart data={data} ride={ride} darkMode={darkMode} pxWidth={chartW} hideLegend />
-          </div>
-          {zoom > 1 && <p className={`text-xs mt-3 text-center ${muted}`}>Scroll horizontally to pan across the session</p>}
+        {/* Chart — fills modal width */}
+        <div className="overflow-y-auto flex-1 p-6 pt-8">
+          <RideLineChart data={data} ride={ride} darkMode={darkMode} hideLegend />
+          <p className={`text-xs mt-4 text-center ${muted}`}>Hover across the line to read values at each minute</p>
         </div>
       </div>
     </div>

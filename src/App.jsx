@@ -1219,6 +1219,26 @@ function DarkModeToggle({ darkMode, onToggle }) {
 
 // ─── SESSION PLAN MODAL ──────────────────────────────────────────────────────
 
+function Avatar({ name, size = 32, square = false, user = false }) {
+  const [err, setErr] = useState(false)
+  const seed    = user ? "eeniejim-camih" : name.toLowerCase().replace(/\s+/g, "-")
+  const initials = name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()
+  const radius  = square ? Math.round(size * 0.28) : "50%"
+  const style   = { width: size, height: size, borderRadius: radius, flexShrink: 0, objectFit: "cover" }
+
+  if (!err) return (
+    <img src={`https://i.pravatar.cc/${size * 2}?u=${seed}`} alt={name}
+      onError={() => setErr(true)}
+      style={style} />
+  )
+  return (
+    <div style={{ ...style, background: "#e6f9e8", display: "flex", alignItems: "center",
+      justifyContent: "center", fontSize: size * 0.32, fontWeight: 700, color: "#00aa13" }}>
+      {initials}
+    </div>
+  )
+}
+
 function useDragToDismiss(onDismiss) {
   const [dragY, setDragY] = useState(0)
   const startY = useRef(null)
@@ -1371,7 +1391,7 @@ function HomePage({ darkMode, onToggleDarkMode }) {
       <div className="flex items-center justify-end gap-3 mb-6 md:mb-8">
         <DarkModeToggle darkMode={darkMode} onToggle={onToggleDarkMode} />
         <span className={`hidden sm:inline text-sm ${muted}`}>eenieJIM</span>
-        <div className="w-8 h-8 rounded-full bg-[#e6f9e8] flex items-center justify-center text-xs font-medium text-[#00aa13]">EJ</div>
+        <Avatar name="eenieJIM" size={32} user />
       </div>
 
       {/* Next ride hero */}
@@ -2144,7 +2164,7 @@ function BookingsPage({ darkMode, onToggleDarkMode }) {
             ))}
           </div>
           <span className={`hidden sm:inline text-sm ${muted}`}>eenieJIM</span>
-          <div className="w-8 h-8 rounded-full bg-[#e6f9e8] flex items-center justify-center text-xs font-medium text-[#00aa13]">EJ</div>
+          <Avatar name="eenieJIM" size={32} user />
         </div>
       </div>
 
@@ -2353,9 +2373,7 @@ function BookingsPage({ darkMode, onToggleDarkMode }) {
 
                 <div className={`p-5 border-b ${divider}`}>
                   <div className={`flex items-center gap-3 rounded-xl p-4 ${subtle}`}>
-                    <div className="w-10 h-10 rounded-full bg-[#e6f9e8] flex items-center justify-center text-xs font-semibold text-[#00aa13]">
-                      {selectedSession.instructor.split(" ").map(w => w[0]).join("").slice(0,2).toUpperCase()}
-                    </div>
+                    <Avatar name={selectedSession.instructor} size={40} />
                     <div>
                       <p className={`text-sm font-medium ${heading}`}>{selectedSession.instructor}</p>
                       <p className={`text-xs ${muted}`}>Lead Instructor</p>
@@ -2523,9 +2541,7 @@ function BookingsPage({ darkMode, onToggleDarkMode }) {
               {/* Instructor */}
               <div className={`px-5 py-4 border-b ${divider}`}>
                 <div className={`flex items-center gap-3 rounded-xl p-4 ${subtle}`}>
-                  <div className="w-10 h-10 rounded-full bg-[#e6f9e8] flex items-center justify-center text-xs font-semibold text-[#00aa13] flex-shrink-0">
-                    {selectedSession.instructor.split(" ").map(w => w[0]).join("").slice(0,2).toUpperCase()}
-                  </div>
+                  <Avatar name={selectedSession.instructor} size={40} />
                   <div>
                     <p className={`text-sm font-medium ${heading}`}>{selectedSession.instructor}</p>
                     <p className={`text-xs ${muted}`}>Lead Instructor</p>
@@ -2775,7 +2791,7 @@ function CalendarPage({ darkMode, onToggleDarkMode }) {
 
         {/* Instructor */}
         <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-full bg-[#e6f9e8] flex items-center justify-center text-xs font-bold text-[#00aa13] flex-shrink-0">{initials}</div>
+          <Avatar name={s.instructor} size={28} />
           <div>
             <p className={`text-xs font-medium ${heading}`}>{s.instructor}</p>
             <p className={`text-xs ${muted}`}>Lead Instructor</p>
@@ -2814,9 +2830,7 @@ function CalendarPage({ darkMode, onToggleDarkMode }) {
         {/* Instructor quote */}
         {(s.state === "booked") && (
           <div className={`flex items-start gap-2.5 rounded-xl p-3 ${subtle}`}>
-            <div className="w-7 h-7 rounded-full bg-[#e6f9e8] flex items-center justify-center text-[10px] font-bold text-[#00aa13] flex-shrink-0">
-              {s.instructor.split(" ").map(w => w[0]).join("").slice(0,2)}
-            </div>
+            <Avatar name={s.instructor} size={28} />
             <p className={`text-xs italic leading-relaxed ${muted}`}>"{getInstructorQuote(s.instructor, s.name)}"</p>
           </div>
         )}
@@ -2905,7 +2919,7 @@ function CalendarPage({ darkMode, onToggleDarkMode }) {
               {mySessions.map((s, i) => (
                 <button key={i}
                   onClick={() => setWidgetIdx(i)}
-                  className={`flex items-center justify-between py-2.5 w-full text-left transition-colors rounded-xl px-2 -mx-2
+                  className={`flex items-center justify-between py-2.5 w-full text-left transition-colors rounded-xl px-3
                     ${i === clampedIdx ? darkMode ? "bg-gray-800" : "bg-[#f0fdf4]" : ""}`}
                 >
                   <div className="flex items-center gap-3 min-w-0">
@@ -2963,7 +2977,7 @@ function CalendarPage({ darkMode, onToggleDarkMode }) {
             ))}
           </div>
           <span className={`hidden sm:inline text-sm ${muted}`}>eenieJIM</span>
-          <div className="w-8 h-8 rounded-full bg-[#e6f9e8] flex items-center justify-center text-xs font-medium text-[#00aa13]">EJ</div>
+          <Avatar name="eenieJIM" size={32} user />
         </div>
       </div>
 
@@ -3326,7 +3340,7 @@ function RidesPage({ darkMode, onToggleDarkMode }) {
         <div className="flex items-center gap-2 md:gap-3">
           <DarkModeToggle darkMode={darkMode} onToggle={onToggleDarkMode} />
           <span className={`hidden sm:inline text-sm ${muted}`}>eenieJIM</span>
-          <div className="w-8 h-8 rounded-full bg-[#e6f9e8] flex items-center justify-center text-xs font-medium text-[#00aa13]">EJ</div>
+          <Avatar name="eenieJIM" size={32} user />
         </div>
       </div>
 
@@ -3398,9 +3412,7 @@ function RidesPage({ darkMode, onToggleDarkMode }) {
               <h2 className={`text-xl font-bold mt-1 ${heading}`}>{selectedRide.name}</h2>
               <p className={`text-xs mt-1 ${muted}`}>{selectedRide.date} · {selectedRide.time} · {selectedRide.studio}</p>
               <div className={`flex items-center gap-2.5 mt-3 px-3 py-2.5 rounded-xl ${subtle}`}>
-                <div className="w-8 h-8 rounded-full bg-[#e6f9e8] flex items-center justify-center text-xs font-bold text-[#00aa13] flex-shrink-0">
-                  {selectedRide.instructor.split(" ").map(w => w[0]).join("").slice(0,2).toUpperCase()}
-                </div>
+                <Avatar name={selectedRide.instructor} size={32} />
                 <div>
                   <p className={`text-xs font-semibold ${heading}`}>{selectedRide.instructor}</p>
                   <p className={`text-xs ${muted}`}>Lead Instructor · 45 min</p>
@@ -3764,7 +3776,7 @@ function AchievementsPage({ darkMode, onToggleDarkMode, onNavigate }) {
         </div>
         <div className="flex items-center gap-3">
           <span className={`hidden sm:inline text-sm ${muted}`}>eenieJIM</span>
-          <div className="w-8 h-8 rounded-full bg-[#e6f9e8] flex items-center justify-center text-xs font-medium text-[#00aa13]">EJ</div>
+          <Avatar name="eenieJIM" size={32} user />
         </div>
       </div>
 
@@ -3922,7 +3934,7 @@ function SettingsPage({ darkMode, onToggleDarkMode }) {
         {/* Profile */}
         <SettingsSection darkMode={darkMode}>
           <div className={`flex items-center gap-4 px-5 py-4 ${subtle}`}>
-            <div className="w-14 h-14 rounded-full bg-[#e6f9e8] flex items-center justify-center text-lg font-bold text-[#00aa13] flex-shrink-0">EJ</div>
+            <Avatar name="eenieJIM" size={56} user />
             <div className="flex-1 min-w-0">
               <p className={`font-semibold ${heading}`}>eenieJIM</p>
               <p className={`text-sm ${muted}`}>camih014@gmail.com</p>
@@ -4093,14 +4105,14 @@ function ProfilePage({ darkMode, onToggleDarkMode }) {
         <h1 className={`text-xl font-semibold ${heading}`}>Profile</h1>
         <div className="flex items-center gap-3">
           <DarkModeToggle darkMode={darkMode} onToggle={onToggleDarkMode} />
-          <div className="w-8 h-8 rounded-full bg-[#e6f9e8] flex items-center justify-center text-xs font-medium text-[#00aa13]">EJ</div>
+          <Avatar name="eenieJIM" size={32} user />
         </div>
       </div>
 
       {/* Identity card */}
       <div className={`${card} p-5 mb-5`}>
         <div className="flex items-center gap-4">
-          <div className="w-16 h-16 rounded-2xl bg-[#e6f9e8] flex items-center justify-center text-xl font-bold text-[#00aa13] flex-shrink-0">EJ</div>
+          <Avatar name="eenieJIM" size={64} square user />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2.5 flex-wrap">
               <h2 className={`text-xl font-bold ${heading}`}>eenieJIM</h2>
@@ -4401,7 +4413,7 @@ function LogOutPage({ darkMode }) {
     <div className="flex items-center justify-center h-full p-8">
       <div className="max-w-sm w-full">
         <div className={`rounded-2xl border p-8 text-center ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`}>
-          <div className="w-16 h-16 rounded-full bg-[#e6f9e8] flex items-center justify-center text-xl font-bold text-[#00aa13] mx-auto mb-5">EJ</div>
+          <Avatar name="eenieJIM" size={64} user />
           <h2 className={`text-lg font-bold mb-1 ${heading}`}>Sign out?</h2>
           <p className={`text-sm mb-1 ${muted}`}>eenieJIM · camih014@gmail.com</p>
           <p className={`text-xs mb-7 ${muted}`}>Your ride history, bookings and achievements are saved to your account and will be here when you return.</p>

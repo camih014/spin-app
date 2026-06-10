@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react"
+import React, { useState, useRef, useEffect } from "react"
 import { Home, Calendar, BookOpen, Bike, Trophy, User, Settings, LogOut,
   ChevronDown, LayoutDashboard, Users, ListMusic, SlidersHorizontal, BarChart3, CalendarClock } from "lucide-react"
 
@@ -4971,11 +4971,42 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode }) {
   const [hover, setHover]     = useState(null)        // { frac, start, secs, zone, cad }
   const [cursor, setCursor]   = useState(null)        // insert position in seconds; null = end
   const [summaryOpen, setSummaryOpen] = useState(false)
+  const [playing, setPlaying] = useState(false)
+  const [playhead, setPlayhead] = useState(0)
+  const [dragging, setDragging] = useState(false)
+  const rafRef = useRef(0), lastRef = useRef(0)
 
   const TARGET = length * 60
   const total  = strokes.reduce((s, st) => s + st[0], 0)
   const scale  = Math.max(TARGET, total)
-  const cur    = cursor == null ? total : Math.min(cursor, total)
+  const insertPos = playing ? Math.min(playhead, scale) : (cursor == null ? total : Math.min(cursor, total))
+  const cur    = insertPos
+
+  // Playback — playhead sweeps the timeline so you can lay zones down in time
+  useEffect(() => {
+    if (!playing) return
+    const PLAY_SECONDS = 30   // wall-clock seconds to traverse the whole canvas
+    lastRef.current = performance.now()
+    function tick(now) {
+      const dt = (now - lastRef.current) / 1000
+      lastRef.current = now
+      setPlayhead(p => {
+        const next = p + (scale / PLAY_SECONDS) * dt
+        if (next >= scale) { setPlaying(false); return scale }
+        return next
+      })
+      rafRef.current = requestAnimationFrame(tick)
+    }
+    rafRef.current = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(rafRef.current)
+  }, [playing, scale])
+
+  function togglePlay() {
+    if (playing) { setPlaying(false); return }
+    setPlayhead(insertPos >= scale ? 0 : insertPos)
+    setPlaying(true)
+  }
+  function stopPlay() { setPlaying(false); setPlayhead(0) }
 
   // merge consecutive strokes with same zone + cadence
   const merged = strokes.reduce((acc, [secs, zone, cad]) => {
@@ -5003,19 +5034,24 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode }) {
 
   function addZone(zone) {
     const stroke = [brush, zone, cadence]
-    if (cursor == null || cur >= total) { commit([...strokes, stroke], null); return }
-    // insert/split at cursor
-    const out = []; let acc = 0, done = false
-    for (const st of strokes) {
-      const [secs, z, c] = st
-      if (!done && cur <= acc + 0.001) { out.push(stroke); done = true; out.push(st) }
-      else if (!done && cur < acc + secs) {
-        out.push([cur - acc, z, c]); out.push(stroke); out.push([secs - (cur - acc), z, c]); done = true
-      } else out.push(st)
-      acc += secs
+    const at = insertPos
+    if (at >= total) {
+      commit([...strokes, stroke], playing ? undefined : null)
+    } else {
+      // insert/split at the cursor/playhead
+      const out = []; let acc = 0, done = false
+      for (const st of strokes) {
+        const [secs, z, c] = st
+        if (!done && at <= acc + 0.001) { out.push(stroke); done = true; out.push(st) }
+        else if (!done && at < acc + secs) {
+          out.push([at - acc, z, c]); out.push(stroke); out.push([secs - (at - acc), z, c]); done = true
+        } else out.push(st)
+        acc += secs
+      }
+      if (!done) out.push(stroke)
+      commit(out, playing ? undefined : at + brush)
     }
-    if (!done) out.push(stroke)
-    commit(out, cur + brush)
+    if (playing) setPlayhead(p => p + brush)
   }
   function undo()  { setUndoStack(s => { if (!s.length) return s; setStrokes(s[s.length-1]); setCursor(null); return s.slice(0,-1) }) }
   function clear() { commit([], null) }
@@ -5105,25 +5141,47 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode }) {
           <span className={`text-xs font-semibold ${total > TARGET ? "text-orange-500" : muted}`}>{fmtSecs(total)} / {length}m</span>
         </div>
 
-        {/* Audio waveform lane — track energy guides your cadence */}
-        <div className={`flex items-center gap-1 rounded-lg px-2 mb-1.5 ${darkMode ? "bg-gray-800/60" : "bg-gray-50"}`} style={{ height: 34 }}>
-          {waveform.map((h, i) => (
-            <div key={i} className="flex-1 rounded-full" style={{ height: `${h*100}%`, background: darkMode ? "#475569" : "#cbd5e1", minWidth: 1 }} />
-          ))}
-        </div>
         <p className={`text-[10px] mb-2 ${muted}`}>🎵 {playlist} · beat energy — busier sections suit higher cadence</p>
 
-        {/* Bar canvas */}
-        <div className="relative">
+        {/* Combined wrapper: waveform + bars share one draggable playhead */}
+        <div className="relative select-none" style={{ cursor: total > 0 ? "ew-resize" : "default", touchAction: "none" }}
+          onPointerDown={e => {
+            if (total === 0) return
+            setPlaying(false); setDragging(true)
+            const rect = e.currentTarget.getBoundingClientRect()
+            const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
+            setCursor(Math.min(Math.round(frac*scale/15)*15, total))
+            try { e.currentTarget.setPointerCapture(e.pointerId) } catch {}
+          }}
+          onPointerMove={e => {
+            const rect = e.currentTarget.getBoundingClientRect()
+            const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
+            if (dragging) { setCursor(Math.min(Math.round(frac*scale/15)*15, total)); return }
+            const t = frac*scale; let acc = 0, h = null
+            for (const [secs, zone, cad] of merged) { if (t>=acc && t<acc+secs) { h = { frac, start: acc, secs, zone, cad }; break } acc += secs }
+            setHover(h)
+          }}
+          onPointerUp={() => setDragging(false)}
+          onPointerLeave={() => { if (!dragging) setHover(null) }}>
+
           {/* Hover tooltip */}
-          {hover && (
-            <div className={`absolute -top-1 z-10 pointer-events-none text-xs px-2 py-1.5 rounded-lg whitespace-nowrap ${darkMode ? "bg-gray-700 text-white" : "bg-gray-900 text-white"}`}
+          {hover && !dragging && (
+            <div className={`absolute -top-1 z-20 pointer-events-none text-xs px-2 py-1.5 rounded-lg whitespace-nowrap ${darkMode ? "bg-gray-700 text-white" : "bg-gray-900 text-white"}`}
               style={{ left: `${hover.frac * 100}%`, transform: hover.frac > 0.8 ? "translate(-100%,-100%)" : hover.frac < 0.2 ? "translate(0,-100%)" : "translate(-50%,-100%)" }}>
               <span style={{ color: ZONE_COLORS[hover.zone-1] }}>●</span> Z{hover.zone} {ZONE_NAMES[hover.zone-1]} · {CADENCE_BANDS[hover.cad].rpm} · {fmtSecs(hover.start)}–{fmtSecs(hover.start + hover.secs)}
             </div>
           )}
+
+          {/* Audio waveform lane */}
+          <div className={`flex items-center gap-1 rounded-lg px-2 mb-1.5 ${darkMode ? "bg-gray-800/60" : "bg-gray-50"}`} style={{ height: 34 }}>
+            {waveform.map((h, i) => {
+              const past = total > 0 && (i / waveform.length) <= (insertPos / scale)
+              return <div key={i} className="flex-1 rounded-full" style={{ height: `${h*100}%`, background: past ? "#00aa13" : darkMode ? "#475569" : "#cbd5e1", opacity: past ? 0.55 : 1, minWidth: 1 }} />
+            })}
+          </div>
+
+          {/* Bar canvas */}
           <div className={`relative w-full rounded-lg overflow-hidden ${darkMode ? "bg-gray-800" : "bg-gray-50"}`}
-            onMouseMove={onCanvasMove} onMouseLeave={() => setHover(null)}
             style={{ height: 130, backgroundImage: darkMode
               ? "repeating-linear-gradient(90deg, transparent, transparent 9.99%, rgba(255,255,255,0.05) 9.99%, rgba(255,255,255,0.05) calc(9.99% + 1px))"
               : "repeating-linear-gradient(90deg, transparent, transparent 9.99%, rgba(0,0,0,0.05) 9.99%, rgba(0,0,0,0.05) calc(9.99% + 1px))" }}>
@@ -5140,30 +5198,39 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode }) {
                 ))}
               </div>
             )}
-            {/* hover guide line */}
-            {hover && <div className="absolute top-0 bottom-0 w-px bg-white/50 pointer-events-none" style={{ left: `${hover.frac*100}%` }} />}
-            {/* insert cursor line */}
-            {total > 0 && (
-              <div className="absolute top-0 bottom-0 pointer-events-none" style={{ left: `${cur/scale*100}%` }}>
-                <div className="w-0.5 h-full bg-[#00aa13]" />
-                <div className="absolute -top-0.5 -translate-x-1/2 w-2.5 h-2.5 rounded-full bg-[#00aa13] border-2 border-white" style={{ left: 1 }} />
-              </div>
-            )}
           </div>
+
+          {/* hover guide line (spans both lanes) */}
+          {hover && !dragging && <div className="absolute top-0 bottom-0 w-px bg-white/50 pointer-events-none z-10" style={{ left: `${hover.frac*100}%` }} />}
+          {/* playhead / insert cursor (spans both lanes) */}
+          {total > 0 && (
+            <div className="absolute top-0 bottom-0 pointer-events-none z-10" style={{ left: `${insertPos/scale*100}%` }}>
+              <div className={`w-0.5 h-full ${playing ? "bg-[#00aa13]" : "bg-[#00aa13]"}`} style={{ boxShadow: playing ? "0 0 6px #00aa13" : "none" }} />
+              <div className="absolute -top-1 -translate-x-1/2 w-3 h-3 rounded-full bg-[#00aa13] border-2 border-white shadow" style={{ left: 1 }} />
+            </div>
+          )}
         </div>
 
-        {/* Insert position slider */}
-        {total > 0 && (
-          <div className="flex items-center gap-2 mt-3">
-            <span className={`text-[10px] ${muted}`}>Insert at</span>
-            <input type="range" min={0} max={total} step={15} value={cur}
-              onChange={e => setCursor(+e.target.value)}
-              className="flex-1 accent-[#00aa13]" style={{ height: 4 }} />
-            <span className={`text-xs font-semibold tabular-nums ${heading}`} style={{ width: 52, textAlign: "right" }}>{fmtSecs(cur)}</span>
-            <button onClick={() => setCursor(null)}
-              className={`text-[10px] font-semibold px-2 py-1 rounded-lg transition-colors ${cursor == null ? "opacity-30 cursor-not-allowed" : darkMode ? "bg-gray-800 text-gray-300 hover:bg-gray-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>To end</button>
-          </div>
-        )}
+        {/* Play + insert controls */}
+        <div className="flex items-center gap-2 mt-3">
+          <button onClick={togglePlay} disabled={total === 0}
+            className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${total === 0 ? "opacity-30 cursor-not-allowed" : "bg-[#00aa13] text-white hover:bg-[#008a0f]"}`}>
+            {playing
+              ? <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+              : <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5l12 7-12 7z"/></svg>}
+          </button>
+          <button onClick={stopPlay} disabled={total === 0}
+            className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${total === 0 ? "opacity-30 cursor-not-allowed" : darkMode ? "bg-gray-800 text-gray-300 hover:bg-gray-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+          </button>
+          <input type="range" min={0} max={Math.max(total,1)} step={15} value={Math.min(insertPos, total)}
+            onChange={e => { setPlaying(false); setCursor(+e.target.value) }} disabled={total === 0}
+            className="flex-1 accent-[#00aa13]" style={{ height: 4 }} />
+          <span className={`text-xs font-semibold tabular-nums ${heading}`} style={{ width: 80, textAlign: "right" }}>{fmtSecs(insertPos)} / {length}m</span>
+          <button onClick={() => { setPlaying(false); setCursor(null) }}
+            className={`text-[10px] font-semibold px-2 py-1 rounded-lg transition-colors ${cursor == null && !playing ? "opacity-30 cursor-not-allowed" : darkMode ? "bg-gray-800 text-gray-300 hover:bg-gray-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>End</button>
+        </div>
+        {playing && <p className="text-[10px] mt-1.5 text-[#00aa13] font-medium">▶ Playing — tap a zone to drop it at the playhead</p>}
 
         {/* Brush + cadence */}
         <div className="flex flex-wrap items-center gap-x-2 gap-y-3 mt-4">

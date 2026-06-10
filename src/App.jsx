@@ -991,8 +991,7 @@ const RIDER_NAV = [
 
 const INSTRUCTOR_NAV = [
   { label: "Studio Home",   icon: LayoutDashboard   },
-  { label: "My Classes",    icon: ListMusic         },
-  { label: "Roster",        icon: Users             },
+  { label: "My Classes",    icon: Users             },
   { label: "Class Builder", icon: SlidersHorizontal },
   { label: "Insights",      icon: BarChart3         },
 ]
@@ -1015,7 +1014,8 @@ export default function App() {
   const isInstructorPage = INSTRUCTOR_NAV.some(n => n.label === activePage)
   const mobileNav = isInstructorPage ? INSTRUCTOR_NAV : RIDER_NAV
 
-  function openRoster(cls) { setRosterClass(cls); setActivePage("Roster") }
+  function openRoster(cls) { setRosterClass(cls); setActivePage("My Classes") }
+  function navTo(page) { setRosterClass(null); setActivePage(page) }
 
   const toggle = key => setOpenSections(s => ({ ...s, [key]: !s[key] }))
   const dm = () => setDarkMode(!darkMode)
@@ -1038,10 +1038,10 @@ export default function App() {
         {/* Workspaces */}
         <div className="flex flex-col gap-2 flex-1 overflow-y-auto">
           <NavSection title="Rider" icon={Bike} items={RIDER_NAV}
-            activePage={activePage} onSelect={setActivePage} darkMode={darkMode}
+            activePage={activePage} onSelect={navTo} darkMode={darkMode}
             open={openSections.rider} onToggle={() => toggle("rider")} />
           <NavSection title="Instructor" icon={LayoutDashboard} items={INSTRUCTOR_NAV}
-            activePage={activePage} onSelect={setActivePage} darkMode={darkMode}
+            activePage={activePage} onSelect={navTo} darkMode={darkMode}
             open={openSections.instructor} onToggle={() => toggle("instructor")} />
         </div>
 
@@ -1049,7 +1049,7 @@ export default function App() {
         <div className={`flex flex-col gap-1 border-t pt-4 ${darkMode ? "border-gray-800" : "border-gray-100"}`}>
           {bottomItems.map(item => (
             <NavItem key={item.label} label={item.label} icon={item.icon}
-              active={activePage === item.label} onClick={() => setActivePage(item.label)} darkMode={darkMode} />
+              active={activePage === item.label} onClick={() => navTo(item.label)} darkMode={darkMode} />
           ))}
         </div>
 
@@ -1065,8 +1065,7 @@ export default function App() {
         {activePage === "Achievements" && <AchievementsPage darkMode={darkMode} onToggleDarkMode={dm} onNavigate={setActivePage} />}
         {/* Instructor */}
         {activePage === "Studio Home"   && <InstructorHomePage    darkMode={darkMode} onToggleDarkMode={dm} onOpenRoster={openRoster} />}
-        {activePage === "My Classes"    && <InstructorClassesPage darkMode={darkMode} onToggleDarkMode={dm} onOpenRoster={openRoster} />}
-        {activePage === "Roster"        && <InstructorRosterPage  darkMode={darkMode} onToggleDarkMode={dm} initialClass={rosterClass} />}
+        {activePage === "My Classes"    && <InstructorClassesPage key={rosterClass ? rosterClass.name + rosterClass.time : "all"} darkMode={darkMode} onToggleDarkMode={dm} initialClass={rosterClass} />}
         {activePage === "Class Builder" && <ClassBuilderPage      darkMode={darkMode} onToggleDarkMode={dm} />}
         {activePage === "Insights"      && <InstructorStatsPage   darkMode={darkMode} onToggleDarkMode={dm} />}
         {/* Shared */}
@@ -1081,7 +1080,7 @@ export default function App() {
         {mobileNav.map(item => (
           <button
             key={item.label}
-            onClick={() => setActivePage(item.label)}
+            onClick={() => navTo(item.label)}
             className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg transition-colors
               ${activePage === item.label
                 ? "text-[#00aa13]"
@@ -4706,148 +4705,180 @@ function InstructorHomePage({ darkMode, onToggleDarkMode, onOpenRoster }) {
   )
 }
 
-function InstructorClassesPage({ darkMode, onToggleDarkMode, onOpenRoster }) {
-  const [tab, setTab] = useState("upcoming")
-  const heading = darkMode ? "text-white"    : "text-gray-900"
-  const muted   = darkMode ? "text-gray-400" : "text-gray-500"
-  const card    = `rounded-2xl border transition-colors ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`
-  const divider = darkMode ? "border-gray-800" : "border-gray-100"
-
-  const list = instructorClasses.filter(c => tab === "upcoming" ? c.status === "upcoming" : c.status === "done")
-
-  return (
-    <div className="p-4 md:p-8 max-w-4xl mx-auto pb-16">
-      <InstructorTopBar title="My Classes" sub="Classes you're teaching at SpinOut" darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
-
-      <div className={`inline-flex rounded-xl p-0.5 mb-5 ${darkMode ? "bg-gray-800" : "bg-gray-100"}`}>
-        {["upcoming","past"].map(t => (
-          <button key={t} onClick={() => setTab(t)}
-            className={`px-4 py-1.5 rounded-lg text-xs font-semibold capitalize transition-all ${tab === t
-              ? darkMode ? "bg-gray-700 text-white shadow-sm" : "bg-white text-gray-900 shadow-sm"
-              : muted}`}>{t}</button>
-        ))}
-      </div>
-
-      <div className={`${card} overflow-hidden`}>
-        {list.map((c, i) => (
-          <button key={i} onClick={() => onOpenRoster(c)}
-            className={`w-full text-left flex items-center gap-4 px-5 py-4 border-b last:border-b-0 ${divider} transition-colors ${darkMode ? "hover:bg-gray-800" : "hover:bg-gray-50"}`}>
-            <div className="w-14 flex-shrink-0">
-              <p className={`text-xs font-medium ${muted}`}>{c.dateLabel}</p>
-              <p className={`text-sm font-bold tabular-nums ${heading}`}>{c.time}</p>
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className={`text-sm font-semibold ${heading}`}>{c.name}</p>
-              <p className={`text-xs mt-0.5 ${muted}`}>{c.studio} · {c.booked}/{c.capacity} riders{c.waitlist > 0 && ` · ${c.waitlist} waitlist`}</p>
-            </div>
-            {c.status === "done"
-              ? <span className="text-xs font-semibold text-amber-500 flex-shrink-0">{c.rating} ★</span>
-              : <span className={`text-xs font-semibold flex-shrink-0 ${c.booked >= c.capacity ? "text-orange-500" : "text-[#00aa13]"}`}>{c.booked >= c.capacity ? "Full" : `${c.capacity - c.booked} left`}</span>}
-          </button>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function InstructorRosterPage({ darkMode, onToggleDarkMode, initialClass }) {
-  const classes = instructorClasses.filter(c => c.status === "upcoming")
-  const [selected, setSelected] = useState(initialClass || classes[0])
+function ClassRoster({ cls, darkMode }) {
   const heading = darkMode ? "text-white"    : "text-gray-900"
   const muted   = darkMode ? "text-gray-400" : "text-gray-500"
   const card    = `rounded-2xl border transition-colors ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`
   const subtle  = darkMode ? "bg-gray-800"   : "bg-gray-50"
   const divider = darkMode ? "border-gray-800" : "border-gray-100"
 
-  const roster = rosterFor(selected.seed, selected.booked)
-  const layout = STUDIO_LAYOUTS[selected.studio] || STUDIO_LAYOUTS["Studio 1"]
+  const roster  = rosterFor(cls.seed, cls.booked)
+  const layout  = STUDIO_LAYOUTS[cls.studio] || STUDIO_LAYOUTS["Studio 1"]
   const bikeMap = {}
   roster.forEach(r => { bikeMap[r.bike] = r })
 
   return (
-    <div className="p-4 md:p-8 max-w-5xl mx-auto pb-16">
-      <InstructorTopBar title="Roster" sub="Riders booked into your class" darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
-
-      {/* Class selector */}
-      <div className="flex gap-2 mb-6 overflow-x-auto pb-1">
-        {classes.map((c, i) => {
-          const on = c === selected
-          return (
-            <button key={i} onClick={() => setSelected(c)}
-              className={`flex-shrink-0 px-4 py-2.5 rounded-xl text-left transition-all border ${on
-                ? "bg-[#e6f9e8] border-[#00aa13]"
-                : darkMode ? "bg-gray-900 border-gray-800 hover:bg-gray-800" : "bg-white border-gray-100 hover:bg-gray-50"}`}>
-              <p className={`text-xs ${on ? "text-[#00aa13]" : muted}`}>{c.dateLabel} · {c.time}</p>
-              <p className={`text-sm font-semibold ${on ? "text-[#00aa13]" : heading}`}>{c.name}</p>
-            </button>
-          )
-        })}
+    <div className="flex flex-col gap-4">
+      {/* Class header */}
+      <div className={`${card} p-5`}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className={`text-lg font-bold ${heading}`}>{cls.name}</h2>
+            <p className={`text-xs mt-0.5 ${muted}`}>{cls.dateLabel} · {cls.time} · {cls.studio} · 45 mins</p>
+          </div>
+          {cls.status === "done"
+            ? <span className="text-xs font-semibold text-amber-500 flex-shrink-0">{cls.rating} ★</span>
+            : <span className={`text-xs font-semibold flex-shrink-0 ${cls.booked >= cls.capacity ? "text-orange-500" : "text-[#00aa13]"}`}>{cls.booked >= cls.capacity ? "Full" : `${cls.capacity - cls.booked} spaces`}</span>}
+        </div>
+        <div className="flex items-center justify-between mt-3 mb-1.5">
+          <span className={`text-xs ${muted}`}>{cls.booked} / {cls.capacity} booked{cls.waitlist > 0 && ` · ${cls.waitlist} waitlist`}</span>
+        </div>
+        <CapacityBar booked={cls.booked} capacity={cls.capacity} darkMode={darkMode} />
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-6">
-
-        {/* Bike layout */}
-        <div className={`${card} p-5 lg:w-[360px] flex-shrink-0`}>
-          <div className="flex items-center justify-between mb-4">
-            <p className={`text-sm font-semibold ${heading}`}>Studio layout</p>
-            <span className={`text-xs ${muted}`}>{layout.label}</span>
-          </div>
-          <div className="flex flex-col gap-2">
-            <div className="flex justify-center mb-2">
-              <div className="flex flex-col items-center gap-1">
-                <span className={`text-xs ${muted}`}>You</span>
-                <div className="w-9 h-11 rounded-lg bg-[#00aa13] flex items-center justify-center text-white text-xs font-bold">JIM</div>
-              </div>
-            </div>
-            {layout.rows.map((row, ri) => (
-              <div key={ri} className="flex gap-1.5 justify-center">
-                {row.map(num => {
-                  const rider = bikeMap[num]
-                  return (
-                    <div key={num} title={rider ? `${rider.name} · Bike ${num}` : `Bike ${num} · empty`}
-                      className={`w-9 h-11 rounded-lg flex items-center justify-center text-[10px] font-bold transition-colors
-                        ${rider
-                          ? rider.checkedIn ? "bg-[#00aa13] text-white" : "bg-[#e6f9e8] text-[#00aa13] border border-[#00aa13]"
-                          : darkMode ? "bg-gray-800 text-gray-600" : "bg-gray-100 text-gray-400"}`}>
-                      {rider ? rider.name.split(" ").map(w=>w[0]).join("") : num}
-                    </div>
-                  )
-                })}
-              </div>
-            ))}
-          </div>
-          <div className="flex items-center gap-4 mt-4 flex-wrap">
-            <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-[#00aa13]" /><span className={`text-xs ${muted}`}>Checked in</span></div>
-            <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-[#e6f9e8] border border-[#00aa13]" /><span className={`text-xs ${muted}`}>Booked</span></div>
-            <div className="flex items-center gap-1.5"><div className={`w-3 h-3 rounded ${darkMode ? "bg-gray-800" : "bg-gray-100"}`} /><span className={`text-xs ${muted}`}>Empty</span></div>
-          </div>
+      {/* Bike layout */}
+      <div className={`${card} p-5`}>
+        <div className="flex items-center justify-between mb-4">
+          <p className={`text-sm font-semibold ${heading}`}>Studio layout</p>
+          <span className={`text-xs ${muted}`}>{layout.label}</span>
         </div>
-
-        {/* Rider list */}
-        <div className={`${card} flex-1 overflow-hidden`}>
-          <div className={`flex items-center justify-between px-5 py-3.5 border-b ${divider}`}>
-            <p className={`text-sm font-semibold ${heading}`}>Booked riders</p>
-            <span className={`text-xs ${muted}`}>{roster.filter(r=>r.checkedIn).length} checked in · {selected.booked} total</span>
-          </div>
-          <div className="max-h-[480px] overflow-y-auto">
-            {roster.map((r, i) => (
-              <div key={i} className={`flex items-center gap-3 px-5 py-3 border-b last:border-b-0 ${divider}`}>
-                <Avatar name={r.name} size={34} />
-                <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-medium ${heading}`}>{r.name}</p>
-                  <p className={`text-xs ${muted}`}>Bike {r.bike}</p>
-                </div>
-                {r.checkedIn
-                  ? <span className="text-xs font-semibold text-[#00aa13] flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#00aa13]" />Checked in</span>
-                  : <span className={`text-xs ${muted}`}>Booked</span>}
-              </div>
-            ))}
-          </div>
-          {selected.waitlist > 0 && (
-            <div className={`px-5 py-3 border-t ${divider} ${subtle}`}>
-              <p className={`text-xs font-semibold text-amber-600`}>{selected.waitlist} on the waitlist</p>
+        <div className="flex flex-col gap-2">
+          <div className="flex justify-center mb-2">
+            <div className="flex flex-col items-center gap-1">
+              <span className={`text-xs ${muted}`}>You</span>
+              <div className="w-9 h-11 rounded-lg bg-[#00aa13] flex items-center justify-center text-white text-xs font-bold">JIM</div>
             </div>
-          )}
+          </div>
+          {layout.rows.map((row, ri) => (
+            <div key={ri} className="flex gap-1.5 justify-center">
+              {row.map(num => {
+                const rider = bikeMap[num]
+                return (
+                  <div key={num} title={rider ? `${rider.name} · Bike ${num}` : `Bike ${num} · empty`}
+                    className={`w-9 h-11 rounded-lg flex items-center justify-center text-[10px] font-bold transition-colors
+                      ${rider
+                        ? rider.checkedIn ? "bg-[#00aa13] text-white" : "bg-[#e6f9e8] text-[#00aa13] border border-[#00aa13]"
+                        : darkMode ? "bg-gray-800 text-gray-600" : "bg-gray-100 text-gray-400"}`}>
+                    {rider ? rider.name.split(" ").map(w=>w[0]).join("") : num}
+                  </div>
+                )
+              })}
+            </div>
+          ))}
+        </div>
+        <div className="flex items-center gap-4 mt-4 flex-wrap">
+          <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-[#00aa13]" /><span className={`text-xs ${muted}`}>Checked in</span></div>
+          <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-[#e6f9e8] border border-[#00aa13]" /><span className={`text-xs ${muted}`}>Booked</span></div>
+          <div className="flex items-center gap-1.5"><div className={`w-3 h-3 rounded ${darkMode ? "bg-gray-800" : "bg-gray-100"}`} /><span className={`text-xs ${muted}`}>Empty</span></div>
+        </div>
+      </div>
+
+      {/* Rider list */}
+      <div className={`${card} overflow-hidden`}>
+        <div className={`flex items-center justify-between px-5 py-3.5 border-b ${divider}`}>
+          <p className={`text-sm font-semibold ${heading}`}>Booked riders</p>
+          <span className={`text-xs ${muted}`}>{roster.filter(r=>r.checkedIn).length} checked in · {cls.booked} total</span>
+        </div>
+        <div className="max-h-[420px] overflow-y-auto">
+          {roster.map((r, i) => (
+            <div key={i} className={`flex items-center gap-3 px-5 py-3 border-b last:border-b-0 ${divider}`}>
+              <Avatar name={r.name} size={34} />
+              <div className="flex-1 min-w-0">
+                <p className={`text-sm font-medium ${heading}`}>{r.name}</p>
+                <p className={`text-xs ${muted}`}>Bike {r.bike}</p>
+              </div>
+              {r.checkedIn
+                ? <span className="text-xs font-semibold text-[#00aa13] flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#00aa13]" />Checked in</span>
+                : <span className={`text-xs ${muted}`}>Booked</span>}
+            </div>
+          ))}
+        </div>
+        {cls.waitlist > 0 && (
+          <div className={`px-5 py-3 border-t ${divider} ${subtle}`}>
+            <p className={`text-xs font-semibold text-amber-600`}>{cls.waitlist} on the waitlist</p>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function InstructorClassesPage({ darkMode, onToggleDarkMode, initialClass }) {
+  const heading = darkMode ? "text-white"    : "text-gray-900"
+  const muted   = darkMode ? "text-gray-400" : "text-gray-500"
+  const card    = `rounded-2xl border transition-colors ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`
+  const divider = darkMode ? "border-gray-800" : "border-gray-100"
+
+  const initialTab = initialClass?.status === "done" ? "past" : "upcoming"
+  const [tab, setTab]           = useState(initialTab)
+  const [selected, setSelected] = useState(initialClass || instructorClasses.find(c => c.status === "upcoming"))
+  const [mobileDetail, setMobileDetail] = useState(!!initialClass)
+
+  const list = instructorClasses.filter(c => tab === "upcoming" ? c.status === "upcoming" : c.status === "done")
+
+  function pick(c) { setSelected(c); setMobileDetail(true) }
+  function switchTab(t) {
+    setTab(t)
+    const first = instructorClasses.find(c => t === "upcoming" ? c.status === "upcoming" : c.status === "done")
+    setSelected(first)
+  }
+
+  const ClassList = (
+    <div className={`${card} overflow-hidden`}>
+      {list.map((c, i) => {
+        const on = c === selected
+        return (
+          <button key={i} onClick={() => pick(c)}
+            className={`w-full text-left flex items-center gap-4 px-5 py-4 border-b last:border-b-0 ${divider} transition-colors
+              ${on ? darkMode ? "bg-gray-800 border-l-2 border-l-[#00aa13]" : "bg-[#e6f9e8] border-l-2 border-l-[#00aa13]" : darkMode ? "hover:bg-gray-800" : "hover:bg-gray-50"}`}>
+            <div className="w-14 flex-shrink-0">
+              <p className={`text-xs font-medium ${muted}`}>{c.dateLabel}</p>
+              <p className={`text-sm font-bold tabular-nums ${on ? "text-[#00aa13]" : heading}`}>{c.time}</p>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className={`text-sm font-semibold ${on ? "text-[#00aa13]" : heading}`}>{c.name}</p>
+              <p className={`text-xs mt-0.5 ${muted}`}>{c.studio} · {c.booked}/{c.capacity} riders{c.waitlist > 0 && ` · ${c.waitlist} waitlist`}</p>
+            </div>
+            {c.status === "done"
+              ? <span className="text-xs font-semibold text-amber-500 flex-shrink-0">{c.rating} ★</span>
+              : <span className={`text-xs font-semibold flex-shrink-0 ${c.booked >= c.capacity ? "text-orange-500" : "text-[#00aa13]"}`}>{c.booked >= c.capacity ? "Full" : `${c.capacity - c.booked} left`}</span>}
+          </button>
+        )
+      })}
+    </div>
+  )
+
+  return (
+    <div className="p-4 md:p-8 max-w-5xl mx-auto pb-16">
+      <InstructorTopBar title="My Classes" sub="Classes you're teaching at SpinOut" darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
+
+      {/* Tabs — hidden on mobile when viewing detail */}
+      <div className={`${mobileDetail ? "hidden md:flex" : "flex"} inline-flex rounded-xl p-0.5 mb-5 ${darkMode ? "bg-gray-800" : "bg-gray-100"}`} style={{ width: "fit-content" }}>
+        {["upcoming","past"].map(t => (
+          <button key={t} onClick={() => switchTab(t)}
+            className={`px-4 py-1.5 rounded-lg text-xs font-semibold capitalize transition-all ${tab === t
+              ? darkMode ? "bg-gray-700 text-white shadow-sm" : "bg-white text-gray-900 shadow-sm"
+              : muted}`}>{t}</button>
+        ))}
+      </div>
+
+      {/* Mobile back button when in detail */}
+      {mobileDetail && (
+        <button onClick={() => setMobileDetail(false)}
+          className={`md:hidden flex items-center gap-1.5 mb-4 text-sm font-medium ${muted}`}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+          All classes
+        </button>
+      )}
+
+      {/* Desktop: list + detail side by side. Mobile: one or the other. */}
+      <div className="flex flex-col md:flex-row gap-6">
+        <div className={`md:w-[340px] md:flex-shrink-0 ${mobileDetail ? "hidden md:block" : "block"}`}>
+          {ClassList}
+        </div>
+        <div className={`flex-1 min-w-0 ${mobileDetail ? "block" : "hidden md:block"}`}>
+          {selected ? <ClassRoster cls={selected} darkMode={darkMode} />
+            : <div className={`${card} p-10 text-center`}><p className={`text-sm ${muted}`}>Select a class to view its roster</p></div>}
         </div>
       </div>
     </div>

@@ -4879,26 +4879,31 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode }) {
   const subtle  = darkMode ? "bg-gray-800"   : "bg-gray-50"
   const inputCls = `w-full px-3.5 py-2.5 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-[#00aa13] focus:border-transparent transition ${darkMode ? "bg-gray-800 border-gray-700 text-white" : "bg-white border-gray-200 text-gray-900"}`
 
-  const [name, setName]       = useState("New Power Ride")
-  const [studio, setStudio]   = useState("Studio 1")
-  const [phases, setPhases]   = useState([
-    { name: "Warm Up",      zone: 1, mins: 7 },
-    { name: "Build",        zone: 3, mins: 8 },
-    { name: "Threshold",    zone: 4, mins: 12 },
-    { name: "Recovery",     zone: 1, mins: 4 },
-    { name: "Sprints",      zone: 5, mins: 9 },
-    { name: "Cool Down",    zone: 1, mins: 5 },
-  ])
+  const [name, setName]     = useState("New Power Ride")
+  const [studio, setStudio] = useState("Studio 1")
+  const [brush, setBrush]   = useState(30)            // seconds added per tap
+  const [strokes, setStrokes] = useState([])          // [secs, zone] per tap
 
-  const total = phases.reduce((s, p) => s + p.mins, 0)
+  const TARGET = 45 * 60
+  const total  = strokes.reduce((s, [secs]) => s + secs, 0)
+  const scale  = Math.max(TARGET, total)
 
-  function updatePhase(i, patch) { setPhases(p => p.map((ph, j) => j === i ? { ...ph, ...patch } : ph)) }
-  function removePhase(i) { setPhases(p => p.filter((_, j) => j !== i)) }
-  function addPhase() { setPhases(p => [...p, { name: "New Phase", zone: 2, mins: 5 }]) }
+  // merge consecutive same-zone strokes for display + summary
+  const merged = strokes.reduce((acc, [secs, zone]) => {
+    if (acc.length && acc[acc.length-1][1] === zone) acc[acc.length-1] = [acc[acc.length-1][0]+secs, zone]
+    else acc.push([secs, zone])
+    return acc
+  }, [])
+
+  function addZone(zone) { setStrokes(p => [...p, [brush, zone]]) }
+  function undo()  { setStrokes(p => p.slice(0, -1)) }
+  function clear() { setStrokes([]) }
+
+  const brushOpts = [{ s: 15, l: "15s" }, { s: 30, l: "30s" }, { s: 60, l: "1m" }, { s: 120, l: "2m" }]
 
   return (
     <div className="p-4 md:p-8 max-w-3xl mx-auto pb-16">
-      <InstructorTopBar title="Class Builder" sub="Design a session plan for your riders" darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
+      <InstructorTopBar title="Class Builder" sub="Tap zones to paint your session in real time" darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
 
       {/* Details */}
       <div className={`${card} p-5 mb-5`}>
@@ -4919,56 +4924,90 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode }) {
         </div>
       </div>
 
-      {/* Live preview chart */}
+      {/* Live canvas */}
       <div className={`${card} p-5 mb-5`}>
-        <div className="flex items-center justify-between mb-4">
-          <p className={`text-sm font-semibold ${heading}`}>Intensity preview</p>
-          <span className={`text-xs ${muted}`}>{total} min total</span>
+        <div className="flex items-center justify-between mb-3">
+          <p className={`text-sm font-semibold ${heading}`}>Session canvas</p>
+          <span className={`text-xs font-semibold ${total > TARGET ? "text-orange-500" : muted}`}>{fmtSecs(total)} / 45m</span>
         </div>
-        <div className="flex items-end w-full gap-1" style={{ height: 90 }}>
-          {phases.map((ph, i) => (
-            <div key={i} className="rounded-t-sm flex items-end justify-center transition-all"
-              style={{ flex: ph.mins, height: `${FTP_ZONES[Math.min(ph.zone-1,6)].height}%`, background: FTP_ZONES[Math.min(ph.zone-1,6)].color }}
-              title={`${ph.name} · Z${ph.zone} · ${ph.mins} min`} />
+
+        {/* Bar canvas */}
+        <div className={`relative w-full rounded-lg overflow-hidden ${darkMode ? "bg-gray-800" : "bg-gray-50"}`}
+          style={{ height: 130, backgroundImage: darkMode
+            ? "repeating-linear-gradient(90deg, transparent, transparent 11.11%, rgba(255,255,255,0.04) 11.11%, rgba(255,255,255,0.04) calc(11.11% + 1px))"
+            : "repeating-linear-gradient(90deg, transparent, transparent 11.11%, rgba(0,0,0,0.04) 11.11%, rgba(0,0,0,0.04) calc(11.11% + 1px))" }}>
+          {total === 0 ? (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <p className={`text-xs ${muted}`}>Empty — tap a zone below to start building</p>
+            </div>
+          ) : (
+            <div className="absolute inset-0 flex items-end">
+              {merged.map(([secs, zone], i) => (
+                <div key={i} className="flex items-end justify-center transition-all"
+                  style={{ width: `${secs / scale * 100}%`, height: `${ZONE_HEIGHTS[zone-1]}%`, background: ZONE_COLORS[zone-1] }}
+                  title={`Z${zone} ${ZONE_NAMES[zone-1]} · ${fmtSecs(secs)}`} />
+              ))}
+            </div>
+          )}
+          {/* 5-min gridline labels */}
+          <div className="absolute bottom-0 left-0 right-0 flex justify-between px-1 pointer-events-none">
+            {[0,5,10,15,20,25,30,35,40,45].map(m => (
+              <span key={m} className={`text-[8px] ${darkMode ? "text-gray-600" : "text-gray-400"}`}>{m}</span>
+            ))}
+          </div>
+        </div>
+
+        {/* Brush size */}
+        <div className="flex items-center gap-2 mt-4">
+          <span className={`text-xs ${muted}`}>Add</span>
+          <div className={`inline-flex rounded-lg overflow-hidden border ${darkMode ? "border-gray-700" : "border-gray-200"}`}>
+            {brushOpts.map(o => (
+              <button key={o.s} onClick={() => setBrush(o.s)}
+                className={`px-3 py-1.5 text-xs font-semibold transition-colors ${brush === o.s ? "bg-[#00aa13] text-white" : darkMode ? "bg-gray-800 text-gray-400 hover:bg-gray-700" : "bg-white text-gray-500 hover:bg-gray-50"}`}>{o.l}</button>
+            ))}
+          </div>
+          <span className={`text-xs ${muted}`}>per tap</span>
+          <div className="flex-1" />
+          <button onClick={undo} disabled={!strokes.length}
+            className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${!strokes.length ? "opacity-30 cursor-not-allowed" : ""} ${darkMode ? "bg-gray-800 text-gray-300 hover:bg-gray-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>Undo</button>
+          <button onClick={clear} disabled={!strokes.length}
+            className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${!strokes.length ? "opacity-30 cursor-not-allowed" : ""} ${darkMode ? "bg-gray-800 text-gray-300 hover:bg-gray-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>Clear</button>
+        </div>
+      </div>
+
+      {/* Zone palette */}
+      <div className={`${card} p-5 mb-5`}>
+        <p className={`text-sm font-semibold mb-3 ${heading}`}>Add a zone</p>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+          {ZONE_NAMES.map((zn, i) => (
+            <button key={i} onClick={() => addZone(i+1)}
+              className="rounded-xl p-3 text-left transition-transform active:scale-95 hover:opacity-90"
+              style={{ background: ZONE_COLORS[i] }}>
+              <p className="text-xs font-bold text-white drop-shadow">Z{i+1}</p>
+              <p className="text-[11px] font-medium text-white/90 drop-shadow leading-tight">{zn}</p>
+            </button>
           ))}
         </div>
-        <div className="flex justify-between mt-2">
-          <span className={`text-xs ${muted}`}>0:00</span>
-          <span className={`text-xs ${muted}`}>{total}:00</span>
-        </div>
       </div>
 
-      {/* Phase editor */}
-      <div className={`${card} overflow-hidden mb-5`}>
-        <div className={`px-5 py-3.5 border-b ${darkMode ? "border-gray-800" : "border-gray-100"} flex items-center justify-between`}>
-          <p className={`text-sm font-semibold ${heading}`}>Phases</p>
-          <button onClick={addPhase} className="text-xs font-semibold text-[#00aa13] hover:underline">+ Add phase</button>
-        </div>
-        {phases.map((ph, i) => (
-          <div key={i} className={`flex items-center gap-3 px-5 py-3 border-b last:border-b-0 ${darkMode ? "border-gray-800" : "border-gray-100"}`}>
-            <div className="w-2 h-8 rounded-full flex-shrink-0" style={{ background: FTP_ZONES[Math.min(ph.zone-1,6)].color }} />
-            <input value={ph.name} onChange={e => updatePhase(i, { name: e.target.value })}
-              className={`flex-1 min-w-0 bg-transparent text-sm font-medium focus:outline-none ${heading}`} />
-            {/* Zone */}
-            <div className="flex items-center gap-1">
-              <span className={`text-xs ${muted}`}>Z</span>
-              <select value={ph.zone} onChange={e => updatePhase(i, { zone: +e.target.value })}
-                className={`text-xs font-semibold rounded-lg px-1.5 py-1 ${darkMode ? "bg-gray-800 text-white" : "bg-gray-100 text-gray-700"}`}>
-                {[1,2,3,4,5,6,7].map(z => <option key={z} value={z}>{z}</option>)}
-              </select>
-            </div>
-            {/* Mins */}
-            <div className="flex items-center gap-1">
-              <button onClick={() => updatePhase(i, { mins: Math.max(1, ph.mins-1) })} className={`w-6 h-6 rounded flex items-center justify-center text-sm font-bold ${darkMode ? "bg-gray-800 text-gray-300" : "bg-gray-100 text-gray-600"}`}>−</button>
-              <span className={`text-xs font-bold w-10 text-center tabular-nums ${heading}`}>{ph.mins}m</span>
-              <button onClick={() => updatePhase(i, { mins: Math.min(30, ph.mins+1) })} className={`w-6 h-6 rounded flex items-center justify-center text-sm font-bold ${darkMode ? "bg-gray-800 text-gray-300" : "bg-gray-100 text-gray-600"}`}>+</button>
-            </div>
-            <button onClick={() => removePhase(i)} className={`w-6 h-6 rounded flex items-center justify-center text-xs flex-shrink-0 ${darkMode ? "hover:bg-gray-800 text-gray-500" : "hover:bg-gray-100 text-gray-400"}`}>✕</button>
+      {/* Phase summary */}
+      {merged.length > 0 && (
+        <div className={`${card} overflow-hidden mb-5`}>
+          <div className={`px-5 py-3.5 border-b ${darkMode ? "border-gray-800" : "border-gray-100"}`}>
+            <p className={`text-sm font-semibold ${heading}`}>Plan summary · {merged.length} {merged.length === 1 ? "block" : "blocks"}</p>
           </div>
-        ))}
-      </div>
+          {merged.map(([secs, zone], i) => (
+            <div key={i} className={`flex items-center gap-3 px-5 py-2.5 border-b last:border-b-0 ${darkMode ? "border-gray-800" : "border-gray-100"}`}>
+              <div className="w-2 h-7 rounded-full flex-shrink-0" style={{ background: ZONE_COLORS[zone-1] }} />
+              <span className={`flex-1 text-sm font-medium ${heading}`}>Z{zone} · {ZONE_NAMES[zone-1]}</span>
+              <span className={`text-xs font-bold tabular-nums ${heading}`}>{fmtSecs(secs)}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
-      <button className="w-full py-3 rounded-xl bg-[#00aa13] hover:bg-[#008a0f] text-white font-semibold text-sm transition-colors">
+      <button disabled={total === 0}
+        className={`w-full py-3 rounded-xl text-white font-semibold text-sm transition-colors ${total === 0 ? "bg-gray-300 cursor-not-allowed" : "bg-[#00aa13] hover:bg-[#008a0f]"}`}>
         Publish class plan
       </button>
     </div>

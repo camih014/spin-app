@@ -4734,6 +4734,11 @@ function InstructorHomePage({ darkMode, onToggleDarkMode, onOpenRoster }) {
   const card    = `rounded-2xl border transition-colors ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`
   const subtle  = darkMode ? "bg-gray-800"   : "bg-gray-50"
 
+  const [locations, setLocations] = useState([LOCATIONS[0]])
+  function toggleLocation(l) {
+    setLocations(p => p.includes(l) ? (p.length > 1 ? p.filter(x => x !== l) : p) : [...p, l])
+  }
+
   const today = instructorClasses.filter(c => c.dateLabel === "Today")
   const ridersToday = today.reduce((s, c) => s + c.booked, 0)
 
@@ -4746,7 +4751,39 @@ function InstructorHomePage({ darkMode, onToggleDarkMode, onOpenRoster }) {
 
   return (
     <div className="p-4 md:p-8 max-w-4xl mx-auto pb-16">
-      <InstructorTopBar title="Good morning, JIM" sub={`${today.length} classes to teach today · SpinOut Hampstead`} darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
+      <InstructorTopBar title="Good morning, JIM" sub={`${today.length} classes to teach today`} darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
+
+      {/* Instructor profile */}
+      <div className={`${card} p-5 mb-6`}>
+        <div className="flex items-center gap-4">
+          <Avatar name="JIM" size={56} />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <h2 className={`text-lg font-bold ${heading}`}>JIM</h2>
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-[#e6f9e8] text-[#00aa13]">Instructor</span>
+            </div>
+            <p className={`text-sm ${muted}`}>Power · Rhythm · HIIT · 4.9★ over 622 riders</p>
+          </div>
+          <button className={`text-xs font-semibold px-3 py-1.5 rounded-lg border flex-shrink-0 ${darkMode ? "border-gray-700 text-gray-300 hover:bg-gray-800" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}>Edit</button>
+        </div>
+        <div className="mt-4">
+          <p className={`text-xs font-semibold mb-2 ${muted}`}>Your locations</p>
+          <div className="flex flex-wrap gap-2">
+            {LOCATIONS.map(l => {
+              const on = locations.includes(l)
+              return (
+                <button key={l} onClick={() => toggleLocation(l)}
+                  className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors flex items-center gap-1.5 ${on
+                    ? "bg-[#e6f9e8] border-[#00aa13] text-[#00aa13]"
+                    : darkMode ? "border-gray-700 text-gray-400 hover:bg-gray-800" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>
+                  {l}{on && " ✓"}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      </div>
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
@@ -4826,8 +4863,12 @@ function ClassRoster({ cls, darkMode }) {
       <div className={`${card} p-5`}>
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className={`text-lg font-bold ${heading}`}>{cls.name}</h2>
+            <div className="flex items-center gap-2">
+              <h2 className={`text-lg font-bold ${heading}`}>{cls.name}</h2>
+              {isSocialClass(cls.name) && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-[#e6f9e8] text-[#00aa13]">🎲 Social</span>}
+            </div>
             <p className={`text-xs mt-0.5 ${muted}`}>{cls.dateLabel} · {cls.time} · {cls.studio} · 45 mins</p>
+            {isSocialClass(cls.name) && <p className={`text-xs mt-1 ${muted}`}>Random seating — riders are assigned a bike on arrival</p>}
           </div>
           {cls.status === "done"
             ? <span className="text-xs font-semibold text-amber-500 flex-shrink-0">{cls.rating} ★</span>
@@ -4914,10 +4955,16 @@ function InstructorClassesPage({ darkMode, onToggleDarkMode, initialClass }) {
 
   const initialTab = initialClass?.status === "done" ? "past" : "upcoming"
   const [tab, setTab]           = useState(initialTab)
+  const [view, setView]         = useState("list")
   const [selected, setSelected] = useState(initialClass || instructorClasses.find(c => c.status === "upcoming"))
   const [mobileDetail, setMobileDetail] = useState(!!initialClass)
 
   const list = instructorClasses.filter(c => tab === "upcoming" ? c.status === "upcoming" : c.status === "done")
+
+  // Calendar data (Feb 2026 — where all classes sit)
+  const monthCells = getMonthGrid(2026, 2)
+  const byDay = {}
+  instructorClasses.forEach(c => { (byDay[c.dateIso] ||= []).push(c) })
 
   function pick(c) { setSelected(c); setMobileDetail(true) }
   function switchTab(t) {
@@ -4955,14 +5002,24 @@ function InstructorClassesPage({ darkMode, onToggleDarkMode, initialClass }) {
     <div className="p-4 md:p-8 max-w-5xl mx-auto pb-16">
       <InstructorTopBar title="My Classes" sub="Classes you're teaching at SpinOut" darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
 
-      {/* Tabs — hidden on mobile when viewing detail */}
-      <div className={`${mobileDetail ? "hidden md:flex" : "flex"} inline-flex rounded-xl p-0.5 mb-5 ${darkMode ? "bg-gray-800" : "bg-gray-100"}`} style={{ width: "fit-content" }}>
-        {["upcoming","past"].map(t => (
-          <button key={t} onClick={() => switchTab(t)}
-            className={`px-4 py-1.5 rounded-lg text-xs font-semibold capitalize transition-all ${tab === t
-              ? darkMode ? "bg-gray-700 text-white shadow-sm" : "bg-white text-gray-900 shadow-sm"
-              : muted}`}>{t}</button>
-        ))}
+      {/* Tabs + view toggle */}
+      <div className={`flex items-center justify-between gap-3 mb-5 ${mobileDetail ? "hidden md:flex" : "flex"}`}>
+        <div className={`inline-flex rounded-xl p-0.5 ${darkMode ? "bg-gray-800" : "bg-gray-100"}`}>
+          {["upcoming","past"].map(t => (
+            <button key={t} onClick={() => switchTab(t)}
+              className={`px-4 py-1.5 rounded-lg text-xs font-semibold capitalize transition-all ${tab === t
+                ? darkMode ? "bg-gray-700 text-white shadow-sm" : "bg-white text-gray-900 shadow-sm"
+                : muted}`}>{t}</button>
+          ))}
+        </div>
+        <div className={`inline-flex rounded-xl p-0.5 ${darkMode ? "bg-gray-800" : "bg-gray-100"}`}>
+          {[["list","List"],["calendar","Calendar"]].map(([v, l]) => (
+            <button key={v} onClick={() => setView(v)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${view === v
+                ? darkMode ? "bg-gray-700 text-white shadow-sm" : "bg-white text-gray-900 shadow-sm"
+                : muted}`}>{l}</button>
+          ))}
+        </div>
       </div>
 
       {/* Mobile back button when in detail */}
@@ -4974,16 +5031,58 @@ function InstructorClassesPage({ darkMode, onToggleDarkMode, initialClass }) {
         </button>
       )}
 
-      {/* Desktop: list + detail side by side. Mobile: one or the other. */}
-      <div className="flex flex-col md:flex-row gap-6">
-        <div className={`md:w-[340px] md:flex-shrink-0 ${mobileDetail ? "hidden md:block" : "block"}`}>
-          {ClassList}
+      {view === "calendar" ? (
+        <div className="flex flex-col gap-6">
+          {/* Month calendar */}
+          <div className={`${card} p-4 md:p-5 ${mobileDetail ? "hidden md:block" : "block"}`}>
+            <p className={`text-sm font-semibold mb-4 ${heading}`}>February 2026</p>
+            <div className="grid grid-cols-7 gap-1 mb-1">
+              {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(d => (
+                <div key={d} className={`text-[10px] font-medium text-center ${muted}`}>{d}</div>
+              ))}
+            </div>
+            <div className="grid grid-cols-7 gap-1">
+              {monthCells.map((day, i) => {
+                if (!day) return <div key={i} />
+                const ds = `2026-02-${String(day).padStart(2,"0")}`
+                const dayClasses = byDay[ds] || []
+                const isToday = ds === "2026-02-26"
+                return (
+                  <div key={i} className={`rounded-lg p-1 min-h-[64px] border ${isToday ? "border-[#00aa13]" : darkMode ? "border-gray-800" : "border-gray-100"}`}>
+                    <p className={`text-[10px] font-semibold mb-0.5 ${isToday ? "text-[#00aa13]" : muted}`}>{day}</p>
+                    <div className="flex flex-col gap-0.5">
+                      {dayClasses.map((c, j) => (
+                        <button key={j} onClick={() => pick(c)}
+                          className="text-left rounded px-1 py-0.5 text-white text-[8px] leading-tight font-medium truncate hover:opacity-90"
+                          style={{ background: c === selected ? "#008a0f" : "#00aa13" }}
+                          title={`${c.time} ${c.name}`}>
+                          {c.time} {c.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+          {/* Selected detail */}
+          <div className={`${mobileDetail ? "block" : "hidden md:block"}`}>
+            {selected ? <ClassRoster cls={selected} darkMode={darkMode} />
+              : <div className={`${card} p-10 text-center`}><p className={`text-sm ${muted}`}>Tap a class in the calendar to view its roster</p></div>}
+          </div>
         </div>
-        <div className={`flex-1 min-w-0 ${mobileDetail ? "block" : "hidden md:block"}`}>
-          {selected ? <ClassRoster cls={selected} darkMode={darkMode} />
-            : <div className={`${card} p-10 text-center`}><p className={`text-sm ${muted}`}>Select a class to view its roster</p></div>}
+      ) : (
+        /* List + detail */
+        <div className="flex flex-col md:flex-row gap-6">
+          <div className={`md:w-[340px] md:flex-shrink-0 ${mobileDetail ? "hidden md:block" : "block"}`}>
+            {ClassList}
+          </div>
+          <div className={`flex-1 min-w-0 ${mobileDetail ? "block" : "hidden md:block"}`}>
+            {selected ? <ClassRoster cls={selected} darkMode={darkMode} />
+              : <div className={`${card} p-10 text-center`}><p className={`text-sm ${muted}`}>Select a class to view its roster</p></div>}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }

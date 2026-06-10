@@ -999,11 +999,11 @@ const INSTRUCTOR_NAV = [
 export default function App() {
   const [activePage, setActivePage] = useState("Home")
   const [darkMode, setDarkMode]     = useState(false)
-  const [authed, setAuthed]         = useState(false)
+  const [authed, setAuthed]         = useState(true)
   const [openSections, setOpenSections] = useState({ rider: true, instructor: false })
   const [rosterClass, setRosterClass]   = useState(null)
 
-  if (!authed) return <AuthPage onAuth={() => setAuthed(true)} />
+  if (!authed) return <AuthPage onAuth={() => { setAuthed(true); setActivePage("Home") }} />
 
   const bottomItems = [
     { label: "Profile",  icon: User     },
@@ -1071,7 +1071,7 @@ export default function App() {
         {/* Shared */}
         {activePage === "Profile"      && <ProfilePage  darkMode={darkMode} onToggleDarkMode={dm} />}
         {activePage === "Settings"     && <SettingsPage darkMode={darkMode} onToggleDarkMode={dm} />}
-        {activePage === "Log out"      && <LogOutPage   darkMode={darkMode} />}
+        {activePage === "Log out"      && <LogOutPage   darkMode={darkMode} onLogout={() => setAuthed(false)} onStay={() => setActivePage("Home")} />}
       </main>
 
       {/* ── Mobile bottom navigation ── */}
@@ -4507,22 +4507,9 @@ function ProfilePage({ darkMode, onToggleDarkMode }) {
 
 // ─── LOG OUT PAGE ────────────────────────────────────────────────────────────
 
-function LogOutPage({ darkMode }) {
-  const [confirmed, setConfirmed] = useState(false)
+function LogOutPage({ darkMode, onLogout, onStay }) {
   const heading = darkMode ? "text-white"    : "text-gray-900"
   const muted   = darkMode ? "text-gray-400" : "text-gray-500"
-
-  if (confirmed) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center px-8">
-          <div className="w-16 h-16 rounded-2xl bg-[#e6f9e8] flex items-center justify-center text-2xl mx-auto mb-4">✓</div>
-          <p className={`text-lg font-semibold mb-2 ${heading}`}>Signed out</p>
-          <p className={`text-sm ${muted}`}>Your data is saved. See you next ride.</p>
-        </div>
-      </div>
-    )
-  }
 
   return (
     <div className="flex items-center justify-center h-full p-8">
@@ -4532,11 +4519,11 @@ function LogOutPage({ darkMode }) {
           <h2 className={`text-lg font-bold mb-1 ${heading}`}>Sign out?</h2>
           <p className={`text-sm mb-1 ${muted}`}>eenieJIM · camih014@gmail.com</p>
           <p className={`text-xs mb-7 ${muted}`}>Your ride history, bookings and achievements are saved to your account and will be here when you return.</p>
-          <button onClick={() => setConfirmed(true)}
+          <button onClick={onLogout}
             className="w-full py-3 rounded-xl bg-red-500 hover:bg-red-600 text-white font-semibold text-sm transition-colors mb-3">
             Sign out
           </button>
-          <button className={`w-full py-3 rounded-xl text-sm font-semibold border transition-colors ${darkMode ? "border-gray-700 text-gray-300 hover:bg-gray-800" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}>
+          <button onClick={onStay} className={`w-full py-3 rounded-xl text-sm font-semibold border transition-colors ${darkMode ? "border-gray-700 text-gray-300 hover:bg-gray-800" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}>
             Stay signed in
           </button>
         </div>

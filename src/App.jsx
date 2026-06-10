@@ -1,5 +1,6 @@
 import React, { useState, useRef } from "react"
-import { Home, Calendar, BookOpen, Bike, Trophy, User, Settings, LogOut } from "lucide-react"
+import { Home, Calendar, BookOpen, Bike, Trophy, User, Settings, LogOut,
+  ChevronDown, LayoutDashboard, Users, ListMusic, SlidersHorizontal, BarChart3 } from "lucide-react"
 
 // ─── DATA ───────────────────────────────────────────────────────────────────
 
@@ -705,6 +706,29 @@ function NavItem({ label, icon: Icon, active, onClick, darkMode }) {
   )
 }
 
+function NavSection({ title, icon: Icon, items, activePage, onSelect, darkMode, open, onToggle }) {
+  const hasActive = items.some(it => it.label === activePage)
+  return (
+    <div>
+      <button onClick={onToggle} title={title}
+        className={`flex items-center gap-2 justify-center lg:justify-start px-2 lg:px-3 py-2 rounded-lg w-full text-left transition-colors
+          ${darkMode ? "hover:bg-gray-800" : "hover:bg-gray-50"}`}>
+        <Icon size={15} className={hasActive ? "text-[#00aa13]" : darkMode ? "text-gray-300" : "text-gray-600"} />
+        <span className={`hidden lg:block flex-1 text-xs font-semibold uppercase tracking-wider ${hasActive ? "text-[#00aa13]" : darkMode ? "text-gray-300" : "text-gray-600"}`}>{title}</span>
+        <ChevronDown size={13} className={`hidden lg:block transition-transform ${open ? "rotate-180" : ""} ${darkMode ? "text-gray-500" : "text-gray-400"}`} />
+      </button>
+      {open && (
+        <div className="flex flex-col gap-0.5 mt-0.5 lg:pl-2">
+          {items.map(item => (
+            <NavItem key={item.label} label={item.label} icon={item.icon}
+              active={activePage === item.label} onClick={() => onSelect(item.label)} darkMode={darkMode} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function badgeStyle(badge) {
   if (badge === "Personal best") return "bg-green-50 text-[#00aa13] border border-[#00aa13]"
   if (badge === "First class")   return "bg-blue-50 text-blue-600 border border-blue-200"
@@ -957,20 +981,30 @@ function AuthPage({ onAuth }) {
 
 // ─── MAIN APP ───────────────────────────────────────────────────────────────
 
+const RIDER_NAV = [
+  { label: "Home",         icon: Home      },
+  { label: "Calendar",     icon: Calendar  },
+  { label: "Bookings",     icon: BookOpen  },
+  { label: "Rides",        icon: Bike      },
+  { label: "Achievements", icon: Trophy    },
+]
+
+const INSTRUCTOR_NAV = [
+  { label: "Studio Home",   icon: LayoutDashboard   },
+  { label: "My Classes",    icon: ListMusic         },
+  { label: "Roster",        icon: Users             },
+  { label: "Class Builder", icon: SlidersHorizontal },
+  { label: "Insights",      icon: BarChart3         },
+]
+
 export default function App() {
   const [activePage, setActivePage] = useState("Home")
   const [darkMode, setDarkMode]     = useState(false)
   const [authed, setAuthed]         = useState(false)
+  const [openSections, setOpenSections] = useState({ rider: true, instructor: false })
+  const [rosterClass, setRosterClass]   = useState(null)
 
   if (!authed) return <AuthPage onAuth={() => setAuthed(true)} />
-
-  const navItems = [
-    { label: "Home",         icon: Home      },
-    { label: "Calendar",     icon: Calendar  },
-    { label: "Bookings",     icon: BookOpen  },
-    { label: "Rides",        icon: Bike      },
-    { label: "Achievements", icon: Trophy    },
-  ]
 
   const bottomItems = [
     { label: "Profile",  icon: User     },
@@ -978,43 +1012,44 @@ export default function App() {
     { label: "Log out",  icon: LogOut   },
   ]
 
+  const isInstructorPage = INSTRUCTOR_NAV.some(n => n.label === activePage)
+  const mobileNav = isInstructorPage ? INSTRUCTOR_NAV : RIDER_NAV
+
+  function openRoster(cls) { setRosterClass(cls); setActivePage("Roster") }
+
+  const toggle = key => setOpenSections(s => ({ ...s, [key]: !s[key] }))
+  const dm = () => setDarkMode(!darkMode)
+
   return (
     <div className={`flex h-screen font-sans transition-colors ${darkMode ? "bg-gray-950 text-white" : "bg-gray-50 text-gray-900"}`}>
 
       {/* ── Sidebar (hidden on mobile, icon-only on md, full on lg) ── */}
-      <aside className={`hidden md:flex md:w-16 lg:w-44 border-r flex-col py-6 px-3 flex-shrink-0 transition-all
+      <aside className={`hidden md:flex md:w-16 lg:w-48 border-r flex-col py-6 px-3 flex-shrink-0 transition-all
         ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`}>
 
         {/* Logo */}
-        <div className="hidden lg:flex items-center px-3 mb-6">
-          <p className={`font-semibold text-base ${darkMode ? "text-white" : "text-gray-900"}`}>Dashboard</p>
+        <div className="flex items-center justify-center lg:justify-start lg:px-3 mb-6 gap-2">
+          <div className="w-7 h-7 rounded-lg bg-[#00aa13] flex items-center justify-center flex-shrink-0">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+          </div>
+          <p className={`hidden lg:block font-bold text-base ${darkMode ? "text-white" : "text-gray-900"}`}>SpinOut</p>
         </div>
 
-        {/* Main nav */}
-        <div className="flex flex-col gap-1 flex-1">
-          {navItems.map(item => (
-            <NavItem
-              key={item.label}
-              label={item.label}
-              icon={item.icon}
-              active={activePage === item.label}
-              onClick={() => setActivePage(item.label)}
-              darkMode={darkMode}
-            />
-          ))}
+        {/* Workspaces */}
+        <div className="flex flex-col gap-2 flex-1 overflow-y-auto">
+          <NavSection title="Rider" icon={Bike} items={RIDER_NAV}
+            activePage={activePage} onSelect={setActivePage} darkMode={darkMode}
+            open={openSections.rider} onToggle={() => toggle("rider")} />
+          <NavSection title="Instructor" icon={LayoutDashboard} items={INSTRUCTOR_NAV}
+            activePage={activePage} onSelect={setActivePage} darkMode={darkMode}
+            open={openSections.instructor} onToggle={() => toggle("instructor")} />
         </div>
 
         {/* Bottom nav */}
         <div className={`flex flex-col gap-1 border-t pt-4 ${darkMode ? "border-gray-800" : "border-gray-100"}`}>
           {bottomItems.map(item => (
-            <NavItem
-              key={item.label}
-              label={item.label}
-              icon={item.icon}
-              active={activePage === item.label}
-              onClick={() => setActivePage(item.label)}
-              darkMode={darkMode}
-            />
+            <NavItem key={item.label} label={item.label} icon={item.icon}
+              active={activePage === item.label} onClick={() => setActivePage(item.label)} darkMode={darkMode} />
           ))}
         </div>
 
@@ -1022,24 +1057,32 @@ export default function App() {
 
       {/* ── Page content ── */}
       <main className="flex-1 overflow-y-auto pb-16 md:pb-0">
-        {activePage === "Home"         && <HomePage         darkMode={darkMode} onToggleDarkMode={() => setDarkMode(!darkMode)} />}
-        {activePage === "Bookings"     && <BookingsPage     darkMode={darkMode} onToggleDarkMode={() => setDarkMode(!darkMode)} />}
-        {activePage === "Calendar"     && <CalendarPage     darkMode={darkMode} onToggleDarkMode={() => setDarkMode(!darkMode)} />}
-        {activePage === "Rides"        && <RidesPage        darkMode={darkMode} onToggleDarkMode={() => setDarkMode(!darkMode)} />}
-        {activePage === "Achievements" && <AchievementsPage darkMode={darkMode} onToggleDarkMode={() => setDarkMode(!darkMode)} onNavigate={setActivePage} />}
-        {activePage === "Profile"      && <ProfilePage  darkMode={darkMode} onToggleDarkMode={() => setDarkMode(!darkMode)} />}
-        {activePage === "Settings"     && <SettingsPage darkMode={darkMode} onToggleDarkMode={() => setDarkMode(!darkMode)} />}
+        {/* Rider */}
+        {activePage === "Home"         && <HomePage         darkMode={darkMode} onToggleDarkMode={dm} />}
+        {activePage === "Bookings"     && <BookingsPage     darkMode={darkMode} onToggleDarkMode={dm} />}
+        {activePage === "Calendar"     && <CalendarPage     darkMode={darkMode} onToggleDarkMode={dm} />}
+        {activePage === "Rides"        && <RidesPage        darkMode={darkMode} onToggleDarkMode={dm} />}
+        {activePage === "Achievements" && <AchievementsPage darkMode={darkMode} onToggleDarkMode={dm} onNavigate={setActivePage} />}
+        {/* Instructor */}
+        {activePage === "Studio Home"   && <InstructorHomePage    darkMode={darkMode} onToggleDarkMode={dm} onOpenRoster={openRoster} />}
+        {activePage === "My Classes"    && <InstructorClassesPage darkMode={darkMode} onToggleDarkMode={dm} onOpenRoster={openRoster} />}
+        {activePage === "Roster"        && <InstructorRosterPage  darkMode={darkMode} onToggleDarkMode={dm} initialClass={rosterClass} />}
+        {activePage === "Class Builder" && <ClassBuilderPage      darkMode={darkMode} onToggleDarkMode={dm} />}
+        {activePage === "Insights"      && <InstructorStatsPage   darkMode={darkMode} onToggleDarkMode={dm} />}
+        {/* Shared */}
+        {activePage === "Profile"      && <ProfilePage  darkMode={darkMode} onToggleDarkMode={dm} />}
+        {activePage === "Settings"     && <SettingsPage darkMode={darkMode} onToggleDarkMode={dm} />}
         {activePage === "Log out"      && <LogOutPage   darkMode={darkMode} />}
       </main>
 
       {/* ── Mobile bottom navigation ── */}
       <nav className={`fixed bottom-0 left-0 right-0 md:hidden border-t z-40 flex items-center justify-around py-2 px-1
         ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`}>
-        {navItems.map(item => (
+        {mobileNav.map(item => (
           <button
             key={item.label}
             onClick={() => setActivePage(item.label)}
-            className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg transition-colors
+            className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg transition-colors
               ${activePage === item.label
                 ? "text-[#00aa13]"
                 : darkMode ? "text-gray-500" : "text-gray-400"}`}
@@ -4498,6 +4541,489 @@ function LogOutPage({ darkMode }) {
             Stay signed in
           </button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── INSTRUCTOR DATA ─────────────────────────────────────────────────────────
+
+const INSTRUCTOR_TODAY = "Thu 26 Feb"
+
+const RIDER_POOL = [
+  "Olivia Hart","Noah Patel","Emma Cole","Liam Ward","Ava Reid","Jack Doyle","Mia Foster",
+  "Leo Barnes","Sophie Lane","Ethan Cross","Isla Webb","Max Field","Ruby Shaw","Finn Walsh",
+  "Grace Hill","Oscar Penn","Lily Frost","Cole Hayes","Nina Vance","Theo Marsh","Daisy Quinn",
+  "Sam Rourke","Zara Bly","Kit Mercer","Eve Larsson","Jonah Reece","Tess Aldridge","Rory Vale",
+]
+
+function rosterFor(seed, booked) {
+  // deterministic pick of riders + bike assignments
+  const out = []
+  const used = new Set()
+  for (let i = 0; i < booked; i++) {
+    const r = (seed * 17 + i * 31) % RIDER_POOL.length
+    let name = RIDER_POOL[r]
+    let n = r
+    while (used.has(name)) { n = (n + 1) % RIDER_POOL.length; name = RIDER_POOL[n] }
+    used.add(name)
+    const bike = ((seed * 7 + i * 13) % 24) + 1
+    out.push({ name, bike, checkedIn: (seed + i) % 3 !== 0 })
+  }
+  // unique bikes
+  const seenBikes = new Set()
+  out.forEach(r => { while (seenBikes.has(r.bike)) r.bike = (r.bike % 24) + 1; seenBikes.add(r.bike) })
+  return out
+}
+
+const instructorClasses = [
+  { dateLabel: "Today",     dateIso: "2026-02-26", time: "06:15", name: "Sunrise Power",   studio: "Studio 1", capacity: 24, booked: 22, waitlist: 3, status: "upcoming", seed: 3 },
+  { dateLabel: "Today",     dateIso: "2026-02-26", time: "12:00", name: "Lunch Sprint",    studio: "Studio 2", capacity: 20, booked: 16, waitlist: 0, status: "upcoming", seed: 7 },
+  { dateLabel: "Today",     dateIso: "2026-02-26", time: "18:00", name: "Evening Flow",    studio: "Studio 1", capacity: 24, booked: 14, waitlist: 0, status: "upcoming", seed: 11 },
+  { dateLabel: "Tomorrow",  dateIso: "2026-02-27", time: "08:00", name: "Cadence Control", studio: "Studio 1", capacity: 24, booked: 19, waitlist: 0, status: "upcoming", seed: 5 },
+  { dateLabel: "Tomorrow",  dateIso: "2026-02-27", time: "19:00", name: "HIIT Blast",      studio: "Studio 1", capacity: 24, booked: 24, waitlist: 6, status: "upcoming", seed: 9 },
+  { dateLabel: "Sat 28 Feb",dateIso: "2026-02-28", time: "09:00", name: "Rhythm Ride",     studio: "Studio 1", capacity: 24, booked: 21, waitlist: 1, status: "upcoming", seed: 2 },
+  // past
+  { dateLabel: "Wed 25 Feb",dateIso: "2026-02-25", time: "07:00", name: "Threshold Push",  studio: "Studio 1", capacity: 24, booked: 23, waitlist: 0, status: "done", seed: 4, rating: 4.9, attended: 21 },
+  { dateLabel: "Tue 24 Feb",dateIso: "2026-02-24", time: "18:30", name: "Climb Intervals", studio: "Studio 2", capacity: 20, booked: 18, waitlist: 0, status: "done", seed: 8, rating: 4.8, attended: 17 },
+  { dateLabel: "Mon 23 Feb",dateIso: "2026-02-23", time: "06:30", name: "Sunrise Power",   studio: "Studio 1", capacity: 24, booked: 24, waitlist: 2, status: "done", seed: 6, rating: 5.0, attended: 23 },
+]
+
+const INSTRUCTOR_REVIEWS = [
+  { name: "Olivia Hart",  rating: 5, text: "Best class of my week — the energy is unreal.",            cls: "Sunrise Power"  },
+  { name: "Noah Patel",   rating: 5, text: "Tough but so well structured. Loved the threshold blocks.", cls: "Threshold Push" },
+  { name: "Mia Foster",   rating: 4, text: "Great playlist, pushed me harder than I expected.",         cls: "HIIT Blast"     },
+  { name: "Leo Barnes",   rating: 5, text: "Clear cues, great pacing. Always leave buzzing.",            cls: "Climb Intervals"},
+]
+
+// ─── INSTRUCTOR PAGES ────────────────────────────────────────────────────────
+
+function InstructorTopBar({ title, sub, darkMode, onToggleDarkMode }) {
+  const heading = darkMode ? "text-white"    : "text-gray-900"
+  const muted   = darkMode ? "text-gray-400" : "text-gray-500"
+  return (
+    <div className="flex items-center justify-between mb-6">
+      <div>
+        <h1 className={`text-xl font-semibold ${heading}`}>{title}</h1>
+        {sub && <p className={`text-sm mt-0.5 ${muted}`}>{sub}</p>}
+      </div>
+      <div className="flex items-center gap-3">
+        <DarkModeToggle darkMode={darkMode} onToggle={onToggleDarkMode} />
+        <span className={`hidden sm:inline text-sm ${muted}`}>JIM · Instructor</span>
+        <Avatar name="JIM" size={32} />
+      </div>
+    </div>
+  )
+}
+
+function CapacityBar({ booked, capacity, darkMode }) {
+  const pct = Math.min(100, (booked / capacity) * 100)
+  const full = booked >= capacity
+  return (
+    <div className={`h-1.5 rounded-full ${darkMode ? "bg-gray-700" : "bg-gray-100"}`}>
+      <div className="h-1.5 rounded-full" style={{ width: `${pct}%`, background: full ? "#fb7512" : "#00aa13" }} />
+    </div>
+  )
+}
+
+function InstructorHomePage({ darkMode, onToggleDarkMode, onOpenRoster }) {
+  const heading = darkMode ? "text-white"    : "text-gray-900"
+  const muted   = darkMode ? "text-gray-400" : "text-gray-500"
+  const card    = `rounded-2xl border transition-colors ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`
+  const subtle  = darkMode ? "bg-gray-800"   : "bg-gray-50"
+
+  const today = instructorClasses.filter(c => c.dateLabel === "Today")
+  const ridersToday = today.reduce((s, c) => s + c.booked, 0)
+
+  const stats = [
+    { label: "Classes today",   value: today.length },
+    { label: "Riders booked",   value: ridersToday },
+    { label: "This week",       value: "6 classes" },
+    { label: "Avg rating",      value: "4.9 ★" },
+  ]
+
+  return (
+    <div className="p-4 md:p-8 max-w-4xl mx-auto pb-16">
+      <InstructorTopBar title="Good morning, JIM" sub={`${today.length} classes to teach today · SpinOut Hampstead`} darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+        {stats.map((s, i) => (
+          <div key={i} className={`${card} p-4`}>
+            <p className={`text-xs ${muted} mb-1`}>{s.label}</p>
+            <p className={`text-xl font-bold ${heading}`}>{s.value}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Today's classes */}
+      <h2 className={`font-semibold mb-3 ${heading}`}>Today's classes</h2>
+      <div className="flex flex-col gap-3 mb-8">
+        {today.map((c, i) => (
+          <div key={i} className={`${card} p-5`}>
+            <div className="flex items-start justify-between gap-4 mb-3">
+              <div>
+                <div className="flex items-center gap-2.5">
+                  <span className={`text-sm font-bold tabular-nums ${heading}`}>{c.time}</span>
+                  <span className={`text-base font-bold ${heading}`}>{c.name}</span>
+                </div>
+                <p className={`text-xs mt-0.5 ${muted}`}>{c.studio} · 45 mins</p>
+              </div>
+              <button onClick={() => onOpenRoster(c)}
+                className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-[#00aa13] text-white hover:bg-[#008a0f] transition-colors flex-shrink-0">
+                View roster
+              </button>
+            </div>
+            <div className="flex items-center justify-between mb-1.5">
+              <span className={`text-xs ${muted}`}>{c.booked} / {c.capacity} booked{c.waitlist > 0 && ` · ${c.waitlist} waitlist`}</span>
+              <span className={`text-xs font-semibold ${c.booked >= c.capacity ? "text-orange-500" : "text-[#00aa13]"}`}>
+                {c.booked >= c.capacity ? "Full" : `${c.capacity - c.booked} spaces`}
+              </span>
+            </div>
+            <CapacityBar booked={c.booked} capacity={c.capacity} darkMode={darkMode} />
+          </div>
+        ))}
+      </div>
+
+      {/* Recent reviews */}
+      <h2 className={`font-semibold mb-3 ${heading}`}>Recent rider feedback</h2>
+      <div className="flex flex-col gap-3">
+        {INSTRUCTOR_REVIEWS.slice(0, 3).map((r, i) => (
+          <div key={i} className={`${card} p-4 flex items-start gap-3`}>
+            <Avatar name={r.name} size={36} />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between">
+                <p className={`text-sm font-semibold ${heading}`}>{r.name}</p>
+                <span className="text-xs text-amber-500">{"★".repeat(r.rating)}<span className={muted}>{"★".repeat(5-r.rating)}</span></span>
+              </div>
+              <p className={`text-xs mt-1 ${muted}`}>"{r.text}"</p>
+              <p className={`text-xs mt-1.5 text-[#00aa13] font-medium`}>{r.cls}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function InstructorClassesPage({ darkMode, onToggleDarkMode, onOpenRoster }) {
+  const [tab, setTab] = useState("upcoming")
+  const heading = darkMode ? "text-white"    : "text-gray-900"
+  const muted   = darkMode ? "text-gray-400" : "text-gray-500"
+  const card    = `rounded-2xl border transition-colors ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`
+  const divider = darkMode ? "border-gray-800" : "border-gray-100"
+
+  const list = instructorClasses.filter(c => tab === "upcoming" ? c.status === "upcoming" : c.status === "done")
+
+  return (
+    <div className="p-4 md:p-8 max-w-4xl mx-auto pb-16">
+      <InstructorTopBar title="My Classes" sub="Classes you're teaching at SpinOut" darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
+
+      <div className={`inline-flex rounded-xl p-0.5 mb-5 ${darkMode ? "bg-gray-800" : "bg-gray-100"}`}>
+        {["upcoming","past"].map(t => (
+          <button key={t} onClick={() => setTab(t)}
+            className={`px-4 py-1.5 rounded-lg text-xs font-semibold capitalize transition-all ${tab === t
+              ? darkMode ? "bg-gray-700 text-white shadow-sm" : "bg-white text-gray-900 shadow-sm"
+              : muted}`}>{t}</button>
+        ))}
+      </div>
+
+      <div className={`${card} overflow-hidden`}>
+        {list.map((c, i) => (
+          <button key={i} onClick={() => onOpenRoster(c)}
+            className={`w-full text-left flex items-center gap-4 px-5 py-4 border-b last:border-b-0 ${divider} transition-colors ${darkMode ? "hover:bg-gray-800" : "hover:bg-gray-50"}`}>
+            <div className="w-14 flex-shrink-0">
+              <p className={`text-xs font-medium ${muted}`}>{c.dateLabel}</p>
+              <p className={`text-sm font-bold tabular-nums ${heading}`}>{c.time}</p>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className={`text-sm font-semibold ${heading}`}>{c.name}</p>
+              <p className={`text-xs mt-0.5 ${muted}`}>{c.studio} · {c.booked}/{c.capacity} riders{c.waitlist > 0 && ` · ${c.waitlist} waitlist`}</p>
+            </div>
+            {c.status === "done"
+              ? <span className="text-xs font-semibold text-amber-500 flex-shrink-0">{c.rating} ★</span>
+              : <span className={`text-xs font-semibold flex-shrink-0 ${c.booked >= c.capacity ? "text-orange-500" : "text-[#00aa13]"}`}>{c.booked >= c.capacity ? "Full" : `${c.capacity - c.booked} left`}</span>}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function InstructorRosterPage({ darkMode, onToggleDarkMode, initialClass }) {
+  const classes = instructorClasses.filter(c => c.status === "upcoming")
+  const [selected, setSelected] = useState(initialClass || classes[0])
+  const heading = darkMode ? "text-white"    : "text-gray-900"
+  const muted   = darkMode ? "text-gray-400" : "text-gray-500"
+  const card    = `rounded-2xl border transition-colors ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`
+  const subtle  = darkMode ? "bg-gray-800"   : "bg-gray-50"
+  const divider = darkMode ? "border-gray-800" : "border-gray-100"
+
+  const roster = rosterFor(selected.seed, selected.booked)
+  const layout = STUDIO_LAYOUTS[selected.studio] || STUDIO_LAYOUTS["Studio 1"]
+  const bikeMap = {}
+  roster.forEach(r => { bikeMap[r.bike] = r })
+
+  return (
+    <div className="p-4 md:p-8 max-w-5xl mx-auto pb-16">
+      <InstructorTopBar title="Roster" sub="Riders booked into your class" darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
+
+      {/* Class selector */}
+      <div className="flex gap-2 mb-6 overflow-x-auto pb-1">
+        {classes.map((c, i) => {
+          const on = c === selected
+          return (
+            <button key={i} onClick={() => setSelected(c)}
+              className={`flex-shrink-0 px-4 py-2.5 rounded-xl text-left transition-all border ${on
+                ? "bg-[#e6f9e8] border-[#00aa13]"
+                : darkMode ? "bg-gray-900 border-gray-800 hover:bg-gray-800" : "bg-white border-gray-100 hover:bg-gray-50"}`}>
+              <p className={`text-xs ${on ? "text-[#00aa13]" : muted}`}>{c.dateLabel} · {c.time}</p>
+              <p className={`text-sm font-semibold ${on ? "text-[#00aa13]" : heading}`}>{c.name}</p>
+            </button>
+          )
+        })}
+      </div>
+
+      <div className="flex flex-col lg:flex-row gap-6">
+
+        {/* Bike layout */}
+        <div className={`${card} p-5 lg:w-[360px] flex-shrink-0`}>
+          <div className="flex items-center justify-between mb-4">
+            <p className={`text-sm font-semibold ${heading}`}>Studio layout</p>
+            <span className={`text-xs ${muted}`}>{layout.label}</span>
+          </div>
+          <div className="flex flex-col gap-2">
+            <div className="flex justify-center mb-2">
+              <div className="flex flex-col items-center gap-1">
+                <span className={`text-xs ${muted}`}>You</span>
+                <div className="w-9 h-11 rounded-lg bg-[#00aa13] flex items-center justify-center text-white text-xs font-bold">JIM</div>
+              </div>
+            </div>
+            {layout.rows.map((row, ri) => (
+              <div key={ri} className="flex gap-1.5 justify-center">
+                {row.map(num => {
+                  const rider = bikeMap[num]
+                  return (
+                    <div key={num} title={rider ? `${rider.name} · Bike ${num}` : `Bike ${num} · empty`}
+                      className={`w-9 h-11 rounded-lg flex items-center justify-center text-[10px] font-bold transition-colors
+                        ${rider
+                          ? rider.checkedIn ? "bg-[#00aa13] text-white" : "bg-[#e6f9e8] text-[#00aa13] border border-[#00aa13]"
+                          : darkMode ? "bg-gray-800 text-gray-600" : "bg-gray-100 text-gray-400"}`}>
+                      {rider ? rider.name.split(" ").map(w=>w[0]).join("") : num}
+                    </div>
+                  )
+                })}
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center gap-4 mt-4 flex-wrap">
+            <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-[#00aa13]" /><span className={`text-xs ${muted}`}>Checked in</span></div>
+            <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-[#e6f9e8] border border-[#00aa13]" /><span className={`text-xs ${muted}`}>Booked</span></div>
+            <div className="flex items-center gap-1.5"><div className={`w-3 h-3 rounded ${darkMode ? "bg-gray-800" : "bg-gray-100"}`} /><span className={`text-xs ${muted}`}>Empty</span></div>
+          </div>
+        </div>
+
+        {/* Rider list */}
+        <div className={`${card} flex-1 overflow-hidden`}>
+          <div className={`flex items-center justify-between px-5 py-3.5 border-b ${divider}`}>
+            <p className={`text-sm font-semibold ${heading}`}>Booked riders</p>
+            <span className={`text-xs ${muted}`}>{roster.filter(r=>r.checkedIn).length} checked in · {selected.booked} total</span>
+          </div>
+          <div className="max-h-[480px] overflow-y-auto">
+            {roster.map((r, i) => (
+              <div key={i} className={`flex items-center gap-3 px-5 py-3 border-b last:border-b-0 ${divider}`}>
+                <Avatar name={r.name} size={34} />
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm font-medium ${heading}`}>{r.name}</p>
+                  <p className={`text-xs ${muted}`}>Bike {r.bike}</p>
+                </div>
+                {r.checkedIn
+                  ? <span className="text-xs font-semibold text-[#00aa13] flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#00aa13]" />Checked in</span>
+                  : <span className={`text-xs ${muted}`}>Booked</span>}
+              </div>
+            ))}
+          </div>
+          {selected.waitlist > 0 && (
+            <div className={`px-5 py-3 border-t ${divider} ${subtle}`}>
+              <p className={`text-xs font-semibold text-amber-600`}>{selected.waitlist} on the waitlist</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ClassBuilderPage({ darkMode, onToggleDarkMode }) {
+  const heading = darkMode ? "text-white"    : "text-gray-900"
+  const muted   = darkMode ? "text-gray-400" : "text-gray-500"
+  const card    = `rounded-2xl border transition-colors ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`
+  const subtle  = darkMode ? "bg-gray-800"   : "bg-gray-50"
+  const inputCls = `w-full px-3.5 py-2.5 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-[#00aa13] focus:border-transparent transition ${darkMode ? "bg-gray-800 border-gray-700 text-white" : "bg-white border-gray-200 text-gray-900"}`
+
+  const [name, setName]       = useState("New Power Ride")
+  const [studio, setStudio]   = useState("Studio 1")
+  const [phases, setPhases]   = useState([
+    { name: "Warm Up",      zone: 1, mins: 7 },
+    { name: "Build",        zone: 3, mins: 8 },
+    { name: "Threshold",    zone: 4, mins: 12 },
+    { name: "Recovery",     zone: 1, mins: 4 },
+    { name: "Sprints",      zone: 5, mins: 9 },
+    { name: "Cool Down",    zone: 1, mins: 5 },
+  ])
+
+  const total = phases.reduce((s, p) => s + p.mins, 0)
+
+  function updatePhase(i, patch) { setPhases(p => p.map((ph, j) => j === i ? { ...ph, ...patch } : ph)) }
+  function removePhase(i) { setPhases(p => p.filter((_, j) => j !== i)) }
+  function addPhase() { setPhases(p => [...p, { name: "New Phase", zone: 2, mins: 5 }]) }
+
+  return (
+    <div className="p-4 md:p-8 max-w-3xl mx-auto pb-16">
+      <InstructorTopBar title="Class Builder" sub="Design a session plan for your riders" darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
+
+      {/* Details */}
+      <div className={`${card} p-5 mb-5`}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className={`block text-xs font-semibold mb-1.5 ${muted}`}>Class name</label>
+            <input value={name} onChange={e => setName(e.target.value)} className={inputCls} />
+          </div>
+          <div>
+            <label className={`block text-xs font-semibold mb-1.5 ${muted}`}>Studio</label>
+            <div className={`inline-flex rounded-xl overflow-hidden border w-full ${darkMode ? "border-gray-700" : "border-gray-200"}`}>
+              {["Studio 1","Studio 2"].map(s => (
+                <button key={s} onClick={() => setStudio(s)}
+                  className={`flex-1 px-3 py-2.5 text-xs font-medium transition-colors ${studio === s ? "bg-[#00aa13] text-white" : darkMode ? "bg-gray-800 text-gray-400" : "bg-white text-gray-500"}`}>{s}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Live preview chart */}
+      <div className={`${card} p-5 mb-5`}>
+        <div className="flex items-center justify-between mb-4">
+          <p className={`text-sm font-semibold ${heading}`}>Intensity preview</p>
+          <span className={`text-xs ${muted}`}>{total} min total</span>
+        </div>
+        <div className="flex items-end w-full gap-1" style={{ height: 90 }}>
+          {phases.map((ph, i) => (
+            <div key={i} className="rounded-t-sm flex items-end justify-center transition-all"
+              style={{ flex: ph.mins, height: `${FTP_ZONES[Math.min(ph.zone-1,6)].height}%`, background: FTP_ZONES[Math.min(ph.zone-1,6)].color }}
+              title={`${ph.name} · Z${ph.zone} · ${ph.mins} min`} />
+          ))}
+        </div>
+        <div className="flex justify-between mt-2">
+          <span className={`text-xs ${muted}`}>0:00</span>
+          <span className={`text-xs ${muted}`}>{total}:00</span>
+        </div>
+      </div>
+
+      {/* Phase editor */}
+      <div className={`${card} overflow-hidden mb-5`}>
+        <div className={`px-5 py-3.5 border-b ${darkMode ? "border-gray-800" : "border-gray-100"} flex items-center justify-between`}>
+          <p className={`text-sm font-semibold ${heading}`}>Phases</p>
+          <button onClick={addPhase} className="text-xs font-semibold text-[#00aa13] hover:underline">+ Add phase</button>
+        </div>
+        {phases.map((ph, i) => (
+          <div key={i} className={`flex items-center gap-3 px-5 py-3 border-b last:border-b-0 ${darkMode ? "border-gray-800" : "border-gray-100"}`}>
+            <div className="w-2 h-8 rounded-full flex-shrink-0" style={{ background: FTP_ZONES[Math.min(ph.zone-1,6)].color }} />
+            <input value={ph.name} onChange={e => updatePhase(i, { name: e.target.value })}
+              className={`flex-1 min-w-0 bg-transparent text-sm font-medium focus:outline-none ${heading}`} />
+            {/* Zone */}
+            <div className="flex items-center gap-1">
+              <span className={`text-xs ${muted}`}>Z</span>
+              <select value={ph.zone} onChange={e => updatePhase(i, { zone: +e.target.value })}
+                className={`text-xs font-semibold rounded-lg px-1.5 py-1 ${darkMode ? "bg-gray-800 text-white" : "bg-gray-100 text-gray-700"}`}>
+                {[1,2,3,4,5,6,7].map(z => <option key={z} value={z}>{z}</option>)}
+              </select>
+            </div>
+            {/* Mins */}
+            <div className="flex items-center gap-1">
+              <button onClick={() => updatePhase(i, { mins: Math.max(1, ph.mins-1) })} className={`w-6 h-6 rounded flex items-center justify-center text-sm font-bold ${darkMode ? "bg-gray-800 text-gray-300" : "bg-gray-100 text-gray-600"}`}>−</button>
+              <span className={`text-xs font-bold w-10 text-center tabular-nums ${heading}`}>{ph.mins}m</span>
+              <button onClick={() => updatePhase(i, { mins: Math.min(30, ph.mins+1) })} className={`w-6 h-6 rounded flex items-center justify-center text-sm font-bold ${darkMode ? "bg-gray-800 text-gray-300" : "bg-gray-100 text-gray-600"}`}>+</button>
+            </div>
+            <button onClick={() => removePhase(i)} className={`w-6 h-6 rounded flex items-center justify-center text-xs flex-shrink-0 ${darkMode ? "hover:bg-gray-800 text-gray-500" : "hover:bg-gray-100 text-gray-400"}`}>✕</button>
+          </div>
+        ))}
+      </div>
+
+      <button className="w-full py-3 rounded-xl bg-[#00aa13] hover:bg-[#008a0f] text-white font-semibold text-sm transition-colors">
+        Publish class plan
+      </button>
+    </div>
+  )
+}
+
+function InstructorStatsPage({ darkMode, onToggleDarkMode }) {
+  const heading = darkMode ? "text-white"    : "text-gray-900"
+  const muted   = darkMode ? "text-gray-400" : "text-gray-500"
+  const card    = `rounded-2xl border transition-colors ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`
+  const subtle  = darkMode ? "bg-gray-800"   : "bg-gray-50"
+
+  const weeks = [
+    { label: "5 wks ago", classes: 5, riders: 96 },
+    { label: "4 wks ago", classes: 6, riders: 118 },
+    { label: "3 wks ago", classes: 5, riders: 104 },
+    { label: "2 wks ago", classes: 7, riders: 142 },
+    { label: "Last week",  classes: 6, riders: 128 },
+    { label: "This week",  classes: 6, riders: 134 },
+  ]
+  const maxRiders = Math.max(...weeks.map(w => w.riders))
+
+  const stats = [
+    { label: "Earnings this month", value: "£2,140" },
+    { label: "Classes taught",      value: "28" },
+    { label: "Riders taught",       value: "622" },
+    { label: "Avg rating",          value: "4.9 ★" },
+  ]
+
+  return (
+    <div className="p-4 md:p-8 max-w-4xl mx-auto pb-16">
+      <InstructorTopBar title="Insights & Earnings" sub="Your teaching performance over time" darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+        {stats.map((s, i) => (
+          <div key={i} className={`${card} p-4`}>
+            <p className={`text-xs ${muted} mb-1`}>{s.label}</p>
+            <p className={`text-xl font-bold ${heading}`}>{s.value}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Riders per week chart */}
+      <div className={`${card} p-5 mb-6`}>
+        <p className={`text-sm font-semibold mb-5 ${heading}`}>Riders taught per week</p>
+        <div className="flex items-end justify-between gap-2" style={{ height: 160 }}>
+          {weeks.map((w, i) => (
+            <div key={i} className="flex-1 flex flex-col items-center gap-2 h-full justify-end">
+              <span className={`text-xs font-bold ${heading}`}>{w.riders}</span>
+              <div className="w-full rounded-t-lg transition-all" style={{ height: `${(w.riders/maxRiders)*100}%`, background: i === weeks.length-1 ? "#00aa13" : darkMode ? "#374151" : "#d1fae5" }} />
+              <span className={`text-[10px] text-center ${muted}`}>{w.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Reviews */}
+      <h2 className={`font-semibold mb-3 ${heading}`}>Latest reviews</h2>
+      <div className="flex flex-col gap-3">
+        {INSTRUCTOR_REVIEWS.map((r, i) => (
+          <div key={i} className={`${card} p-4 flex items-start gap-3`}>
+            <Avatar name={r.name} size={36} />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between">
+                <p className={`text-sm font-semibold ${heading}`}>{r.name}</p>
+                <span className="text-xs text-amber-500">{"★".repeat(r.rating)}<span className={muted}>{"★".repeat(5-r.rating)}</span></span>
+              </div>
+              <p className={`text-xs mt-1 ${muted}`}>"{r.text}"</p>
+              <p className="text-xs mt-1.5 text-[#00aa13] font-medium">{r.cls}</p>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   )

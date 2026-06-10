@@ -474,6 +474,10 @@ const bikes = [
   [17, 18, 19, 20, 21, 22, 23, 24],
 ]
 
+// Social classes use random seating — riders can't pick a bike (mix the room, make friends)
+const SOCIAL_CLASSES = new Set(["Rhythm Ride", "Evening Flow"])
+const isSocialClass = name => SOCIAL_CLASSES.has(name)
+
 const STUDIO_LAYOUTS = {
   "Studio 1": {
     rows: [[1,2,3,4,5,6,7,8],[9,10,11,12,13,14,15,16],[17,18,19,20,21,22,23,24]],
@@ -1008,7 +1012,7 @@ export default function App() {
   function publishClass(cls) {
     setBuiltClasses(prev => {
       const without = prev.filter(c => c.name !== cls.name)
-      return [{ name: cls.name, length: cls.length, studio: cls.studio }, ...without]
+      return [{ name: cls.name, length: cls.length, social: cls.social }, ...without]
     })
   }
 
@@ -1907,6 +1911,11 @@ function fmtSecs(s) {
   return r ? `${m}m ${r}s` : `${m}m`
 }
 
+function fmtClock(s) {
+  const m = Math.floor(s / 60), r = Math.round(s % 60)
+  return `${m}:${String(r).padStart(2, "0")}`
+}
+
 function processIntervals(raw) {
   // 1. Merge consecutive same-zone intervals
   const merged = raw.reduce((acc, [secs, zone]) => {
@@ -2504,6 +2513,18 @@ function BookingsPage({ darkMode, onToggleDarkMode }) {
                       <button className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-semibold text-sm transition-colors">Join Waitlist</button>
                     </>)}
                   </div>
+                ) : isSocialClass(selectedSession.name) ? (
+                  <div className="p-5">
+                    <div className={`rounded-xl p-4 text-center ${darkMode ? "bg-gray-800" : "bg-[#e6f9e8]"}`}>
+                      <p className="text-2xl mb-1">🎲</p>
+                      <p className={`text-sm font-semibold ${heading}`}>Social ride · random seating</p>
+                      <p className={`text-xs mt-1 ${muted}`}>Your bike is assigned when you arrive — a great way to mix the room and meet other riders.</p>
+                    </div>
+                    <button onClick={() => handleBook(selectedSession)}
+                      className="w-full mt-5 py-3 rounded-xl bg-[#00aa13] hover:bg-[#008a0f] text-white font-semibold text-sm transition-colors">
+                      {bookedSessions.includes(selectedSession.time + selectedSession.name) ? "✓ Booked!" : "Confirm booking"}
+                    </button>
+                  </div>
                 ) : (
                   <div className="p-5">
                     <div className="flex items-center justify-between mb-4">
@@ -2625,6 +2646,18 @@ function BookingsPage({ darkMode, onToggleDarkMode }) {
               {isPast ? (
                 <div className="px-5 py-6 text-center">
                   <p className={`text-sm ${muted}`}>This session has passed — view only</p>
+                </div>
+              ) : isSocialClass(selectedSession.name) ? (
+                <div className="px-5 py-4 pb-10">
+                  <div className={`rounded-xl p-4 text-center ${darkMode ? "bg-gray-800" : "bg-[#e6f9e8]"}`}>
+                    <p className="text-2xl mb-1">🎲</p>
+                    <p className={`text-sm font-semibold ${heading}`}>Social ride · random seating</p>
+                    <p className={`text-xs mt-1 ${muted}`}>Your bike is assigned when you arrive — a great way to mix the room and meet other riders.</p>
+                  </div>
+                  <button onClick={() => handleBook(selectedSession)}
+                    className="w-full mt-5 py-3 rounded-xl bg-[#00aa13] hover:bg-[#008a0f] text-white font-semibold text-sm transition-colors">
+                    {bookedSessions.includes(selectedSession.time + selectedSession.name) ? "✓ Booked!" : "Confirm booking"}
+                  </button>
                 </div>
               ) : (
                 <div className="px-5 py-4 pb-10">
@@ -4546,6 +4579,8 @@ function LogOutPage({ darkMode, onLogout, onStay }) {
 
 const INSTRUCTOR_TODAY = "Thu 26 Feb"
 
+const LOCATIONS = ["SpinOut · Hampstead", "SpinOut · Shoreditch"]
+
 const RIDER_POOL = [
   "Olivia Hart","Noah Patel","Emma Cole","Liam Ward","Ava Reid","Jack Doyle","Mia Foster",
   "Leo Barnes","Sophie Lane","Ethan Cross","Isla Webb","Max Field","Ruby Shaw","Finn Walsh",
@@ -4564,7 +4599,8 @@ function rosterFor(seed, booked) {
     while (used.has(name)) { n = (n + 1) % RIDER_POOL.length; name = RIDER_POOL[n] }
     used.add(name)
     const bike = ((seed * 7 + i * 13) % 24) + 1
-    out.push({ name, bike, checkedIn: (seed + i) % 3 !== 0 })
+    // most riders are simply "booked"; only a few have physically checked in
+    out.push({ name, bike, checkedIn: (seed + i) % 6 === 0 })
   }
   // unique bikes
   const seenBikes = new Set()
@@ -4626,11 +4662,11 @@ function presetTracks(name) {
 }
 
 const SEED_BUILT_CLASSES = [
-  { name: "Sunrise Power", length: 45, studio: "Studio 1" },
-  { name: "HIIT Blast",    length: 30, studio: "Studio 1" },
-  { name: "Rhythm Ride",   length: 45, studio: "Studio 2" },
-  { name: "Threshold Push", length: 45, studio: "Studio 1" },
-  { name: "Endurance Builder", length: 60, studio: "Studio 1" },
+  { name: "Sunrise Power",     length: 45, social: false },
+  { name: "HIIT Blast",        length: 30, social: false },
+  { name: "Rhythm Ride",       length: 45, social: true  },
+  { name: "Threshold Push",    length: 45, social: false },
+  { name: "Endurance Builder", length: 60, social: false },
 ]
 
 const QUOTE_PRESETS = [
@@ -5003,7 +5039,7 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
   const selectCls = `px-3 py-2.5 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-[#00aa13] transition ${darkMode ? "bg-gray-800 border-gray-700 text-white" : "bg-white border-gray-200 text-gray-900"}`
 
   const [name, setName]       = useState("New Power Ride")
-  const [studio, setStudio]   = useState("Studio 1")
+  const [social, setSocial]   = useState(false)       // random seating
   const [length, setLength]   = useState(45)          // minutes
   const [tracks, setTracks]   = useState(presetTracks("Power Hour Mix"))
   const [newTrack, setNewTrack] = useState("")
@@ -5015,20 +5051,18 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
   const [undoStack, setUndoStack] = useState([])
   const [quote, setQuote]     = useState("")
   const [hover, setHover]     = useState(null)        // { frac, start, secs, zone, cad }
-  const [cursor, setCursor]   = useState(null)        // insert position in seconds; null = end
-  const [summaryOpen, setSummaryOpen] = useState(false)
+  const [cursor, setCursor]   = useState(null)        // insert/playhead position in seconds; null = end
   const [playing, setPlaying] = useState(false)
-  const [playhead, setPlayhead] = useState(0)
   const [dragging, setDragging] = useState(false)
+  const [summaryOpen, setSummaryOpen] = useState(false)
   const rafRef = useRef(0), lastRef = useRef(0)
-
   const TARGET = length * 60
   const total  = strokes.reduce((s, st) => s + st[0], 0)
   const scale  = Math.max(TARGET, total)
-  const insertPos = playing ? Math.min(playhead, scale) : (cursor == null ? total : Math.min(cursor, total))
+  const insertPos = cursor == null ? total : Math.min(cursor, total)
   const cur    = insertPos
 
-  // Playback — playhead sweeps the timeline so you can lay zones down in time
+  // Playback — sweeps the insert cursor across the timeline so you can lay zones down in time
   useEffect(() => {
     if (!playing) return
     const PLAY_SECONDS = 30   // wall-clock seconds to traverse the whole canvas
@@ -5036,8 +5070,9 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
     function tick(now) {
       const dt = (now - lastRef.current) / 1000
       lastRef.current = now
-      setPlayhead(p => {
-        const next = p + (scale / PLAY_SECONDS) * dt
+      setCursor(c => {
+        const base = c == null ? 0 : c
+        const next = base + (scale / PLAY_SECONDS) * dt
         if (next >= scale) { setPlaying(false); return scale }
         return next
       })
@@ -5049,10 +5084,9 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
 
   function togglePlay() {
     if (playing) { setPlaying(false); return }
-    setPlayhead(insertPos >= scale ? 0 : insertPos)
+    if (cursor == null || cursor >= scale) setCursor(0)
     setPlaying(true)
   }
-  function stopPlay() { setPlaying(false); setPlayhead(0) }
 
   // merge consecutive strokes with same zone + cadence
   const merged = strokes.reduce((acc, [secs, zone, cad]) => {
@@ -5079,7 +5113,7 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
 
   function publish() {
     if (!total) return
-    onPublish?.({ name, length, studio })
+    onPublish?.({ name, length, social })
     setPublished(true)
     setTimeout(() => setPublished(false), 2500)
   }
@@ -5109,7 +5143,7 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
       if (!done) out.push(stroke)
       commit(out, playing ? undefined : at + brush)
     }
-    if (playing) setPlayhead(p => p + brush)
+    if (playing) setCursor(c => (c == null ? at : c) + brush)
   }
   function undo()  { setUndoStack(s => { if (!s.length) return s; setStrokes(s[s.length-1]); setCursor(null); return s.slice(0,-1) }) }
   function clear() { commit([], null) }
@@ -5166,15 +5200,6 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
             <input value={name} onChange={e => setName(e.target.value)} className={inputCls} />
           </div>
           <div>
-            <label className={`block text-xs font-semibold mb-1.5 ${muted}`}>Studio</label>
-            <div className={`inline-flex rounded-xl overflow-hidden border w-full ${darkMode ? "border-gray-700" : "border-gray-200"}`}>
-              {["Studio 1","Studio 2"].map(s => (
-                <button key={s} onClick={() => setStudio(s)}
-                  className={`flex-1 px-3 py-2.5 text-xs font-medium transition-colors ${studio === s ? "bg-[#00aa13] text-white" : darkMode ? "bg-gray-800 text-gray-400" : "bg-white text-gray-500"}`}>{s}</button>
-              ))}
-            </div>
-          </div>
-          <div className="sm:col-span-2">
             <label className={`block text-xs font-semibold mb-1.5 ${muted}`}>Class length</label>
             <div className={`inline-flex rounded-xl overflow-hidden border w-full ${darkMode ? "border-gray-700" : "border-gray-200"}`}>
               {lengthOpts.map(l => (
@@ -5184,6 +5209,17 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
             </div>
           </div>
         </div>
+
+        {/* Social class toggle */}
+        <button onClick={() => setSocial(!social)} className={`flex items-center gap-3 mt-4 p-3 rounded-xl w-full text-left transition-colors ${subtle}`}>
+          <div style={{ width: 44, height: 24, borderRadius: 12, flexShrink: 0, background: social ? "#00aa13" : darkMode ? "#4B5563" : "#D1D5DB", position: "relative", transition: "background 0.18s" }}>
+            <div style={{ position: "absolute", top: 2, left: social ? 22 : 2, width: 20, height: 20, borderRadius: "50%", background: "#fff", transition: "left 0.18s" }} />
+          </div>
+          <div>
+            <p className={`text-sm font-medium ${heading}`}>Social class · random seating 🎲</p>
+            <p className={`text-xs ${muted}`}>{social ? "Riders are assigned a bike at random to mix the room and make friends" : "Riders choose their own bike"}</p>
+          </div>
+        </button>
       </div>
 
       {/* Playlist builder */}
@@ -5327,14 +5363,10 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
               ? <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
               : <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5l12 7-12 7z"/></svg>}
           </button>
-          <button onClick={stopPlay} disabled={total === 0}
-            className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${total === 0 ? "opacity-30 cursor-not-allowed" : darkMode ? "bg-gray-800 text-gray-300 hover:bg-gray-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
-          </button>
           <input type="range" min={0} max={Math.max(total,1)} step={15} value={Math.min(insertPos, total)}
             onChange={e => { setPlaying(false); setCursor(+e.target.value) }} disabled={total === 0}
             className="flex-1 accent-[#00aa13]" style={{ height: 4 }} />
-          <span className={`text-xs font-semibold tabular-nums ${heading}`} style={{ width: 80, textAlign: "right" }}>{fmtSecs(insertPos)} / {length}m</span>
+          <span className={`text-xs font-semibold tabular-nums ${heading}`} style={{ width: 88, textAlign: "right" }}>{fmtClock(insertPos)} / {fmtClock(length*60)}</span>
           <button onClick={() => { setPlaying(false); setCursor(null) }}
             className={`text-[10px] font-semibold px-2 py-1 rounded-lg transition-colors ${cursor == null && !playing ? "opacity-30 cursor-not-allowed" : darkMode ? "bg-gray-800 text-gray-300 hover:bg-gray-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>End</button>
         </div>
@@ -5501,9 +5533,9 @@ function InstructorStatsPage({ darkMode, onToggleDarkMode }) {
 }
 
 const CLASS_REQUESTS = [
-  { name: "Sunrise Power", studio: "Studio 1", day: "Mon", time: "06:15", recurring: true,  status: "approved" },
-  { name: "HIIT Blast",    studio: "Studio 1", day: "Wed", time: "19:00", recurring: true,  status: "approved" },
-  { name: "Rhythm Ride",   studio: "Studio 2", day: "Sat", time: "10:00", recurring: false, status: "pending"  },
+  { name: "Sunrise Power", location: "SpinOut · Hampstead",  studio: "Studio 1", day: "Mon", time: "06:15", recurring: true,  status: "approved" },
+  { name: "HIIT Blast",    location: "SpinOut · Hampstead",  studio: "Studio 1", day: "Wed", time: "19:00", recurring: true,  status: "approved" },
+  { name: "Rhythm Ride",   location: "SpinOut · Shoreditch", studio: "Studio 2", day: "Sat", time: "10:00", recurring: false, social: true, status: "pending"  },
 ]
 
 function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] }) {
@@ -5516,21 +5548,19 @@ function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] 
 
   const DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]
   const [className, setClassName] = useState(builtClasses[0]?.name || "")
-  const [studio, setStudio]   = useState(builtClasses[0]?.studio || "Studio 1")
+  const [location, setLocation] = useState(LOCATIONS[0])
+  const [studio, setStudio]   = useState("Studio 1")
   const [day, setDay]         = useState("Mon")
   const [time, setTime]       = useState("06:15")
   const [recurring, setRecurring] = useState(true)
   const [requests, setRequests]   = useState(CLASS_REQUESTS)
   const [toast, setToast]     = useState(false)
 
-  function pickClass(nm) {
-    setClassName(nm)
-    const c = builtClasses.find(b => b.name === nm)
-    if (c?.studio) setStudio(c.studio)
-  }
+  const selectedClass = builtClasses.find(b => b.name === className)
+
   function submit() {
     if (!className) return
-    setRequests(p => [{ name: className, studio, day, time, recurring, status: "pending" }, ...p])
+    setRequests(p => [{ name: className, studio, location, day, time, recurring, social: selectedClass?.social, status: "pending" }, ...p])
     setToast(true)
     setTimeout(() => setToast(false), 2500)
   }
@@ -5545,11 +5575,17 @@ function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="sm:col-span-2">
             <label className={`block text-xs font-semibold mb-1.5 ${muted}`}>Class</label>
-            <select value={className} onChange={e => pickClass(e.target.value)} className={selectCls}>
+            <select value={className} onChange={e => setClassName(e.target.value)} className={selectCls}>
               {builtClasses.length === 0 && <option value="">No classes built yet</option>}
-              {builtClasses.map(c => <option key={c.name} value={c.name}>{c.name} · {c.length} min</option>)}
+              {builtClasses.map(c => <option key={c.name} value={c.name}>{c.name} · {c.length} min{c.social ? " · Social" : ""}</option>)}
             </select>
-            <p className={`text-xs mt-1.5 ${muted}`}>Pick from classes you've built in Class Builder</p>
+            <p className={`text-xs mt-1.5 ${muted}`}>Pick from classes you've built in Class Builder{selectedClass?.social && " · 🎲 random seating"}</p>
+          </div>
+          <div className="sm:col-span-2">
+            <label className={`block text-xs font-semibold mb-1.5 ${muted}`}>Location</label>
+            <select value={location} onChange={e => setLocation(e.target.value)} className={selectCls}>
+              {LOCATIONS.map(l => <option key={l} value={l}>{l}</option>)}
+            </select>
           </div>
           <div>
             <label className={`block text-xs font-semibold mb-1.5 ${muted}`}>Studio</label>
@@ -5602,8 +5638,8 @@ function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] 
               <p className={`text-sm font-bold tabular-nums ${heading}`}>{r.time}</p>
             </div>
             <div className="flex-1 min-w-0">
-              <p className={`text-sm font-semibold ${heading}`}>{r.name}</p>
-              <p className={`text-xs mt-0.5 ${muted}`}>{r.studio}{r.recurring && " · Weekly"}</p>
+              <p className={`text-sm font-semibold ${heading}`}>{r.name}{r.social && <span className="ml-1.5">🎲</span>}</p>
+              <p className={`text-xs mt-0.5 ${muted}`}>{r.location ? `${r.location} · ` : ""}{r.studio}{r.recurring && " · Weekly"}</p>
             </div>
             {r.status === "approved"
               ? <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-[#e6f9e8] text-[#00aa13] flex-shrink-0">Approved</span>

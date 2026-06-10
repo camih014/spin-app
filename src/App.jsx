@@ -1,6 +1,6 @@
 import React, { useState, useRef } from "react"
 import { Home, Calendar, BookOpen, Bike, Trophy, User, Settings, LogOut,
-  ChevronDown, LayoutDashboard, Users, ListMusic, SlidersHorizontal, BarChart3 } from "lucide-react"
+  ChevronDown, LayoutDashboard, Users, ListMusic, SlidersHorizontal, BarChart3, CalendarClock } from "lucide-react"
 
 // ─── DATA ───────────────────────────────────────────────────────────────────
 
@@ -993,6 +993,7 @@ const INSTRUCTOR_NAV = [
   { label: "Studio Home",   icon: LayoutDashboard   },
   { label: "My Classes",    icon: Users             },
   { label: "Class Builder", icon: SlidersHorizontal },
+  { label: "Schedule",      icon: CalendarClock     },
   { label: "Insights",      icon: BarChart3         },
 ]
 
@@ -1067,6 +1068,7 @@ export default function App() {
         {activePage === "Studio Home"   && <InstructorHomePage    darkMode={darkMode} onToggleDarkMode={dm} onOpenRoster={openRoster} />}
         {activePage === "My Classes"    && <InstructorClassesPage key={rosterClass ? rosterClass.name + rosterClass.time : "all"} darkMode={darkMode} onToggleDarkMode={dm} initialClass={rosterClass} />}
         {activePage === "Class Builder" && <ClassBuilderPage      darkMode={darkMode} onToggleDarkMode={dm} />}
+        {activePage === "Schedule"      && <InstructorSchedulePage darkMode={darkMode} onToggleDarkMode={dm} />}
         {activePage === "Insights"      && <InstructorStatsPage   darkMode={darkMode} onToggleDarkMode={dm} />}
         {/* Shared */}
         {activePage === "Profile"      && <ProfilePage  darkMode={darkMode} onToggleDarkMode={dm} />}
@@ -4575,6 +4577,40 @@ const instructorClasses = [
   { dateLabel: "Mon 23 Feb",dateIso: "2026-02-23", time: "06:30", name: "Sunrise Power",   studio: "Studio 1", capacity: 24, booked: 24, waitlist: 2, status: "done", seed: 6, rating: 5.0, attended: 23 },
 ]
 
+const CADENCE_BANDS = [
+  { label: "Climb",     rpm: "60–70 rpm"  },
+  { label: "Endurance", rpm: "80–90 rpm"  },
+  { label: "Tempo",     rpm: "90–100 rpm" },
+  { label: "Sprint",    rpm: "100+ rpm"   },
+]
+
+const PLAYLISTS = [
+  "Power Hour Mix", "Sunrise Beats", "Hip-Hop Climb", "Throwback Sprints",
+  "Chillwave Recovery", "Festival Anthems", "Drum & Bass Intervals",
+]
+
+const QUOTE_PRESETS = [
+  "Leave it all on the bike.",
+  "You're stronger than your excuses.",
+  "Every pedal stroke is progress.",
+  "Find your edge — then push past it.",
+  "The hardest classes make the strongest riders.",
+]
+
+// Reusable class templates — strokes as [secs, zone, rpmIndex]
+const CLASS_TEMPLATES = [
+  { name: "Sunrise Power", length: 45, strokes: [
+    [420,1,1],[420,2,2],[180,3,2],[120,4,1],[180,3,2],[120,4,1],[60,5,3],[120,1,0],[60,5,3],[120,1,0],[300,2,1],[180,1,0],
+  ]},
+  { name: "HIIT Blast", length: 30, strokes: [
+    [300,1,1],[120,2,2],[30,5,3],[30,1,0],[30,5,3],[30,1,0],[30,6,3],[30,1,0],[30,6,3],[120,2,1],
+    [30,7,3],[30,1,0],[30,7,3],[30,1,0],[30,6,3],[180,1,0],
+  ]},
+  { name: "Endurance Builder", length: 60, strokes: [
+    [420,1,1],[600,2,1],[120,3,2],[600,2,1],[120,3,2],[600,2,1],[300,3,2],[300,1,0],
+  ]},
+]
+
 const INSTRUCTOR_REVIEWS = [
   { name: "Olivia Hart",  rating: 5, text: "Best class of my week — the energy is unreal.",            cls: "Sunrise Power"  },
   { name: "Noah Patel",   rating: 5, text: "Tough but so well structured. Loved the threshold blocks.", cls: "Threshold Push" },
@@ -4878,32 +4914,76 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode }) {
   const card    = `rounded-2xl border transition-colors ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`
   const subtle  = darkMode ? "bg-gray-800"   : "bg-gray-50"
   const inputCls = `w-full px-3.5 py-2.5 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-[#00aa13] focus:border-transparent transition ${darkMode ? "bg-gray-800 border-gray-700 text-white" : "bg-white border-gray-200 text-gray-900"}`
+  const selectCls = `px-3 py-2.5 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-[#00aa13] transition ${darkMode ? "bg-gray-800 border-gray-700 text-white" : "bg-white border-gray-200 text-gray-900"}`
 
-  const [name, setName]     = useState("New Power Ride")
-  const [studio, setStudio] = useState("Studio 1")
-  const [brush, setBrush]   = useState(30)            // seconds added per tap
-  const [strokes, setStrokes] = useState([])          // [secs, zone] per tap
+  const [name, setName]       = useState("New Power Ride")
+  const [studio, setStudio]   = useState("Studio 1")
+  const [length, setLength]   = useState(45)          // minutes
+  const [playlist, setPlaylist] = useState(PLAYLISTS[0])
+  const [brush, setBrush]     = useState(30)          // seconds added per tap
+  const [cadence, setCadence] = useState(1)           // index into CADENCE_BANDS
+  const [strokes, setStrokes] = useState([])          // [secs, zone, cadenceIdx]
+  const [quote, setQuote]     = useState("")
+  const [hover, setHover]     = useState(null)        // { left, secs, zone, cad }
 
-  const TARGET = 45 * 60
-  const total  = strokes.reduce((s, [secs]) => s + secs, 0)
+  const TARGET = length * 60
+  const total  = strokes.reduce((s, st) => s + st[0], 0)
   const scale  = Math.max(TARGET, total)
 
-  // merge consecutive same-zone strokes for display + summary
-  const merged = strokes.reduce((acc, [secs, zone]) => {
-    if (acc.length && acc[acc.length-1][1] === zone) acc[acc.length-1] = [acc[acc.length-1][0]+secs, zone]
-    else acc.push([secs, zone])
+  // merge consecutive strokes with same zone + cadence
+  const merged = strokes.reduce((acc, [secs, zone, cad]) => {
+    const last = acc[acc.length-1]
+    if (last && last[1] === zone && last[2] === cad) acc[acc.length-1] = [last[0]+secs, zone, cad]
+    else acc.push([secs, zone, cad])
     return acc
   }, [])
 
-  function addZone(zone) { setStrokes(p => [...p, [brush, zone]]) }
+  function addZone(zone) { setStrokes(p => [...p, [brush, zone, cadence]]) }
   function undo()  { setStrokes(p => p.slice(0, -1)) }
   function clear() { setStrokes([]) }
+  function loadTemplate(t) {
+    setName(t.name); setLength(t.length)
+    setStrokes(t.strokes.map(s => [s[0], s[1], s[2] ?? 1]))
+  }
+
+  function onCanvasMove(e) {
+    if (!total) { setHover(null); return }
+    const rect = e.currentTarget.getBoundingClientRect()
+    const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
+    const t = frac * scale
+    let acc = 0
+    for (const [secs, zone, cad] of merged) {
+      if (t >= acc && t < acc + secs) { setHover({ frac, start: acc, secs, zone, cad }); return }
+      acc += secs
+    }
+    setHover(null)
+  }
 
   const brushOpts = [{ s: 15, l: "15s" }, { s: 30, l: "30s" }, { s: 60, l: "1m" }, { s: 120, l: "2m" }]
+  const lengthOpts = [30, 45, 60]
 
   return (
     <div className="p-4 md:p-8 max-w-3xl mx-auto pb-16">
       <InstructorTopBar title="Class Builder" sub="Tap zones to paint your session in real time" darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
+
+      {/* Templates to reuse */}
+      <div className={`${card} p-5 mb-5`}>
+        <p className={`text-sm font-semibold mb-3 ${heading}`}>Start from a template</p>
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {CLASS_TEMPLATES.map((t, i) => (
+            <button key={i} onClick={() => loadTemplate(t)}
+              className={`flex-shrink-0 px-4 py-2.5 rounded-xl text-left border transition-colors ${darkMode ? "border-gray-700 hover:bg-gray-800" : "border-gray-200 hover:bg-gray-50"}`}>
+              <p className={`text-sm font-semibold ${heading}`}>{t.name}</p>
+              <p className={`text-xs ${muted}`}>{t.length} min · {t.strokes.length} blocks</p>
+            </button>
+          ))}
+          <button onClick={clear}
+            className={`flex-shrink-0 px-4 py-2.5 rounded-xl text-left border border-dashed transition-colors ${darkMode ? "border-gray-700 hover:bg-gray-800 text-gray-400" : "border-gray-300 hover:bg-gray-50 text-gray-500"}`}>
+            <p className="text-sm font-semibold">Blank</p>
+            <p className="text-xs">Start fresh</p>
+          </button>
+        </div>
+      </div>
 
       {/* Details */}
       <div className={`${card} p-5 mb-5`}>
@@ -4921,6 +5001,21 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode }) {
               ))}
             </div>
           </div>
+          <div>
+            <label className={`block text-xs font-semibold mb-1.5 ${muted}`}>Class length</label>
+            <div className={`inline-flex rounded-xl overflow-hidden border w-full ${darkMode ? "border-gray-700" : "border-gray-200"}`}>
+              {lengthOpts.map(l => (
+                <button key={l} onClick={() => setLength(l)}
+                  className={`flex-1 px-3 py-2.5 text-xs font-medium transition-colors ${length === l ? "bg-[#00aa13] text-white" : darkMode ? "bg-gray-800 text-gray-400" : "bg-white text-gray-500"}`}>{l} min</button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className={`block text-xs font-semibold mb-1.5 ${muted}`}>Playlist 🎵</label>
+            <select value={playlist} onChange={e => setPlaylist(e.target.value)} className={`${selectCls} w-full`}>
+              {PLAYLISTS.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -4928,37 +5023,48 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode }) {
       <div className={`${card} p-5 mb-5`}>
         <div className="flex items-center justify-between mb-3">
           <p className={`text-sm font-semibold ${heading}`}>Session canvas</p>
-          <span className={`text-xs font-semibold ${total > TARGET ? "text-orange-500" : muted}`}>{fmtSecs(total)} / 45m</span>
+          <span className={`text-xs font-semibold ${total > TARGET ? "text-orange-500" : muted}`}>{fmtSecs(total)} / {length}m</span>
         </div>
 
         {/* Bar canvas */}
-        <div className={`relative w-full rounded-lg overflow-hidden ${darkMode ? "bg-gray-800" : "bg-gray-50"}`}
-          style={{ height: 130, backgroundImage: darkMode
-            ? "repeating-linear-gradient(90deg, transparent, transparent 11.11%, rgba(255,255,255,0.04) 11.11%, rgba(255,255,255,0.04) calc(11.11% + 1px))"
-            : "repeating-linear-gradient(90deg, transparent, transparent 11.11%, rgba(0,0,0,0.04) 11.11%, rgba(0,0,0,0.04) calc(11.11% + 1px))" }}>
-          {total === 0 ? (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <p className={`text-xs ${muted}`}>Empty — tap a zone below to start building</p>
-            </div>
-          ) : (
-            <div className="absolute inset-0 flex items-end">
-              {merged.map(([secs, zone], i) => (
-                <div key={i} className="flex items-end justify-center transition-all"
-                  style={{ width: `${secs / scale * 100}%`, height: `${ZONE_HEIGHTS[zone-1]}%`, background: ZONE_COLORS[zone-1] }}
-                  title={`Z${zone} ${ZONE_NAMES[zone-1]} · ${fmtSecs(secs)}`} />
-              ))}
+        <div className="relative">
+          {/* Hover tooltip */}
+          {hover && (
+            <div className={`absolute -top-1 z-10 pointer-events-none text-xs px-2 py-1.5 rounded-lg whitespace-nowrap ${darkMode ? "bg-gray-700 text-white" : "bg-gray-900 text-white"}`}
+              style={{ left: `${hover.frac * 100}%`, transform: hover.frac > 0.8 ? "translate(-100%,-100%)" : hover.frac < 0.2 ? "translate(0,-100%)" : "translate(-50%,-100%)" }}>
+              <span style={{ color: ZONE_COLORS[hover.zone-1] }}>●</span> Z{hover.zone} {ZONE_NAMES[hover.zone-1]} · {CADENCE_BANDS[hover.cad].rpm} · {fmtSecs(hover.start)}–{fmtSecs(hover.start + hover.secs)}
             </div>
           )}
-          {/* 5-min gridline labels */}
-          <div className="absolute bottom-0 left-0 right-0 flex justify-between px-1 pointer-events-none">
-            {[0,5,10,15,20,25,30,35,40,45].map(m => (
-              <span key={m} className={`text-[8px] ${darkMode ? "text-gray-600" : "text-gray-400"}`}>{m}</span>
-            ))}
+          <div className={`relative w-full rounded-lg overflow-hidden ${darkMode ? "bg-gray-800" : "bg-gray-50"}`}
+            onMouseMove={onCanvasMove} onMouseLeave={() => setHover(null)}
+            style={{ height: 130, backgroundImage: darkMode
+              ? "repeating-linear-gradient(90deg, transparent, transparent 9.99%, rgba(255,255,255,0.05) 9.99%, rgba(255,255,255,0.05) calc(9.99% + 1px))"
+              : "repeating-linear-gradient(90deg, transparent, transparent 9.99%, rgba(0,0,0,0.05) 9.99%, rgba(0,0,0,0.05) calc(9.99% + 1px))" }}>
+            {total === 0 ? (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <p className={`text-xs ${muted}`}>Empty — tap a zone below to start building</p>
+              </div>
+            ) : (
+              <div className="absolute inset-0 flex items-end">
+                {merged.map(([secs, zone], i) => (
+                  <div key={i} className="flex items-end justify-center transition-all"
+                    style={{ width: `${secs / scale * 100}%`, height: `${ZONE_HEIGHTS[zone-1]}%`, background: ZONE_COLORS[zone-1],
+                      opacity: hover && hover.start <= (merged.slice(0,i).reduce((a,m)=>a+m[0],0)) && false ? 0.5 : 1 }}
+                    title={`Z${zone} ${ZONE_NAMES[zone-1]} · ${fmtSecs(secs)}`} />
+                ))}
+              </div>
+            )}
+            {/* hover guide line */}
+            {hover && <div className="absolute top-0 bottom-0 w-px bg-white/50 pointer-events-none" style={{ left: `${hover.frac*100}%` }} />}
           </div>
         </div>
+        <div className="flex justify-between mt-1.5 px-0.5">
+          <span className={`text-[10px] ${muted}`}>0:00</span>
+          <span className={`text-[10px] ${muted}`}>{length}:00</span>
+        </div>
 
-        {/* Brush size */}
-        <div className="flex items-center gap-2 mt-4">
+        {/* Brush + cadence */}
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-3 mt-4">
           <span className={`text-xs ${muted}`}>Add</span>
           <div className={`inline-flex rounded-lg overflow-hidden border ${darkMode ? "border-gray-700" : "border-gray-200"}`}>
             {brushOpts.map(o => (
@@ -4966,13 +5072,20 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode }) {
                 className={`px-3 py-1.5 text-xs font-semibold transition-colors ${brush === o.s ? "bg-[#00aa13] text-white" : darkMode ? "bg-gray-800 text-gray-400 hover:bg-gray-700" : "bg-white text-gray-500 hover:bg-gray-50"}`}>{o.l}</button>
             ))}
           </div>
-          <span className={`text-xs ${muted}`}>per tap</span>
+          <span className={`text-xs ${muted}`}>at</span>
+          <div className={`inline-flex rounded-lg overflow-hidden border ${darkMode ? "border-gray-700" : "border-gray-200"}`}>
+            {CADENCE_BANDS.map((c, i) => (
+              <button key={i} onClick={() => setCadence(i)} title={c.rpm}
+                className={`px-2.5 py-1.5 text-xs font-semibold transition-colors ${cadence === i ? "bg-[#00aa13] text-white" : darkMode ? "bg-gray-800 text-gray-400 hover:bg-gray-700" : "bg-white text-gray-500 hover:bg-gray-50"}`}>{c.label}</button>
+            ))}
+          </div>
           <div className="flex-1" />
           <button onClick={undo} disabled={!strokes.length}
             className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${!strokes.length ? "opacity-30 cursor-not-allowed" : ""} ${darkMode ? "bg-gray-800 text-gray-300 hover:bg-gray-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>Undo</button>
           <button onClick={clear} disabled={!strokes.length}
             className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${!strokes.length ? "opacity-30 cursor-not-allowed" : ""} ${darkMode ? "bg-gray-800 text-gray-300 hover:bg-gray-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>Clear</button>
         </div>
+        <p className={`text-xs mt-2 ${muted}`}>Painting <span className="font-semibold" style={{ color: "#00aa13" }}>{CADENCE_BANDS[cadence].label} · {CADENCE_BANDS[cadence].rpm}</span></p>
       </div>
 
       {/* Zone palette */}
@@ -4996,15 +5109,33 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode }) {
           <div className={`px-5 py-3.5 border-b ${darkMode ? "border-gray-800" : "border-gray-100"}`}>
             <p className={`text-sm font-semibold ${heading}`}>Plan summary · {merged.length} {merged.length === 1 ? "block" : "blocks"}</p>
           </div>
-          {merged.map(([secs, zone], i) => (
+          {merged.map(([secs, zone, cad], i) => (
             <div key={i} className={`flex items-center gap-3 px-5 py-2.5 border-b last:border-b-0 ${darkMode ? "border-gray-800" : "border-gray-100"}`}>
               <div className="w-2 h-7 rounded-full flex-shrink-0" style={{ background: ZONE_COLORS[zone-1] }} />
               <span className={`flex-1 text-sm font-medium ${heading}`}>Z{zone} · {ZONE_NAMES[zone-1]}</span>
-              <span className={`text-xs font-bold tabular-nums ${heading}`}>{fmtSecs(secs)}</span>
+              <span className={`text-xs ${muted}`}>{CADENCE_BANDS[cad].rpm}</span>
+              <span className={`text-xs font-bold tabular-nums w-12 text-right ${heading}`}>{fmtSecs(secs)}</span>
             </div>
           ))}
         </div>
       )}
+
+      {/* Instructor quote */}
+      <div className={`${card} p-5 mb-5`}>
+        <p className={`text-sm font-semibold mb-1 ${heading}`}>Your class quote</p>
+        <p className={`text-xs mb-3 ${muted}`}>Shown to riders when they book — add your own or pick one</p>
+        <textarea value={quote} onChange={e => setQuote(e.target.value)} rows={2}
+          placeholder="e.g. Leave it all on the bike."
+          className={`${inputCls} resize-none mb-3`} />
+        <div className="flex flex-wrap gap-2">
+          {QUOTE_PRESETS.map((q, i) => (
+            <button key={i} onClick={() => setQuote(q)}
+              className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${quote === q ? "bg-[#e6f9e8] border-[#00aa13] text-[#00aa13]" : darkMode ? "border-gray-700 text-gray-400 hover:bg-gray-800" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}>
+              "{q}"
+            </button>
+          ))}
+        </div>
+      </div>
 
       <button disabled={total === 0}
         className={`w-full py-3 rounded-xl text-white font-semibold text-sm transition-colors ${total === 0 ? "bg-gray-300 cursor-not-allowed" : "bg-[#00aa13] hover:bg-[#008a0f]"}`}>
@@ -5079,6 +5210,110 @@ function InstructorStatsPage({ darkMode, onToggleDarkMode }) {
               <p className={`text-xs mt-1 ${muted}`}>"{r.text}"</p>
               <p className="text-xs mt-1.5 text-[#00aa13] font-medium">{r.cls}</p>
             </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+const CLASS_REQUESTS = [
+  { name: "Sunrise Power", studio: "Studio 1", day: "Mon", time: "06:15", recurring: true,  status: "approved" },
+  { name: "HIIT Blast",    studio: "Studio 1", day: "Wed", time: "19:00", recurring: true,  status: "approved" },
+  { name: "Rhythm Ride",   studio: "Studio 2", day: "Sat", time: "10:00", recurring: false, status: "pending"  },
+]
+
+function InstructorSchedulePage({ darkMode, onToggleDarkMode }) {
+  const heading = darkMode ? "text-white"    : "text-gray-900"
+  const muted   = darkMode ? "text-gray-400" : "text-gray-500"
+  const card    = `rounded-2xl border transition-colors ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`
+  const subtle  = darkMode ? "bg-gray-800"   : "bg-gray-50"
+  const inputCls = `w-full px-3.5 py-2.5 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-[#00aa13] focus:border-transparent transition ${darkMode ? "bg-gray-800 border-gray-700 text-white" : "bg-white border-gray-200 text-gray-900"}`
+
+  const DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]
+  const [className, setClassName] = useState("Sunrise Power")
+  const [studio, setStudio]   = useState("Studio 1")
+  const [day, setDay]         = useState("Mon")
+  const [time, setTime]       = useState("06:15")
+  const [recurring, setRecurring] = useState(true)
+  const [requests, setRequests]   = useState(CLASS_REQUESTS)
+  const [toast, setToast]     = useState(false)
+
+  function submit() {
+    setRequests(p => [{ name: className, studio, day, time, recurring, status: "pending" }, ...p])
+    setToast(true)
+    setTimeout(() => setToast(false), 2500)
+  }
+
+  return (
+    <div className="p-4 md:p-8 max-w-3xl mx-auto pb-16">
+      <InstructorTopBar title="Schedule a Class" sub="Request a slot to teach — one-off or recurring" darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
+
+      {/* Request form */}
+      <div className={`${card} p-5 mb-6`}>
+        <p className={`text-sm font-semibold mb-4 ${heading}`}>New class request</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="sm:col-span-2">
+            <label className={`block text-xs font-semibold mb-1.5 ${muted}`}>Class</label>
+            <input value={className} onChange={e => setClassName(e.target.value)} className={inputCls} placeholder="e.g. Sunrise Power" />
+          </div>
+          <div>
+            <label className={`block text-xs font-semibold mb-1.5 ${muted}`}>Studio</label>
+            <div className={`inline-flex rounded-xl overflow-hidden border w-full ${darkMode ? "border-gray-700" : "border-gray-200"}`}>
+              {["Studio 1","Studio 2"].map(s => (
+                <button key={s} onClick={() => setStudio(s)}
+                  className={`flex-1 px-3 py-2.5 text-xs font-medium transition-colors ${studio === s ? "bg-[#00aa13] text-white" : darkMode ? "bg-gray-800 text-gray-400" : "bg-white text-gray-500"}`}>{s}</button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className={`block text-xs font-semibold mb-1.5 ${muted}`}>Time</label>
+            <input type="time" value={time} onChange={e => setTime(e.target.value)} className={inputCls} />
+          </div>
+          <div className="sm:col-span-2">
+            <label className={`block text-xs font-semibold mb-1.5 ${muted}`}>Day</label>
+            <div className="flex gap-1.5 flex-wrap">
+              {DAYS.map(d => (
+                <button key={d} onClick={() => setDay(d)}
+                  className={`px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${day === d ? "bg-[#00aa13] text-white" : darkMode ? "bg-gray-800 text-gray-400 hover:bg-gray-700" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>{d}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Recurring */}
+        <button onClick={() => setRecurring(!recurring)} className={`flex items-center gap-3 mt-4 p-3 rounded-xl w-full text-left transition-colors ${subtle}`}>
+          <div style={{ width: 44, height: 24, borderRadius: 12, flexShrink: 0, background: recurring ? "#00aa13" : darkMode ? "#4B5563" : "#D1D5DB", position: "relative", transition: "background 0.18s" }}>
+            <div style={{ position: "absolute", top: 2, left: recurring ? 22 : 2, width: 20, height: 20, borderRadius: "50%", background: "#fff", transition: "left 0.18s" }} />
+          </div>
+          <div>
+            <p className={`text-sm font-medium ${heading}`}>Repeat weekly</p>
+            <p className={`text-xs ${muted}`}>{recurring ? `Every ${day} at ${time}` : "One-off class"}</p>
+          </div>
+        </button>
+
+        <button onClick={submit}
+          className="w-full mt-5 py-3 rounded-xl bg-[#00aa13] hover:bg-[#008a0f] text-white font-semibold text-sm transition-colors">
+          {toast ? "✓ Request submitted" : "Submit request"}
+        </button>
+      </div>
+
+      {/* Existing requests */}
+      <h2 className={`font-semibold mb-3 ${heading}`}>Your class requests</h2>
+      <div className={`${card} overflow-hidden`}>
+        {requests.map((r, i) => (
+          <div key={i} className={`flex items-center gap-4 px-5 py-4 border-b last:border-b-0 ${darkMode ? "border-gray-800" : "border-gray-100"}`}>
+            <div className="w-14 flex-shrink-0">
+              <p className={`text-xs font-medium ${muted}`}>{r.day}</p>
+              <p className={`text-sm font-bold tabular-nums ${heading}`}>{r.time}</p>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className={`text-sm font-semibold ${heading}`}>{r.name}</p>
+              <p className={`text-xs mt-0.5 ${muted}`}>{r.studio}{r.recurring && " · Weekly"}</p>
+            </div>
+            {r.status === "approved"
+              ? <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-[#e6f9e8] text-[#00aa13] flex-shrink-0">Approved</span>
+              : <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 flex-shrink-0">Pending</span>}
           </div>
         ))}
       </div>

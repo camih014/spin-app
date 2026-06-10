@@ -1003,6 +1003,14 @@ export default function App() {
   const [authed, setAuthed]         = useState(true)
   const [openSections, setOpenSections] = useState({ rider: true, instructor: false })
   const [rosterClass, setRosterClass]   = useState(null)
+  const [builtClasses, setBuiltClasses] = useState(SEED_BUILT_CLASSES)
+
+  function publishClass(cls) {
+    setBuiltClasses(prev => {
+      const without = prev.filter(c => c.name !== cls.name)
+      return [{ name: cls.name, length: cls.length, studio: cls.studio }, ...without]
+    })
+  }
 
   if (!authed) return <AuthPage onAuth={() => { setAuthed(true); setActivePage("Home") }} />
 
@@ -1067,8 +1075,8 @@ export default function App() {
         {/* Instructor */}
         {activePage === "Studio Home"   && <InstructorHomePage    darkMode={darkMode} onToggleDarkMode={dm} onOpenRoster={openRoster} />}
         {activePage === "My Classes"    && <InstructorClassesPage key={rosterClass ? rosterClass.name + rosterClass.time : "all"} darkMode={darkMode} onToggleDarkMode={dm} initialClass={rosterClass} />}
-        {activePage === "Class Builder" && <ClassBuilderPage      darkMode={darkMode} onToggleDarkMode={dm} />}
-        {activePage === "Schedule"      && <InstructorSchedulePage darkMode={darkMode} onToggleDarkMode={dm} />}
+        {activePage === "Class Builder" && <ClassBuilderPage      darkMode={darkMode} onToggleDarkMode={dm} onPublish={publishClass} />}
+        {activePage === "Schedule"      && <InstructorSchedulePage darkMode={darkMode} onToggleDarkMode={dm} builtClasses={builtClasses} />}
         {activePage === "Insights"      && <InstructorStatsPage   darkMode={darkMode} onToggleDarkMode={dm} />}
         {/* Shared */}
         {activePage === "Profile"      && <ProfilePage  darkMode={darkMode} onToggleDarkMode={dm} />}
@@ -4590,6 +4598,41 @@ const PLAYLISTS = [
   "Chillwave Recovery", "Festival Anthems", "Drum & Bass Intervals",
 ]
 
+// Preset playlists as track lists — { title, bpm, mins }
+const PLAYLIST_PRESETS = {
+  "Power Hour Mix": [
+    { title: "Warm Intro",   bpm: 105, mins: 6 },
+    { title: "Build It Up",  bpm: 128, mins: 9 },
+    { title: "Peak Drive",   bpm: 140, mins: 10 },
+    { title: "Sprint Drop",  bpm: 152, mins: 8 },
+    { title: "Wind Down",    bpm: 92,  mins: 7 },
+  ],
+  "Sunrise Beats": [
+    { title: "First Light",  bpm: 100, mins: 7 },
+    { title: "Golden Hour",  bpm: 122, mins: 10 },
+    { title: "Rise",         bpm: 134, mins: 12 },
+    { title: "Settle",       bpm: 90,  mins: 8 },
+  ],
+  "Drum & Bass Intervals": [
+    { title: "Roller Intro", bpm: 110, mins: 5 },
+    { title: "Amen Break",   bpm: 174, mins: 8 },
+    { title: "Liquid Calm",  bpm: 120, mins: 6 },
+    { title: "Jump Up",      bpm: 176, mins: 8 },
+    { title: "Float Out",    bpm: 88,  mins: 6 },
+  ],
+}
+function presetTracks(name) {
+  return (PLAYLIST_PRESETS[name] || PLAYLIST_PRESETS["Power Hour Mix"]).map(t => ({ ...t }))
+}
+
+const SEED_BUILT_CLASSES = [
+  { name: "Sunrise Power", length: 45, studio: "Studio 1" },
+  { name: "HIIT Blast",    length: 30, studio: "Studio 1" },
+  { name: "Rhythm Ride",   length: 45, studio: "Studio 2" },
+  { name: "Threshold Push", length: 45, studio: "Studio 1" },
+  { name: "Endurance Builder", length: 60, studio: "Studio 1" },
+]
+
 const QUOTE_PRESETS = [
   "Leave it all on the bike.",
   "You're stronger than your excuses.",
@@ -4951,7 +4994,7 @@ function ZoneMixDonut({ segments, darkMode }) {
   )
 }
 
-function ClassBuilderPage({ darkMode, onToggleDarkMode }) {
+function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
   const heading = darkMode ? "text-white"    : "text-gray-900"
   const muted   = darkMode ? "text-gray-400" : "text-gray-500"
   const card    = `rounded-2xl border transition-colors ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`
@@ -4962,7 +5005,10 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode }) {
   const [name, setName]       = useState("New Power Ride")
   const [studio, setStudio]   = useState("Studio 1")
   const [length, setLength]   = useState(45)          // minutes
-  const [playlist, setPlaylist] = useState(PLAYLISTS[0])
+  const [tracks, setTracks]   = useState(presetTracks("Power Hour Mix"))
+  const [newTrack, setNewTrack] = useState("")
+  const [newBpm, setNewBpm]   = useState(128)
+  const [published, setPublished] = useState(false)
   const [brush, setBrush]     = useState(30)          // seconds added per tap
   const [cadence, setCadence] = useState(1)           // index into CADENCE_BANDS
   const [strokes, setStrokes] = useState([])          // [secs, zone, cadenceIdx]
@@ -5016,15 +5062,27 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode }) {
     return acc
   }, [])
 
-  // fake audio waveform seeded by playlist — gives a sense of the track energy across time
-  const waveform = (() => {
-    const seed = [...playlist].reduce((a, c) => a + c.charCodeAt(0), 0)
-    const N = 64
-    return Array.from({ length: N }, (_, i) => {
-      const x = Math.sin(seed + i * 0.7) * Math.cos(i * 0.31 + seed * 0.5)
-      return 0.35 + Math.abs(x) * 0.6 + (i % 4 === 0 ? 0.05 : 0)
-    })
-  })()
+  // Lay tracks across the timeline; each track occupies its duration in seconds
+  const playlistSecs = tracks.reduce((s, t) => s + t.mins * 60, 0)
+  let tAcc = 0
+  const trackSegs = tracks.map(t => { const start = tAcc; tAcc += t.mins * 60; return { ...t, start, secs: t.mins * 60 } })
+  const bpmNorm = bpm => Math.max(0.25, Math.min(1, (bpm - 80) / (180 - 80)))
+
+  function addTrack() {
+    const title = newTrack.trim() || `Track ${tracks.length + 1}`
+    setTracks(t => [...t, { title, bpm: +newBpm || 120, mins: 4 }])
+    setNewTrack("")
+  }
+  function removeTrack(i) { setTracks(t => t.filter((_, j) => j !== i)) }
+  function loadPreset(nm) { setTracks(presetTracks(nm)) }
+  function trackMins(i, d) { setTracks(t => t.map((tr, j) => j === i ? { ...tr, mins: Math.max(1, tr.mins + d) } : tr)) }
+
+  function publish() {
+    if (!total) return
+    onPublish?.({ name, length, studio })
+    setPublished(true)
+    setTimeout(() => setPublished(false), 2500)
+  }
 
   function commit(nextStrokes, newCursor) {
     setUndoStack(s => [...s, strokes])
@@ -5116,7 +5174,7 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode }) {
               ))}
             </div>
           </div>
-          <div>
+          <div className="sm:col-span-2">
             <label className={`block text-xs font-semibold mb-1.5 ${muted}`}>Class length</label>
             <div className={`inline-flex rounded-xl overflow-hidden border w-full ${darkMode ? "border-gray-700" : "border-gray-200"}`}>
               {lengthOpts.map(l => (
@@ -5125,13 +5183,56 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode }) {
               ))}
             </div>
           </div>
-          <div>
-            <label className={`block text-xs font-semibold mb-1.5 ${muted}`}>Playlist 🎵</label>
-            <select value={playlist} onChange={e => setPlaylist(e.target.value)} className={`${selectCls} w-full`}>
-              {PLAYLISTS.map(p => <option key={p} value={p}>{p}</option>)}
-            </select>
-          </div>
         </div>
+      </div>
+
+      {/* Playlist builder */}
+      <div className={`${card} p-5 mb-5`}>
+        <div className="flex items-center justify-between mb-3">
+          <p className={`text-sm font-semibold ${heading}`}>Playlist 🎵</p>
+          <span className={`text-xs ${muted}`}>{tracks.length} tracks · {fmtSecs(playlistSecs)}</span>
+        </div>
+
+        {/* Load preset */}
+        <div className="flex gap-2 overflow-x-auto pb-1 mb-3">
+          {Object.keys(PLAYLIST_PRESETS).map(nm => (
+            <button key={nm} onClick={() => loadPreset(nm)}
+              className={`flex-shrink-0 text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${darkMode ? "border-gray-700 text-gray-300 hover:bg-gray-800" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}>
+              {nm}
+            </button>
+          ))}
+        </div>
+
+        {/* Track list */}
+        <div className="flex flex-col gap-2 mb-3">
+          {tracks.map((t, i) => (
+            <div key={i} className={`flex items-center gap-3 px-3 py-2 rounded-xl ${subtle}`}>
+              <span className={`text-xs font-bold w-5 text-center ${muted}`}>{i+1}</span>
+              <div className="flex-1 min-w-0">
+                <p className={`text-sm font-medium truncate ${heading}`}>{t.title}</p>
+                <p className={`text-xs ${muted}`}>{t.bpm} BPM</p>
+              </div>
+              <div className="flex items-center gap-1">
+                <button onClick={() => trackMins(i, -1)} className={`w-6 h-6 rounded flex items-center justify-center text-sm font-bold ${darkMode ? "bg-gray-700 text-gray-300" : "bg-gray-200 text-gray-600"}`}>−</button>
+                <span className={`text-xs font-bold w-10 text-center tabular-nums ${heading}`}>{t.mins}m</span>
+                <button onClick={() => trackMins(i, 1)} className={`w-6 h-6 rounded flex items-center justify-center text-sm font-bold ${darkMode ? "bg-gray-700 text-gray-300" : "bg-gray-200 text-gray-600"}`}>+</button>
+              </div>
+              <button onClick={() => removeTrack(i)} className={`w-6 h-6 rounded flex items-center justify-center text-xs flex-shrink-0 ${darkMode ? "hover:bg-gray-700 text-gray-500" : "hover:bg-gray-200 text-gray-400"}`}>✕</button>
+            </div>
+          ))}
+        </div>
+
+        {/* Add track */}
+        <div className="flex gap-2">
+          <input value={newTrack} onChange={e => setNewTrack(e.target.value)} placeholder="Add a song…"
+            onKeyDown={e => e.key === "Enter" && addTrack()}
+            className={`flex-1 px-3 py-2 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-[#00aa13] ${darkMode ? "bg-gray-800 border-gray-700 text-white" : "bg-white border-gray-200 text-gray-900"}`} />
+          <input type="number" value={newBpm} onChange={e => setNewBpm(e.target.value)} min={60} max={200}
+            className={`w-20 px-3 py-2 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-[#00aa13] ${darkMode ? "bg-gray-800 border-gray-700 text-white" : "bg-white border-gray-200 text-gray-900"}`} />
+          <span className={`self-center text-xs ${muted}`}>BPM</span>
+          <button onClick={addTrack} className="px-4 py-2 rounded-xl bg-[#00aa13] hover:bg-[#008a0f] text-white text-sm font-semibold transition-colors">Add</button>
+        </div>
+        <p className={`text-xs mt-2.5 ${muted}`}>Build zones beneath your tracks — the playlist shows above the canvas so you can match intensity to each song.</p>
       </div>
 
       {/* Live canvas */}
@@ -5140,8 +5241,6 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode }) {
           <p className={`text-sm font-semibold ${heading}`}>Session canvas</p>
           <span className={`text-xs font-semibold ${total > TARGET ? "text-orange-500" : muted}`}>{fmtSecs(total)} / {length}m</span>
         </div>
-
-        <p className={`text-[10px] mb-2 ${muted}`}>🎵 {playlist} · beat energy — busier sections suit higher cadence</p>
 
         {/* Combined wrapper: waveform + bars share one draggable playhead */}
         <div className="relative select-none" style={{ cursor: total > 0 ? "ew-resize" : "default", touchAction: "none" }}
@@ -5172,12 +5271,21 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode }) {
             </div>
           )}
 
-          {/* Audio waveform lane */}
-          <div className={`flex items-center gap-1 rounded-lg px-2 mb-1.5 ${darkMode ? "bg-gray-800/60" : "bg-gray-50"}`} style={{ height: 34 }}>
-            {waveform.map((h, i) => {
-              const past = total > 0 && (i / waveform.length) <= (insertPos / scale)
-              return <div key={i} className="flex-1 rounded-full" style={{ height: `${h*100}%`, background: past ? "#00aa13" : darkMode ? "#475569" : "#cbd5e1", opacity: past ? 0.55 : 1, minWidth: 1 }} />
-            })}
+          {/* Audio track lane — each song laid across the timeline */}
+          <div className={`relative w-full rounded-lg overflow-hidden mb-1.5 ${darkMode ? "bg-gray-800/60" : "bg-gray-50"}`} style={{ height: 44 }}>
+            <div className="absolute inset-0 flex">
+              {trackSegs.map((t, i) => (
+                <div key={i} className="relative flex items-end gap-0.5 px-1 border-r overflow-hidden"
+                  style={{ width: `${t.secs / scale * 100}%`, borderColor: darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)" }}
+                  title={`${t.title} · ${t.bpm} BPM · ${t.mins}m`}>
+                  {/* bpm-driven mini bars */}
+                  {Array.from({ length: Math.max(3, Math.round(t.secs/30)) }).map((_, j) => (
+                    <div key={j} className="flex-1 rounded-full" style={{ height: `${(bpmNorm(t.bpm) * (0.7 + 0.3*Math.abs(Math.sin(j*1.3+t.bpm))))*70}%`, background: darkMode ? "#64748b" : "#cbd5e1", minWidth: 1 }} />
+                  ))}
+                  <span className={`absolute top-0.5 left-1.5 text-[8px] font-medium truncate ${darkMode ? "text-gray-400" : "text-gray-500"}`} style={{ maxWidth: "90%" }}>{t.title} · {t.bpm}</span>
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* Bar canvas */}
@@ -5312,9 +5420,9 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode }) {
         </div>
       </div>
 
-      <button disabled={total === 0}
+      <button disabled={total === 0} onClick={publish}
         className={`w-full py-3 rounded-xl text-white font-semibold text-sm transition-colors ${total === 0 ? "bg-gray-300 cursor-not-allowed" : "bg-[#00aa13] hover:bg-[#008a0f]"}`}>
-        Publish class plan
+        {published ? "✓ Published — now bookable in Schedule" : "Publish class plan"}
       </button>
     </div>
   )
@@ -5398,23 +5506,30 @@ const CLASS_REQUESTS = [
   { name: "Rhythm Ride",   studio: "Studio 2", day: "Sat", time: "10:00", recurring: false, status: "pending"  },
 ]
 
-function InstructorSchedulePage({ darkMode, onToggleDarkMode }) {
+function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] }) {
   const heading = darkMode ? "text-white"    : "text-gray-900"
   const muted   = darkMode ? "text-gray-400" : "text-gray-500"
   const card    = `rounded-2xl border transition-colors ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`
   const subtle  = darkMode ? "bg-gray-800"   : "bg-gray-50"
   const inputCls = `w-full px-3.5 py-2.5 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-[#00aa13] focus:border-transparent transition ${darkMode ? "bg-gray-800 border-gray-700 text-white" : "bg-white border-gray-200 text-gray-900"}`
+  const selectCls = `w-full px-3.5 py-2.5 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-[#00aa13] transition ${darkMode ? "bg-gray-800 border-gray-700 text-white" : "bg-white border-gray-200 text-gray-900"}`
 
   const DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]
-  const [className, setClassName] = useState("Sunrise Power")
-  const [studio, setStudio]   = useState("Studio 1")
+  const [className, setClassName] = useState(builtClasses[0]?.name || "")
+  const [studio, setStudio]   = useState(builtClasses[0]?.studio || "Studio 1")
   const [day, setDay]         = useState("Mon")
   const [time, setTime]       = useState("06:15")
   const [recurring, setRecurring] = useState(true)
   const [requests, setRequests]   = useState(CLASS_REQUESTS)
   const [toast, setToast]     = useState(false)
 
+  function pickClass(nm) {
+    setClassName(nm)
+    const c = builtClasses.find(b => b.name === nm)
+    if (c?.studio) setStudio(c.studio)
+  }
   function submit() {
+    if (!className) return
     setRequests(p => [{ name: className, studio, day, time, recurring, status: "pending" }, ...p])
     setToast(true)
     setTimeout(() => setToast(false), 2500)
@@ -5430,7 +5545,11 @@ function InstructorSchedulePage({ darkMode, onToggleDarkMode }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="sm:col-span-2">
             <label className={`block text-xs font-semibold mb-1.5 ${muted}`}>Class</label>
-            <input value={className} onChange={e => setClassName(e.target.value)} className={inputCls} placeholder="e.g. Sunrise Power" />
+            <select value={className} onChange={e => pickClass(e.target.value)} className={selectCls}>
+              {builtClasses.length === 0 && <option value="">No classes built yet</option>}
+              {builtClasses.map(c => <option key={c.name} value={c.name}>{c.name} · {c.length} min</option>)}
+            </select>
+            <p className={`text-xs mt-1.5 ${muted}`}>Pick from classes you've built in Class Builder</p>
           </div>
           <div>
             <label className={`block text-xs font-semibold mb-1.5 ${muted}`}>Studio</label>

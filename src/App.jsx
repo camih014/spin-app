@@ -4577,11 +4577,12 @@ const instructorClasses = [
   { dateLabel: "Mon 23 Feb",dateIso: "2026-02-23", time: "06:30", name: "Sunrise Power",   studio: "Studio 1", capacity: 24, booked: 24, waitlist: 2, status: "done", seed: 6, rating: 5.0, attended: 23 },
 ]
 
+// Target pedal cadence (RPM) — independent of intensity zone
 const CADENCE_BANDS = [
-  { label: "Climb",     rpm: "60–70 rpm"  },
-  { label: "Endurance", rpm: "80–90 rpm"  },
-  { label: "Tempo",     rpm: "90–100 rpm" },
-  { label: "Sprint",    rpm: "100+ rpm"   },
+  { short: "60–70",  rpm: "60–70 rpm"  },
+  { short: "75–85",  rpm: "75–85 rpm"  },
+  { short: "85–95",  rpm: "85–95 rpm"  },
+  { short: "100+",   rpm: "100+ rpm"   },
 ]
 
 const PLAYLISTS = [
@@ -4908,6 +4909,48 @@ function InstructorClassesPage({ darkMode, onToggleDarkMode, initialClass }) {
   )
 }
 
+function ZoneMixDonut({ segments, darkMode }) {
+  const total = segments.reduce((s, seg) => s + seg[0], 0)
+  if (!total) return null
+  const zt = Array(7).fill(0)
+  segments.forEach(([secs, zone]) => { zt[zone-1] += secs })
+  const zones = zt.map((secs, i) => ({ zone: i+1, secs, pct: secs/total })).filter(z => z.secs > 0)
+
+  const size = 116, cx = 58, cy = 58, outerR = 54, innerR = 34
+  let angle = -90
+  const slices = zones.map(z => { const start = angle; const sweep = z.pct*360; angle += sweep; return { ...z, start, sweep } })
+  function arc(start, sweep, outer, inner) {
+    const r = d => d*Math.PI/180, sw = Math.min(sweep, 359.99)
+    const x1 = cx+outer*Math.cos(r(start)),    y1 = cy+outer*Math.sin(r(start))
+    const x2 = cx+outer*Math.cos(r(start+sw)), y2 = cy+outer*Math.sin(r(start+sw))
+    const x3 = cx+inner*Math.cos(r(start+sw)), y3 = cy+inner*Math.sin(r(start+sw))
+    const x4 = cx+inner*Math.cos(r(start)),    y4 = cy+inner*Math.sin(r(start))
+    const lg = sw > 180 ? 1 : 0
+    return `M${x1},${y1} A${outer},${outer} 0 ${lg} 1 ${x2},${y2} L${x3},${y3} A${inner},${inner} 0 ${lg} 0 ${x4},${y4} Z`
+  }
+  const muted = darkMode ? "text-gray-400" : "text-gray-500"
+  const navy  = darkMode ? "#f9fafb" : "#1b2333"
+
+  return (
+    <div className="flex items-center gap-5">
+      <svg width={size} height={size} className="flex-shrink-0">
+        {slices.map((s, i) => <path key={i} d={arc(s.start, s.sweep, outerR, innerR)} fill={ZONE_COLORS[s.zone-1]} />)}
+        <text x={cx} y={cy-3} textAnchor="middle" fontSize={15} fontWeight={700} fill={navy}>{fmtSecs(total)}</text>
+        <text x={cx} y={cy+12} textAnchor="middle" fontSize={9} fill={darkMode ? "#6b7280" : "#9aa3b0"}>total</text>
+      </svg>
+      <div className="flex-1 grid grid-cols-1 gap-1.5">
+        {zones.sort((a,b) => b.secs-a.secs).map((z, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <div className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: ZONE_COLORS[z.zone-1] }} />
+            <span className={`text-xs flex-1 ${muted}`}>Z{z.zone} {ZONE_NAMES[z.zone-1]}</span>
+            <span className={`text-xs font-semibold tabular-nums ${muted}`}>{Math.round(z.pct*100)}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function ClassBuilderPage({ darkMode, onToggleDarkMode }) {
   const heading = darkMode ? "text-white"    : "text-gray-900"
   const muted   = darkMode ? "text-gray-400" : "text-gray-500"
@@ -4923,12 +4966,16 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode }) {
   const [brush, setBrush]     = useState(30)          // seconds added per tap
   const [cadence, setCadence] = useState(1)           // index into CADENCE_BANDS
   const [strokes, setStrokes] = useState([])          // [secs, zone, cadenceIdx]
+  const [undoStack, setUndoStack] = useState([])
   const [quote, setQuote]     = useState("")
-  const [hover, setHover]     = useState(null)        // { left, secs, zone, cad }
+  const [hover, setHover]     = useState(null)        // { frac, start, secs, zone, cad }
+  const [cursor, setCursor]   = useState(null)        // insert position in seconds; null = end
+  const [summaryOpen, setSummaryOpen] = useState(false)
 
   const TARGET = length * 60
   const total  = strokes.reduce((s, st) => s + st[0], 0)
   const scale  = Math.max(TARGET, total)
+  const cur    = cursor == null ? total : Math.min(cursor, total)
 
   // merge consecutive strokes with same zone + cadence
   const merged = strokes.reduce((acc, [secs, zone, cad]) => {
@@ -4938,11 +4985,43 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode }) {
     return acc
   }, [])
 
-  function addZone(zone) { setStrokes(p => [...p, [brush, zone, cadence]]) }
-  function undo()  { setStrokes(p => p.slice(0, -1)) }
-  function clear() { setStrokes([]) }
+  // fake audio waveform seeded by playlist — gives a sense of the track energy across time
+  const waveform = (() => {
+    const seed = [...playlist].reduce((a, c) => a + c.charCodeAt(0), 0)
+    const N = 64
+    return Array.from({ length: N }, (_, i) => {
+      const x = Math.sin(seed + i * 0.7) * Math.cos(i * 0.31 + seed * 0.5)
+      return 0.35 + Math.abs(x) * 0.6 + (i % 4 === 0 ? 0.05 : 0)
+    })
+  })()
+
+  function commit(nextStrokes, newCursor) {
+    setUndoStack(s => [...s, strokes])
+    setStrokes(nextStrokes)
+    if (newCursor !== undefined) setCursor(newCursor)
+  }
+
+  function addZone(zone) {
+    const stroke = [brush, zone, cadence]
+    if (cursor == null || cur >= total) { commit([...strokes, stroke], null); return }
+    // insert/split at cursor
+    const out = []; let acc = 0, done = false
+    for (const st of strokes) {
+      const [secs, z, c] = st
+      if (!done && cur <= acc + 0.001) { out.push(stroke); done = true; out.push(st) }
+      else if (!done && cur < acc + secs) {
+        out.push([cur - acc, z, c]); out.push(stroke); out.push([secs - (cur - acc), z, c]); done = true
+      } else out.push(st)
+      acc += secs
+    }
+    if (!done) out.push(stroke)
+    commit(out, cur + brush)
+  }
+  function undo()  { setUndoStack(s => { if (!s.length) return s; setStrokes(s[s.length-1]); setCursor(null); return s.slice(0,-1) }) }
+  function clear() { commit([], null) }
   function loadTemplate(t) {
-    setName(t.name); setLength(t.length)
+    setUndoStack(s => [...s, strokes])
+    setName(t.name); setLength(t.length); setCursor(null)
     setStrokes(t.strokes.map(s => [s[0], s[1], s[2] ?? 1]))
   }
 
@@ -5026,6 +5105,14 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode }) {
           <span className={`text-xs font-semibold ${total > TARGET ? "text-orange-500" : muted}`}>{fmtSecs(total)} / {length}m</span>
         </div>
 
+        {/* Audio waveform lane — track energy guides your cadence */}
+        <div className={`flex items-center gap-1 rounded-lg px-2 mb-1.5 ${darkMode ? "bg-gray-800/60" : "bg-gray-50"}`} style={{ height: 34 }}>
+          {waveform.map((h, i) => (
+            <div key={i} className="flex-1 rounded-full" style={{ height: `${h*100}%`, background: darkMode ? "#475569" : "#cbd5e1", minWidth: 1 }} />
+          ))}
+        </div>
+        <p className={`text-[10px] mb-2 ${muted}`}>🎵 {playlist} · beat energy — busier sections suit higher cadence</p>
+
         {/* Bar canvas */}
         <div className="relative">
           {/* Hover tooltip */}
@@ -5048,20 +5135,35 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode }) {
               <div className="absolute inset-0 flex items-end">
                 {merged.map(([secs, zone], i) => (
                   <div key={i} className="flex items-end justify-center transition-all"
-                    style={{ width: `${secs / scale * 100}%`, height: `${ZONE_HEIGHTS[zone-1]}%`, background: ZONE_COLORS[zone-1],
-                      opacity: hover && hover.start <= (merged.slice(0,i).reduce((a,m)=>a+m[0],0)) && false ? 0.5 : 1 }}
+                    style={{ width: `${secs / scale * 100}%`, height: `${ZONE_HEIGHTS[zone-1]}%`, background: ZONE_COLORS[zone-1] }}
                     title={`Z${zone} ${ZONE_NAMES[zone-1]} · ${fmtSecs(secs)}`} />
                 ))}
               </div>
             )}
             {/* hover guide line */}
             {hover && <div className="absolute top-0 bottom-0 w-px bg-white/50 pointer-events-none" style={{ left: `${hover.frac*100}%` }} />}
+            {/* insert cursor line */}
+            {total > 0 && (
+              <div className="absolute top-0 bottom-0 pointer-events-none" style={{ left: `${cur/scale*100}%` }}>
+                <div className="w-0.5 h-full bg-[#00aa13]" />
+                <div className="absolute -top-0.5 -translate-x-1/2 w-2.5 h-2.5 rounded-full bg-[#00aa13] border-2 border-white" style={{ left: 1 }} />
+              </div>
+            )}
           </div>
         </div>
-        <div className="flex justify-between mt-1.5 px-0.5">
-          <span className={`text-[10px] ${muted}`}>0:00</span>
-          <span className={`text-[10px] ${muted}`}>{length}:00</span>
-        </div>
+
+        {/* Insert position slider */}
+        {total > 0 && (
+          <div className="flex items-center gap-2 mt-3">
+            <span className={`text-[10px] ${muted}`}>Insert at</span>
+            <input type="range" min={0} max={total} step={15} value={cur}
+              onChange={e => setCursor(+e.target.value)}
+              className="flex-1 accent-[#00aa13]" style={{ height: 4 }} />
+            <span className={`text-xs font-semibold tabular-nums ${heading}`} style={{ width: 52, textAlign: "right" }}>{fmtSecs(cur)}</span>
+            <button onClick={() => setCursor(null)}
+              className={`text-[10px] font-semibold px-2 py-1 rounded-lg transition-colors ${cursor == null ? "opacity-30 cursor-not-allowed" : darkMode ? "bg-gray-800 text-gray-300 hover:bg-gray-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>To end</button>
+          </div>
+        )}
 
         {/* Brush + cadence */}
         <div className="flex flex-wrap items-center gap-x-2 gap-y-3 mt-4">
@@ -5072,11 +5174,11 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode }) {
                 className={`px-3 py-1.5 text-xs font-semibold transition-colors ${brush === o.s ? "bg-[#00aa13] text-white" : darkMode ? "bg-gray-800 text-gray-400 hover:bg-gray-700" : "bg-white text-gray-500 hover:bg-gray-50"}`}>{o.l}</button>
             ))}
           </div>
-          <span className={`text-xs ${muted}`}>at</span>
+          <span className={`text-xs ${muted}`}>rpm</span>
           <div className={`inline-flex rounded-lg overflow-hidden border ${darkMode ? "border-gray-700" : "border-gray-200"}`}>
             {CADENCE_BANDS.map((c, i) => (
               <button key={i} onClick={() => setCadence(i)} title={c.rpm}
-                className={`px-2.5 py-1.5 text-xs font-semibold transition-colors ${cadence === i ? "bg-[#00aa13] text-white" : darkMode ? "bg-gray-800 text-gray-400 hover:bg-gray-700" : "bg-white text-gray-500 hover:bg-gray-50"}`}>{c.label}</button>
+                className={`px-2.5 py-1.5 text-xs font-semibold transition-colors ${cadence === i ? "bg-[#00aa13] text-white" : darkMode ? "bg-gray-800 text-gray-400 hover:bg-gray-700" : "bg-white text-gray-500 hover:bg-gray-50"}`}>{c.short}</button>
             ))}
           </div>
           <div className="flex-1" />
@@ -5085,7 +5187,7 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode }) {
           <button onClick={clear} disabled={!strokes.length}
             className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${!strokes.length ? "opacity-30 cursor-not-allowed" : ""} ${darkMode ? "bg-gray-800 text-gray-300 hover:bg-gray-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>Clear</button>
         </div>
-        <p className={`text-xs mt-2 ${muted}`}>Painting <span className="font-semibold" style={{ color: "#00aa13" }}>{CADENCE_BANDS[cadence].label} · {CADENCE_BANDS[cadence].rpm}</span></p>
+        <p className={`text-xs mt-2 ${muted}`}>Painting at <span className="font-semibold" style={{ color: "#00aa13" }}>{CADENCE_BANDS[cadence].rpm}</span>{cursor != null && cur < total && <span> · inserting at {fmtSecs(cur)}</span>}</p>
       </div>
 
       {/* Zone palette */}
@@ -5103,14 +5205,20 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode }) {
         </div>
       </div>
 
-      {/* Phase summary */}
+      {/* Plan summary — donut + collapsible detail */}
       {merged.length > 0 && (
         <div className={`${card} overflow-hidden mb-5`}>
-          <div className={`px-5 py-3.5 border-b ${darkMode ? "border-gray-800" : "border-gray-100"}`}>
-            <p className={`text-sm font-semibold ${heading}`}>Plan summary · {merged.length} {merged.length === 1 ? "block" : "blocks"}</p>
+          <div className="p-5">
+            <p className={`text-sm font-semibold mb-4 ${heading}`}>Zone mix</p>
+            <ZoneMixDonut segments={merged} darkMode={darkMode} />
           </div>
-          {merged.map(([secs, zone, cad], i) => (
-            <div key={i} className={`flex items-center gap-3 px-5 py-2.5 border-b last:border-b-0 ${darkMode ? "border-gray-800" : "border-gray-100"}`}>
+          <button onClick={() => setSummaryOpen(o => !o)}
+            className={`w-full flex items-center justify-between px-5 py-3 border-t transition-colors ${darkMode ? "border-gray-800 hover:bg-gray-800" : "border-gray-100 hover:bg-gray-50"}`}>
+            <span className={`text-xs font-semibold ${muted}`}>{merged.length} {merged.length === 1 ? "block" : "blocks"} · tap to {summaryOpen ? "hide" : "view"} detail</span>
+            <ChevronDown size={15} className={`transition-transform ${summaryOpen ? "rotate-180" : ""} ${muted}`} />
+          </button>
+          {summaryOpen && merged.map(([secs, zone, cad], i) => (
+            <div key={i} className={`flex items-center gap-3 px-5 py-2.5 border-t ${darkMode ? "border-gray-800" : "border-gray-100"}`}>
               <div className="w-2 h-7 rounded-full flex-shrink-0" style={{ background: ZONE_COLORS[zone-1] }} />
               <span className={`flex-1 text-sm font-medium ${heading}`}>Z{zone} · {ZONE_NAMES[zone-1]}</span>
               <span className={`text-xs ${muted}`}>{CADENCE_BANDS[cad].rpm}</span>

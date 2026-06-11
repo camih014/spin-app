@@ -4588,7 +4588,7 @@ const RIDER_POOL = [
   "Sam Rourke","Zara Bly","Kit Mercer","Eve Larsson","Jonah Reece","Tess Aldridge","Rory Vale",
 ]
 
-function rosterFor(seed, booked) {
+function rosterFor(seed, booked, canCheckIn = false) {
   // deterministic pick of riders + bike assignments
   const out = []
   const used = new Set()
@@ -4599,8 +4599,8 @@ function rosterFor(seed, booked) {
     while (used.has(name)) { n = (n + 1) % RIDER_POOL.length; name = RIDER_POOL[n] }
     used.add(name)
     const bike = ((seed * 7 + i * 13) % 24) + 1
-    // most riders are simply "booked"; only a few have physically checked in
-    out.push({ name, bike, checkedIn: (seed + i) % 6 === 0 })
+    // riders can only be checked in on the day of the class (they're in the building)
+    out.push({ name, bike, checkedIn: canCheckIn && (seed + i) % 6 === 0 })
   }
   // unique bikes
   const seenBikes = new Set()
@@ -4609,17 +4609,19 @@ function rosterFor(seed, booked) {
 }
 
 const instructorClasses = [
-  { dateLabel: "Today",     dateIso: "2026-02-26", time: "06:15", name: "Sunrise Power",   studio: "Studio 1", capacity: 24, booked: 22, waitlist: 3, status: "upcoming", seed: 3 },
-  { dateLabel: "Today",     dateIso: "2026-02-26", time: "12:00", name: "Lunch Sprint",    studio: "Studio 2", capacity: 20, booked: 16, waitlist: 0, status: "upcoming", seed: 7 },
-  { dateLabel: "Today",     dateIso: "2026-02-26", time: "18:00", name: "Evening Flow",    studio: "Studio 1", capacity: 24, booked: 14, waitlist: 0, status: "upcoming", seed: 11 },
-  { dateLabel: "Tomorrow",  dateIso: "2026-02-27", time: "08:00", name: "Cadence Control", studio: "Studio 1", capacity: 24, booked: 19, waitlist: 0, status: "upcoming", seed: 5 },
-  { dateLabel: "Tomorrow",  dateIso: "2026-02-27", time: "19:00", name: "HIIT Blast",      studio: "Studio 1", capacity: 24, booked: 24, waitlist: 6, status: "upcoming", seed: 9 },
-  { dateLabel: "Sat 28 Feb",dateIso: "2026-02-28", time: "09:00", name: "Rhythm Ride",     studio: "Studio 1", capacity: 24, booked: 21, waitlist: 1, status: "upcoming", seed: 2 },
+  { dateLabel: "Today",     dateIso: "2026-02-26", time: "06:15", name: "Sunrise Power",   studio: "Studio 1", location: "SpinOut · Hampstead",  capacity: 24, booked: 22, waitlist: 3, status: "upcoming", seed: 3 },
+  { dateLabel: "Today",     dateIso: "2026-02-26", time: "12:00", name: "Lunch Sprint",    studio: "Studio 2", location: "SpinOut · Shoreditch", capacity: 20, booked: 16, waitlist: 0, status: "upcoming", seed: 7 },
+  { dateLabel: "Today",     dateIso: "2026-02-26", time: "18:00", name: "Evening Flow",    studio: "Studio 1", location: "SpinOut · Hampstead",  capacity: 24, booked: 14, waitlist: 0, status: "upcoming", seed: 11 },
+  { dateLabel: "Tomorrow",  dateIso: "2026-02-27", time: "08:00", name: "Cadence Control", studio: "Studio 1", location: "SpinOut · Hampstead",  capacity: 24, booked: 19, waitlist: 0, status: "upcoming", seed: 5 },
+  { dateLabel: "Tomorrow",  dateIso: "2026-02-27", time: "19:00", name: "HIIT Blast",      studio: "Studio 1", location: "SpinOut · Shoreditch", capacity: 24, booked: 24, waitlist: 6, status: "upcoming", seed: 9 },
+  { dateLabel: "Sat 28 Feb",dateIso: "2026-02-28", time: "09:00", name: "Rhythm Ride",     studio: "Studio 1", location: "SpinOut · Hampstead",  capacity: 24, booked: 21, waitlist: 1, status: "upcoming", seed: 2 },
   // past
-  { dateLabel: "Wed 25 Feb",dateIso: "2026-02-25", time: "07:00", name: "Threshold Push",  studio: "Studio 1", capacity: 24, booked: 23, waitlist: 0, status: "done", seed: 4, rating: 4.9, attended: 21 },
-  { dateLabel: "Tue 24 Feb",dateIso: "2026-02-24", time: "18:30", name: "Climb Intervals", studio: "Studio 2", capacity: 20, booked: 18, waitlist: 0, status: "done", seed: 8, rating: 4.8, attended: 17 },
-  { dateLabel: "Mon 23 Feb",dateIso: "2026-02-23", time: "06:30", name: "Sunrise Power",   studio: "Studio 1", capacity: 24, booked: 24, waitlist: 2, status: "done", seed: 6, rating: 5.0, attended: 23 },
+  { dateLabel: "Wed 25 Feb",dateIso: "2026-02-25", time: "07:00", name: "Threshold Push",  studio: "Studio 1", location: "SpinOut · Hampstead",  capacity: 24, booked: 23, waitlist: 0, status: "done", seed: 4, rating: 4.9, attended: 21 },
+  { dateLabel: "Tue 24 Feb",dateIso: "2026-02-24", time: "18:30", name: "Climb Intervals", studio: "Studio 2", location: "SpinOut · Shoreditch", capacity: 20, booked: 18, waitlist: 0, status: "done", seed: 8, rating: 4.8, attended: 17 },
+  { dateLabel: "Mon 23 Feb",dateIso: "2026-02-23", time: "06:30", name: "Sunrise Power",   studio: "Studio 1", location: "SpinOut · Hampstead",  capacity: 24, booked: 24, waitlist: 2, status: "done", seed: 6, rating: 5.0, attended: 23 },
 ]
+
+const INSTRUCTOR_TODAY_ISO = "2026-02-26"
 
 // Target pedal cadence (RPM) — independent of intensity zone
 const CADENCE_BANDS = [
@@ -4734,18 +4736,18 @@ function InstructorHomePage({ darkMode, onToggleDarkMode, onOpenRoster }) {
   const card    = `rounded-2xl border transition-colors ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`
   const subtle  = darkMode ? "bg-gray-800"   : "bg-gray-50"
 
-  const [locations, setLocations] = useState([LOCATIONS[0]])
-  function toggleLocation(l) {
-    setLocations(p => p.includes(l) ? (p.length > 1 ? p.filter(x => x !== l) : p) : [...p, l])
-  }
+  const [locFilter, setLocFilter] = useState("All")
+  const filterOpts = ["All", ...LOCATIONS]
 
-  const today = instructorClasses.filter(c => c.dateLabel === "Today")
+  const inLoc = c => locFilter === "All" || c.location === locFilter
+  const today = instructorClasses.filter(c => c.dateLabel === "Today" && inLoc(c))
   const ridersToday = today.reduce((s, c) => s + c.booked, 0)
+  const weekCount = instructorClasses.filter(c => c.status === "upcoming" && inLoc(c)).length
 
   const stats = [
     { label: "Classes today",   value: today.length },
     { label: "Riders booked",   value: ridersToday },
-    { label: "This week",       value: "6 classes" },
+    { label: "Upcoming",        value: `${weekCount} classes` },
     { label: "Avg rating",      value: "4.9 ★" },
   ]
 
@@ -4754,7 +4756,7 @@ function InstructorHomePage({ darkMode, onToggleDarkMode, onOpenRoster }) {
       <InstructorTopBar title="Good morning, JIM" sub={`${today.length} classes to teach today`} darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
 
       {/* Instructor profile */}
-      <div className={`${card} p-5 mb-6`}>
+      <div className={`${card} p-5 mb-5`}>
         <div className="flex items-center gap-4">
           <Avatar name="JIM" size={56} />
           <div className="flex-1 min-w-0">
@@ -4763,26 +4765,25 @@ function InstructorHomePage({ darkMode, onToggleDarkMode, onOpenRoster }) {
               <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-[#e6f9e8] text-[#00aa13]">Instructor</span>
             </div>
             <p className={`text-sm ${muted}`}>Power · Rhythm · HIIT · 4.9★ over 622 riders</p>
+            <p className={`text-xs mt-0.5 ${muted}`}>Based at {LOCATIONS.map(l => l.replace("SpinOut · ","")).join(" & ")}</p>
           </div>
           <button className={`text-xs font-semibold px-3 py-1.5 rounded-lg border flex-shrink-0 ${darkMode ? "border-gray-700 text-gray-300 hover:bg-gray-800" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}>Edit</button>
         </div>
-        <div className="mt-4">
-          <p className={`text-xs font-semibold mb-2 ${muted}`}>Your locations</p>
-          <div className="flex flex-wrap gap-2">
-            {LOCATIONS.map(l => {
-              const on = locations.includes(l)
-              return (
-                <button key={l} onClick={() => toggleLocation(l)}
-                  className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors flex items-center gap-1.5 ${on
-                    ? "bg-[#e6f9e8] border-[#00aa13] text-[#00aa13]"
-                    : darkMode ? "border-gray-700 text-gray-400 hover:bg-gray-800" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}>
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>
-                  {l}{on && " ✓"}
-                </button>
-              )
-            })}
-          </div>
-        </div>
+      </div>
+
+      {/* Location filter */}
+      <div className="flex gap-2 mb-5 overflow-x-auto pb-1">
+        {filterOpts.map(l => {
+          const on = locFilter === l
+          return (
+            <button key={l} onClick={() => setLocFilter(l)}
+              className={`flex-shrink-0 text-xs font-semibold px-3.5 py-2 rounded-full border transition-colors ${on
+                ? "bg-[#00aa13] border-[#00aa13] text-white"
+                : darkMode ? "border-gray-700 text-gray-400 hover:bg-gray-800" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}>
+              {l === "All" ? "All locations" : l.replace("SpinOut · ","")}
+            </button>
+          )
+        })}
       </div>
 
       {/* Stats */}
@@ -4796,8 +4797,11 @@ function InstructorHomePage({ darkMode, onToggleDarkMode, onOpenRoster }) {
       </div>
 
       {/* Today's classes */}
-      <h2 className={`font-semibold mb-3 ${heading}`}>Today's classes</h2>
+      <h2 className={`font-semibold mb-3 ${heading}`}>Today's classes{locFilter !== "All" && ` · ${locFilter.replace("SpinOut · ","")}`}</h2>
       <div className="flex flex-col gap-3 mb-8">
+        {today.length === 0 && (
+          <div className={`${card} p-6 text-center`}><p className={`text-sm ${muted}`}>No classes today at this location</p></div>
+        )}
         {today.map((c, i) => (
           <div key={i} className={`${card} p-5`}>
             <div className="flex items-start justify-between gap-4 mb-3">
@@ -4806,7 +4810,7 @@ function InstructorHomePage({ darkMode, onToggleDarkMode, onOpenRoster }) {
                   <span className={`text-sm font-bold tabular-nums ${heading}`}>{c.time}</span>
                   <span className={`text-base font-bold ${heading}`}>{c.name}</span>
                 </div>
-                <p className={`text-xs mt-0.5 ${muted}`}>{c.studio} · 45 mins</p>
+                <p className={`text-xs mt-0.5 ${muted}`}>{c.location?.replace("SpinOut · ","")} · {c.studio} · 45 mins</p>
               </div>
               <button onClick={() => onOpenRoster(c)}
                 className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-[#00aa13] text-white hover:bg-[#008a0f] transition-colors flex-shrink-0">
@@ -4852,7 +4856,8 @@ function ClassRoster({ cls, darkMode }) {
   const subtle  = darkMode ? "bg-gray-800"   : "bg-gray-50"
   const divider = darkMode ? "border-gray-800" : "border-gray-100"
 
-  const roster  = rosterFor(cls.seed, cls.booked)
+  const isToday = cls.dateIso === INSTRUCTOR_TODAY_ISO && cls.status !== "done"
+  const roster  = rosterFor(cls.seed, cls.booked, isToday)
   const layout  = STUDIO_LAYOUTS[cls.studio] || STUDIO_LAYOUTS["Studio 1"]
   const bikeMap = {}
   roster.forEach(r => { bikeMap[r.bike] = r })
@@ -4911,8 +4916,8 @@ function ClassRoster({ cls, darkMode }) {
           ))}
         </div>
         <div className="flex items-center gap-4 mt-4 flex-wrap">
-          <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-[#00aa13]" /><span className={`text-xs ${muted}`}>Checked in</span></div>
-          <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-[#e6f9e8] border border-[#00aa13]" /><span className={`text-xs ${muted}`}>Booked</span></div>
+          {isToday && <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-[#00aa13]" /><span className={`text-xs ${muted}`}>Checked in</span></div>}
+          <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-[#e6f9e8] border border-[#00aa13]" /><span className={`text-xs ${muted}`}>{cls.status === "done" ? "Attended" : "Booked"}</span></div>
           <div className="flex items-center gap-1.5"><div className={`w-3 h-3 rounded ${darkMode ? "bg-gray-800" : "bg-gray-100"}`} /><span className={`text-xs ${muted}`}>Empty</span></div>
         </div>
       </div>
@@ -4921,7 +4926,7 @@ function ClassRoster({ cls, darkMode }) {
       <div className={`${card} overflow-hidden`}>
         <div className={`flex items-center justify-between px-5 py-3.5 border-b ${divider}`}>
           <p className={`text-sm font-semibold ${heading}`}>Booked riders</p>
-          <span className={`text-xs ${muted}`}>{roster.filter(r=>r.checkedIn).length} checked in · {cls.booked} total</span>
+          <span className={`text-xs ${muted}`}>{isToday ? `${roster.filter(r=>r.checkedIn).length} checked in · ${cls.booked} total` : `${cls.booked} booked`}</span>
         </div>
         <div className="max-h-[420px] overflow-y-auto">
           {roster.map((r, i) => (
@@ -4931,7 +4936,9 @@ function ClassRoster({ cls, darkMode }) {
                 <p className={`text-sm font-medium ${heading}`}>{r.name}</p>
                 <p className={`text-xs ${muted}`}>Bike {r.bike}</p>
               </div>
-              {r.checkedIn
+              {cls.status === "done"
+                ? <span className={`text-xs ${muted}`}>Attended</span>
+                : r.checkedIn
                 ? <span className="text-xs font-semibold text-[#00aa13] flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#00aa13]" />Checked in</span>
                 : <span className={`text-xs ${muted}`}>Booked</span>}
             </div>
@@ -4953,13 +4960,12 @@ function InstructorClassesPage({ darkMode, onToggleDarkMode, initialClass }) {
   const card    = `rounded-2xl border transition-colors ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`
   const divider = darkMode ? "border-gray-800" : "border-gray-100"
 
-  const initialTab = initialClass?.status === "done" ? "past" : "upcoming"
-  const [tab, setTab]           = useState(initialTab)
   const [view, setView]         = useState("list")
   const [selected, setSelected] = useState(initialClass || instructorClasses.find(c => c.status === "upcoming"))
   const [mobileDetail, setMobileDetail] = useState(!!initialClass)
 
-  const list = instructorClasses.filter(c => tab === "upcoming" ? c.status === "upcoming" : c.status === "done")
+  const upcoming = instructorClasses.filter(c => c.status === "upcoming")
+  const past     = instructorClasses.filter(c => c.status === "done")
 
   // Calendar data (Feb 2026 — where all classes sit)
   const monthCells = getMonthGrid(2026, 2)
@@ -4967,34 +4973,42 @@ function InstructorClassesPage({ darkMode, onToggleDarkMode, initialClass }) {
   instructorClasses.forEach(c => { (byDay[c.dateIso] ||= []).push(c) })
 
   function pick(c) { setSelected(c); setMobileDetail(true) }
-  function switchTab(t) {
-    setTab(t)
-    const first = instructorClasses.find(c => t === "upcoming" ? c.status === "upcoming" : c.status === "done")
-    setSelected(first)
+
+  function ClassRow({ c }) {
+    const on = c === selected
+    return (
+      <button onClick={() => pick(c)}
+        className={`w-full text-left flex items-center gap-4 px-5 py-4 border-b last:border-b-0 ${divider} transition-colors
+          ${on ? darkMode ? "bg-gray-800 border-l-2 border-l-[#00aa13]" : "bg-[#e6f9e8] border-l-2 border-l-[#00aa13]" : darkMode ? "hover:bg-gray-800" : "hover:bg-gray-50"}`}>
+        <div className="w-14 flex-shrink-0">
+          <p className={`text-xs font-medium ${muted}`}>{c.dateLabel}</p>
+          <p className={`text-sm font-bold tabular-nums ${on ? "text-[#00aa13]" : heading}`}>{c.time}</p>
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className={`text-sm font-semibold ${on ? "text-[#00aa13]" : heading}`}>{c.name}</p>
+          <p className={`text-xs mt-0.5 ${muted}`}>{c.location?.replace("SpinOut · ","")} · {c.studio} · {c.booked}/{c.capacity}{c.waitlist > 0 && ` · ${c.waitlist} waitlist`}</p>
+        </div>
+        {c.status === "done"
+          ? <span className="text-xs font-semibold text-amber-500 flex-shrink-0">{c.rating} ★</span>
+          : <span className={`text-xs font-semibold flex-shrink-0 ${c.booked >= c.capacity ? "text-orange-500" : "text-[#00aa13]"}`}>{c.booked >= c.capacity ? "Full" : `${c.capacity - c.booked} left`}</span>}
+      </button>
+    )
   }
 
   const ClassList = (
-    <div className={`${card} overflow-hidden`}>
-      {list.map((c, i) => {
-        const on = c === selected
-        return (
-          <button key={i} onClick={() => pick(c)}
-            className={`w-full text-left flex items-center gap-4 px-5 py-4 border-b last:border-b-0 ${divider} transition-colors
-              ${on ? darkMode ? "bg-gray-800 border-l-2 border-l-[#00aa13]" : "bg-[#e6f9e8] border-l-2 border-l-[#00aa13]" : darkMode ? "hover:bg-gray-800" : "hover:bg-gray-50"}`}>
-            <div className="w-14 flex-shrink-0">
-              <p className={`text-xs font-medium ${muted}`}>{c.dateLabel}</p>
-              <p className={`text-sm font-bold tabular-nums ${on ? "text-[#00aa13]" : heading}`}>{c.time}</p>
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className={`text-sm font-semibold ${on ? "text-[#00aa13]" : heading}`}>{c.name}</p>
-              <p className={`text-xs mt-0.5 ${muted}`}>{c.studio} · {c.booked}/{c.capacity} riders{c.waitlist > 0 && ` · ${c.waitlist} waitlist`}</p>
-            </div>
-            {c.status === "done"
-              ? <span className="text-xs font-semibold text-amber-500 flex-shrink-0">{c.rating} ★</span>
-              : <span className={`text-xs font-semibold flex-shrink-0 ${c.booked >= c.capacity ? "text-orange-500" : "text-[#00aa13]"}`}>{c.booked >= c.capacity ? "Full" : `${c.capacity - c.booked} left`}</span>}
-          </button>
-        )
-      })}
+    <div className="flex flex-col gap-5">
+      <div>
+        <p className={`text-xs font-semibold uppercase tracking-widest mb-2 px-1 ${muted}`}>Upcoming</p>
+        <div className={`${card} overflow-hidden`}>
+          {upcoming.map((c, i) => <ClassRow key={i} c={c} />)}
+        </div>
+      </div>
+      <div>
+        <p className={`text-xs font-semibold uppercase tracking-widest mb-2 px-1 ${muted}`}>Past</p>
+        <div className={`${card} overflow-hidden`}>
+          {past.map((c, i) => <ClassRow key={i} c={c} />)}
+        </div>
+      </div>
     </div>
   )
 
@@ -5002,16 +5016,8 @@ function InstructorClassesPage({ darkMode, onToggleDarkMode, initialClass }) {
     <div className="p-4 md:p-8 max-w-5xl mx-auto pb-16">
       <InstructorTopBar title="My Classes" sub="Classes you're teaching at SpinOut" darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
 
-      {/* Tabs + view toggle */}
-      <div className={`flex items-center justify-between gap-3 mb-5 ${mobileDetail ? "hidden md:flex" : "flex"}`}>
-        <div className={`inline-flex rounded-xl p-0.5 ${darkMode ? "bg-gray-800" : "bg-gray-100"}`}>
-          {["upcoming","past"].map(t => (
-            <button key={t} onClick={() => switchTab(t)}
-              className={`px-4 py-1.5 rounded-lg text-xs font-semibold capitalize transition-all ${tab === t
-                ? darkMode ? "bg-gray-700 text-white shadow-sm" : "bg-white text-gray-900 shadow-sm"
-                : muted}`}>{t}</button>
-          ))}
-        </div>
+      {/* View toggle */}
+      <div className={`flex items-center justify-end gap-3 mb-5 ${mobileDetail ? "hidden md:flex" : "flex"}`}>
         <div className={`inline-flex rounded-xl p-0.5 ${darkMode ? "bg-gray-800" : "bg-gray-100"}`}>
           {[["list","List"],["calendar","Calendar"]].map(([v, l]) => (
             <button key={v} onClick={() => setView(v)}
@@ -5051,14 +5057,20 @@ function InstructorClassesPage({ darkMode, onToggleDarkMode, initialClass }) {
                   <div key={i} className={`rounded-lg p-1 min-h-[64px] border ${isToday ? "border-[#00aa13]" : darkMode ? "border-gray-800" : "border-gray-100"}`}>
                     <p className={`text-[10px] font-semibold mb-0.5 ${isToday ? "text-[#00aa13]" : muted}`}>{day}</p>
                     <div className="flex flex-col gap-0.5">
-                      {dayClasses.map((c, j) => (
-                        <button key={j} onClick={() => pick(c)}
-                          className="text-left rounded px-1 py-0.5 text-white text-[8px] leading-tight font-medium truncate hover:opacity-90"
-                          style={{ background: c === selected ? "#008a0f" : "#00aa13" }}
-                          title={`${c.time} ${c.name}`}>
-                          {c.time} {c.name}
-                        </button>
-                      ))}
+                      {dayClasses.map((c, j) => {
+                        const done = c.status === "done"
+                        return (
+                          <button key={j} onClick={() => pick(c)}
+                            className="text-left rounded px-1 py-0.5 text-[8px] leading-tight font-medium truncate hover:opacity-90"
+                            style={{
+                              background: done ? (darkMode ? "#374151" : "#e5e7eb") : c === selected ? "#008a0f" : "#00aa13",
+                              color: done ? (darkMode ? "#9ca3af" : "#6b7280") : "#fff",
+                            }}
+                            title={`${c.time} ${c.name}${done ? " · completed" : ""}`}>
+                            {c.time} {c.name}
+                          </button>
+                        )
+                      })}
                     </div>
                   </div>
                 )
@@ -5140,9 +5152,10 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
   const [name, setName]       = useState("New Power Ride")
   const [social, setSocial]   = useState(false)       // random seating
   const [length, setLength]   = useState(45)          // minutes
-  const [tracks, setTracks]   = useState(presetTracks("Power Hour Mix"))
+  const [tracks, setTracks]   = useState([])
   const [newTrack, setNewTrack] = useState("")
   const [newBpm, setNewBpm]   = useState(128)
+  const [newMins, setNewMins] = useState(3)
   const [published, setPublished] = useState(false)
   const [brush, setBrush]     = useState(30)          // seconds added per tap
   const [cadence, setCadence] = useState(1)           // index into CADENCE_BANDS
@@ -5203,12 +5216,13 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
 
   function addTrack() {
     const title = newTrack.trim() || `Track ${tracks.length + 1}`
-    setTracks(t => [...t, { title, bpm: +newBpm || 120, mins: 4 }])
+    const mins = Math.max(2, Math.min(4, +newMins || 3))
+    setTracks(t => [...t, { title, bpm: +newBpm || 120, mins }])
     setNewTrack("")
   }
   function removeTrack(i) { setTracks(t => t.filter((_, j) => j !== i)) }
   function loadPreset(nm) { setTracks(presetTracks(nm)) }
-  function trackMins(i, d) { setTracks(t => t.map((tr, j) => j === i ? { ...tr, mins: Math.max(1, tr.mins + d) } : tr)) }
+  function trackMins(i, d) { setTracks(t => t.map((tr, j) => j === i ? { ...tr, mins: Math.max(2, Math.min(4, tr.mins + d)) } : tr)) }
 
   function publish() {
     if (!total) return
@@ -5328,18 +5342,13 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
           <span className={`text-xs ${muted}`}>{tracks.length} tracks · {fmtSecs(playlistSecs)}</span>
         </div>
 
-        {/* Load preset */}
-        <div className="flex gap-2 overflow-x-auto pb-1 mb-3">
-          {Object.keys(PLAYLIST_PRESETS).map(nm => (
-            <button key={nm} onClick={() => loadPreset(nm)}
-              className={`flex-shrink-0 text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${darkMode ? "border-gray-700 text-gray-300 hover:bg-gray-800" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}>
-              {nm}
-            </button>
-          ))}
-        </div>
-
         {/* Track list */}
         <div className="flex flex-col gap-2 mb-3">
+          {tracks.length === 0 && (
+            <div className={`rounded-xl px-4 py-5 text-center ${subtle}`}>
+              <p className={`text-sm ${muted}`}>No songs yet — add your first track below to build your playlist.</p>
+            </div>
+          )}
           {tracks.map((t, i) => (
             <div key={i} className={`flex items-center gap-3 px-3 py-2 rounded-xl ${subtle}`}>
               <span className={`text-xs font-bold w-5 text-center ${muted}`}>{i+1}</span>
@@ -5358,16 +5367,23 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
         </div>
 
         {/* Add track */}
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 items-center">
           <input value={newTrack} onChange={e => setNewTrack(e.target.value)} placeholder="Add a song…"
             onKeyDown={e => e.key === "Enter" && addTrack()}
-            className={`flex-1 px-3 py-2 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-[#00aa13] ${darkMode ? "bg-gray-800 border-gray-700 text-white" : "bg-white border-gray-200 text-gray-900"}`} />
-          <input type="number" value={newBpm} onChange={e => setNewBpm(e.target.value)} min={60} max={200}
-            className={`w-20 px-3 py-2 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-[#00aa13] ${darkMode ? "bg-gray-800 border-gray-700 text-white" : "bg-white border-gray-200 text-gray-900"}`} />
-          <span className={`self-center text-xs ${muted}`}>BPM</span>
+            className={`flex-1 min-w-[140px] px-3 py-2 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-[#00aa13] ${darkMode ? "bg-gray-800 border-gray-700 text-white" : "bg-white border-gray-200 text-gray-900"}`} />
+          <div className="flex items-center gap-1">
+            <input type="number" value={newBpm} onChange={e => setNewBpm(e.target.value)} min={60} max={200}
+              className={`w-16 px-2 py-2 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-[#00aa13] ${darkMode ? "bg-gray-800 border-gray-700 text-white" : "bg-white border-gray-200 text-gray-900"}`} />
+            <span className={`text-xs ${muted}`}>BPM</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <input type="number" value={newMins} onChange={e => setNewMins(e.target.value)} min={2} max={4}
+              className={`w-14 px-2 py-2 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-[#00aa13] ${darkMode ? "bg-gray-800 border-gray-700 text-white" : "bg-white border-gray-200 text-gray-900"}`} />
+            <span className={`text-xs ${muted}`}>min</span>
+          </div>
           <button onClick={addTrack} className="px-4 py-2 rounded-xl bg-[#00aa13] hover:bg-[#008a0f] text-white text-sm font-semibold transition-colors">Add</button>
         </div>
-        <p className={`text-xs mt-2.5 ${muted}`}>Build zones beneath your tracks — the playlist shows above the canvas so you can match intensity to each song.</p>
+        <p className={`text-xs mt-2.5 ${muted}`}>Songs run 2–4 mins. Build zones beneath your tracks — the playlist shows above the canvas so you can match intensity to each song.</p>
       </div>
 
       {/* Live canvas */}
@@ -5631,11 +5647,17 @@ function InstructorStatsPage({ darkMode, onToggleDarkMode }) {
   )
 }
 
+const DAY_ORDER = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]
+
 const CLASS_REQUESTS = [
-  { name: "Sunrise Power", location: "SpinOut · Hampstead",  studio: "Studio 1", day: "Mon", time: "06:15", recurring: true,  status: "approved" },
-  { name: "HIIT Blast",    location: "SpinOut · Hampstead",  studio: "Studio 1", day: "Wed", time: "19:00", recurring: true,  status: "approved" },
-  { name: "Rhythm Ride",   location: "SpinOut · Shoreditch", studio: "Studio 2", day: "Sat", time: "10:00", recurring: false, social: true, status: "pending"  },
+  { name: "Sunrise Power", location: "SpinOut · Hampstead",  studio: "Either",   recurring: true,  slots: [{ day: "Mon", time: "06:15" }, { day: "Wed", time: "06:15" }, { day: "Fri", time: "06:15" }], status: "approved" },
+  { name: "HIIT Blast",    location: "SpinOut · Hampstead",  studio: "Studio 1", recurring: true,  slots: [{ day: "Wed", time: "19:00" }], status: "approved" },
+  { name: "Rhythm Ride",   location: "SpinOut · Shoreditch", studio: "Studio 2", recurring: false, social: true, slots: [{ day: "Sat", time: "10:00" }], status: "pending"  },
 ]
+function reqSortKey(r) {
+  const s = r.slots?.[0] || { day: "Sun", time: "23:59" }
+  return DAY_ORDER.indexOf(s.day) * 10000 + parseInt(s.time.replace(":", ""), 10)
+}
 
 function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] }) {
   const heading = darkMode ? "text-white"    : "text-gray-900"
@@ -5648,18 +5670,22 @@ function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] 
   const DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]
   const [className, setClassName] = useState(builtClasses[0]?.name || "")
   const [location, setLocation] = useState(LOCATIONS[0])
-  const [studio, setStudio]   = useState("Studio 1")
-  const [day, setDay]         = useState("Mon")
-  const [time, setTime]       = useState("06:15")
+  const [studio, setStudio]   = useState("Either")
+  const [slots, setSlots]     = useState([{ day: "Mon", time: "06:15" }])
   const [recurring, setRecurring] = useState(true)
   const [requests, setRequests]   = useState(CLASS_REQUESTS)
   const [toast, setToast]     = useState(false)
 
   const selectedClass = builtClasses.find(b => b.name === className)
+  const sortedRequests = [...requests].sort((a, b) => reqSortKey(a) - reqSortKey(b))
+
+  function addSlot()  { setSlots(s => [...s, { day: "Mon", time: "18:00" }]) }
+  function removeSlot(i) { setSlots(s => s.length > 1 ? s.filter((_, j) => j !== i) : s) }
+  function updateSlot(i, patch) { setSlots(s => s.map((sl, j) => j === i ? { ...sl, ...patch } : sl)) }
 
   function submit() {
     if (!className) return
-    setRequests(p => [{ name: className, studio, location, day, time, recurring, social: selectedClass?.social, status: "pending" }, ...p])
+    setRequests(p => [{ name: className, studio, location, recurring, social: selectedClass?.social, slots: slots.map(s => ({ ...s })), status: "pending" }, ...p])
     setToast(true)
     setTimeout(() => setToast(false), 2500)
   }
@@ -5686,27 +5712,40 @@ function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] 
               {LOCATIONS.map(l => <option key={l} value={l}>{l}</option>)}
             </select>
           </div>
-          <div>
+          <div className="sm:col-span-2">
             <label className={`block text-xs font-semibold mb-1.5 ${muted}`}>Studio</label>
             <div className={`inline-flex rounded-xl overflow-hidden border w-full ${darkMode ? "border-gray-700" : "border-gray-200"}`}>
-              {["Studio 1","Studio 2"].map(s => (
+              {["Studio 1","Studio 2","Either"].map(s => (
                 <button key={s} onClick={() => setStudio(s)}
                   className={`flex-1 px-3 py-2.5 text-xs font-medium transition-colors ${studio === s ? "bg-[#00aa13] text-white" : darkMode ? "bg-gray-800 text-gray-400" : "bg-white text-gray-500"}`}>{s}</button>
               ))}
             </div>
+            {studio === "Either" && <p className={`text-xs mt-1.5 ${muted}`}>Class can run in whichever studio is free — useful if one is out of action</p>}
           </div>
-          <div>
-            <label className={`block text-xs font-semibold mb-1.5 ${muted}`}>Time</label>
-            <input type="time" value={time} onChange={e => setTime(e.target.value)} className={inputCls} />
+        </div>
+
+        {/* Day + time slots */}
+        <div className="mt-4">
+          <div className="flex items-center justify-between mb-2">
+            <label className={`text-xs font-semibold ${muted}`}>Day & time{recurring ? " · repeats weekly" : ""}</label>
+            <button onClick={addSlot} className="text-xs font-semibold text-[#00aa13] hover:underline">+ Add another time</button>
           </div>
-          <div className="sm:col-span-2">
-            <label className={`block text-xs font-semibold mb-1.5 ${muted}`}>Day</label>
-            <div className="flex gap-1.5 flex-wrap">
-              {DAYS.map(d => (
-                <button key={d} onClick={() => setDay(d)}
-                  className={`px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${day === d ? "bg-[#00aa13] text-white" : darkMode ? "bg-gray-800 text-gray-400 hover:bg-gray-700" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>{d}</button>
-              ))}
-            </div>
+          <div className="flex flex-col gap-2">
+            {slots.map((sl, i) => (
+              <div key={i} className={`flex items-center gap-2 p-2 rounded-xl ${subtle}`}>
+                <div className="flex gap-1 flex-wrap flex-1">
+                  {DAYS.map(d => (
+                    <button key={d} onClick={() => updateSlot(i, { day: d })}
+                      className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors ${sl.day === d ? "bg-[#00aa13] text-white" : darkMode ? "bg-gray-700 text-gray-400 hover:bg-gray-600" : "bg-white text-gray-500 hover:bg-gray-100"}`}>{d}</button>
+                  ))}
+                </div>
+                <input type="time" value={sl.time} onChange={e => updateSlot(i, { time: e.target.value })}
+                  className={`px-2.5 py-1.5 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-[#00aa13] ${darkMode ? "bg-gray-800 border-gray-700 text-white" : "bg-white border-gray-200 text-gray-900"}`} />
+                {slots.length > 1 && (
+                  <button onClick={() => removeSlot(i)} className={`w-6 h-6 rounded flex items-center justify-center text-xs flex-shrink-0 ${darkMode ? "hover:bg-gray-700 text-gray-500" : "hover:bg-gray-200 text-gray-400"}`}>✕</button>
+                )}
+              </div>
+            ))}
           </div>
         </div>
 
@@ -5717,7 +5756,7 @@ function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] 
           </div>
           <div>
             <p className={`text-sm font-medium ${heading}`}>Repeat weekly</p>
-            <p className={`text-xs ${muted}`}>{recurring ? `Every ${day} at ${time}` : "One-off class"}</p>
+            <p className={`text-xs ${muted}`}>{recurring ? `${slots.length} weekly slot${slots.length > 1 ? "s" : ""}` : "One-off class"}</p>
           </div>
         </button>
 
@@ -5727,18 +5766,18 @@ function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] 
         </button>
       </div>
 
-      {/* Existing requests */}
+      {/* Existing requests — upcoming order */}
       <h2 className={`font-semibold mb-3 ${heading}`}>Your class requests</h2>
       <div className={`${card} overflow-hidden`}>
-        {requests.map((r, i) => (
+        {sortedRequests.map((r, i) => (
           <div key={i} className={`flex items-center gap-4 px-5 py-4 border-b last:border-b-0 ${darkMode ? "border-gray-800" : "border-gray-100"}`}>
-            <div className="w-14 flex-shrink-0">
-              <p className={`text-xs font-medium ${muted}`}>{r.day}</p>
-              <p className={`text-sm font-bold tabular-nums ${heading}`}>{r.time}</p>
+            <div className="w-16 flex-shrink-0">
+              <p className={`text-xs font-medium ${muted}`}>{r.slots.map(s => s.day).join(", ")}</p>
+              <p className={`text-sm font-bold tabular-nums ${heading}`}>{r.slots[0].time}</p>
             </div>
             <div className="flex-1 min-w-0">
               <p className={`text-sm font-semibold ${heading}`}>{r.name}{r.social && <span className="ml-1.5">🎲</span>}</p>
-              <p className={`text-xs mt-0.5 ${muted}`}>{r.location ? `${r.location} · ` : ""}{r.studio}{r.recurring && " · Weekly"}</p>
+              <p className={`text-xs mt-0.5 ${muted}`}>{r.location ? `${r.location.replace("SpinOut · ","")} · ` : ""}{r.studio}{r.recurring && ` · Weekly · ${r.slots.length} slot${r.slots.length > 1 ? "s" : ""}`}</p>
             </div>
             {r.status === "approved"
               ? <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-[#e6f9e8] text-[#00aa13] flex-shrink-0">Approved</span>

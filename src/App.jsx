@@ -4649,6 +4649,54 @@ const PLAYLISTS = [
   "Chillwave Recovery", "Festival Anthems", "Drum & Bass Intervals",
 ]
 
+// "YouTube" catalogue — searchable songs + playlists (prototype)
+const YT_CATALOG = [
+  { title: "Titanium",        artist: "David Guetta",   bpm: 126 },
+  { title: "Levels",          artist: "Avicii",         bpm: 126 },
+  { title: "Stronger",        artist: "Kanye West",     bpm: 104 },
+  { title: "One More Time",   artist: "Daft Punk",      bpm: 123 },
+  { title: "Don't Start Now", artist: "Dua Lipa",       bpm: 124 },
+  { title: "Uptown Funk",     artist: "Bruno Mars",     bpm: 115 },
+  { title: "Sandstorm",       artist: "Darude",         bpm: 136 },
+  { title: "Bangarang",       artist: "Skrillex",       bpm: 110 },
+  { title: "Lose Yourself",   artist: "Eminem",         bpm: 86  },
+  { title: "Power",           artist: "Kanye West",     bpm: 154 },
+  { title: "Born Slippy",     artist: "Underworld",     bpm: 138 },
+  { title: "Insomnia",        artist: "Faithless",      bpm: 128 },
+  { title: "Wake Me Up",      artist: "Avicii",         bpm: 124 },
+  { title: "Galvanize",       artist: "The Chemical Brothers", bpm: 130 },
+  { title: "Praise You",      artist: "Fatboy Slim",    bpm: 122 },
+]
+const YT_PLAYLISTS = [
+  { name: "Spin Anthems",  songs: ["Titanium","Levels","One More Time","Sandstorm","Wake Me Up"] },
+  { name: "Hip-Hop Power", songs: ["Stronger","Power","Lose Yourself","Uptown Funk"] },
+  { name: "Peak Drops",    songs: ["Bangarang","Born Slippy","Insomnia","Galvanize"] },
+]
+
+function hashBpm(title) {
+  const h = [...title].reduce((a, c) => (a * 31 + c.charCodeAt(0)) & 0xffff, 7)
+  return 96 + (h % 40) * 2   // 96–174, even
+}
+function titleSeed(title) { return [...title].reduce((a, c) => a + c.charCodeAt(0), 0) }
+
+// A song's internal structure → energy per part → hinted training zone
+const SONG_STRUCTURE = [
+  { p: 0.14, e: 2, name: "Intro"       },
+  { p: 0.16, e: 3, name: "Build"       },
+  { p: 0.22, e: 5, name: "Drop"        },
+  { p: 0.14, e: 2, name: "Breakdown"   },
+  { p: 0.20, e: 4, name: "Second drop" },
+  { p: 0.14, e: 2, name: "Outro"       },
+]
+const ENERGY_ZONE = [null, 1, 2, 3, 5, 6]   // energy 1–5 → zone
+function songSections(secs, seed) {
+  return SONG_STRUCTURE.map((s, i) => {
+    let e = s.e + ((seed + i) % 3 === 0 ? 1 : 0) - ((seed + i) % 5 === 0 ? 1 : 0)
+    e = Math.max(1, Math.min(5, e))
+    return { secs: Math.max(15, Math.round(secs * s.p)), energy: e, name: s.name }
+  })
+}
+
 // Preset playlists as track lists — { title, bpm, mins }
 const PLAYLIST_PRESETS = {
   "Power Hour Mix": [
@@ -5166,9 +5214,7 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
   const [social, setSocial]   = useState(false)       // random seating
   const [length, setLength]   = useState(45)          // minutes
   const [tracks, setTracks]   = useState([])
-  const [newTrack, setNewTrack] = useState("")
-  const [newBpm, setNewBpm]   = useState(128)
-  const [newMins, setNewMins] = useState(3)
+  const [query, setQuery]     = useState("")
   const [newFull, setNewFull] = useState(false)
   const [crossfade, setCrossfade] = useState(true)
   const [published, setPublished] = useState(false)
@@ -5236,40 +5282,48 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
   const warmOk = warmSecs >= wc.warmMin * 60
   const coolOk = coolSecs >= wc.coolMin * 60
 
-  // Lay tracks across the timeline; each track occupies its duration in seconds
+  // Lay tracks across the timeline; each track's audio sections hint at a zone
   const playlistSecs = tracks.reduce((s, t) => s + t.mins * 60, 0)
   let tAcc = 0
-  const trackSegs = tracks.map(t => { const start = tAcc; tAcc += t.mins * 60; return { ...t, start, secs: t.mins * 60 } })
-  const bpmNorm = bpm => Math.max(0.25, Math.min(1, (bpm - 80) / (180 - 80)))
+  const trackSegs = tracks.map(t => {
+    const secs = t.mins * 60
+    const start = tAcc; tAcc += secs
+    return { ...t, start, secs, sections: songSections(secs, t.seed) }
+  })
+  const cadFor = z => z >= 5 ? 3 : z >= 3 ? 2 : 1
 
-  function addTrack() {
-    const title = newTrack.trim() || `Track ${tracks.length + 1}`
-    const fullMins = 3 + (tracks.length % 3)            // realistic full length 3–5 min
-    const mins = newFull ? fullMins : Math.max(2, Math.min(4, +newMins || 3))
-    setTracks(t => [...t, { title, bpm: +newBpm || 120, mins, fullMins, full: newFull, zone: 3, drop: false }])
-    setNewTrack("")
+  // Search the YT catalogue + playlists
+  const q = query.trim().toLowerCase()
+  const songResults = q ? YT_CATALOG.filter(s => s.title.toLowerCase().includes(q) || s.artist.toLowerCase().includes(q)).slice(0, 6) : []
+  const plResults   = q ? YT_PLAYLISTS.filter(p => p.name.toLowerCase().includes(q)).slice(0, 3) : []
+
+  function makeTrack(song) {
+    const fullMins = 3 + (titleSeed(song.title) % 3)   // 3–5 min full length
+    return {
+      title: song.title, artist: song.artist || "", bpm: song.bpm || hashBpm(song.title),
+      mins: newFull ? fullMins : 3, fullMins, full: newFull, seed: titleSeed(song.title),
+    }
+  }
+  function addSong(song) { setTracks(t => [...t, makeTrack(song)]); setQuery("") }
+  function addPlaylist(p) {
+    const songs = p.songs.map(name => YT_CATALOG.find(s => s.title === name)).filter(Boolean)
+    setTracks(t => [...t, ...songs.map(makeTrack)]); setQuery("")
   }
   function removeTrack(i) { setTracks(t => t.filter((_, j) => j !== i)) }
-  function loadPreset(nm) { setTracks(presetTracks(nm).map(t => ({ ...t, fullMins: t.mins, full: false, zone: 3, drop: false }))) }
-  function trackMins(i, d) { setTracks(t => t.map((tr, j) => j === i ? { ...tr, mins: Math.max(2, Math.min(4, tr.mins + d)), full: false } : tr)) }
+  function trackMins(i, d) { setTracks(t => t.map((tr, j) => j === i ? { ...tr, mins: Math.max(2, Math.min(tr.fullMins, tr.mins + d)), full: false } : tr)) }
   function trackFull(i) { setTracks(t => t.map((tr, j) => j === i ? { ...tr, full: !tr.full, mins: !tr.full ? tr.fullMins : Math.min(4, tr.fullMins) } : tr)) }
-  function trackZone(i, z) { setTracks(t => t.map((tr, j) => j === i ? { ...tr, zone: z } : tr)) }
-  function trackDrop(i)    { setTracks(t => t.map((tr, j) => j === i ? { ...tr, drop: !tr.drop } : tr)) }
 
-  // Music → ride sync: turn each track into a ride segment of its assigned zone.
-  // "Beat drop" tracks build (Z2) for the first 30s, then hit the assigned zone.
+  // Music → ride sync: build the ride from each song's sections (energy → zone)
   function syncFromPlaylist() {
     if (!tracks.length) return
     const out = []
-    tracks.forEach(t => {
-      const secs = t.mins * 60
-      const z = t.zone || 3
-      if (t.drop && secs > 45) { out.push([30, 2, 1]); out.push([secs - 30, z, z >= 5 ? 3 : 2]) }
-      else out.push([secs, z, z >= 5 ? 3 : z >= 3 ? 2 : 1])
-    })
+    trackSegs.forEach(t => t.sections.forEach(s => {
+      const z = ENERGY_ZONE[s.energy]
+      out.push([s.secs, z, cadFor(z)])
+    }))
     setUndoStack(s => [...s, strokes])
     setStrokes(out); setCursor(null)
-    if (length !== Math.round(playlistSecs/60)) setLength([30,45,60].reduce((a,b)=>Math.abs(b-playlistSecs/60)<Math.abs(a-playlistSecs/60)?b:a, 45))
+    setLength([30,45,60].reduce((a,b)=>Math.abs(b-playlistSecs/60)<Math.abs(a-playlistSecs/60)?b:a, 45))
   }
 
   // Warm-up / cool-down auto add (prepend / append a Z1 block)
@@ -5435,22 +5489,11 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
               <span className={`text-xs font-bold w-4 text-center flex-shrink-0 ${muted}`}>{i+1}</span>
               <div className="flex-1 min-w-0">
                 <p className={`text-sm font-medium truncate ${heading}`}>{t.title}</p>
-                <p className={`text-xs ${muted}`}>{t.bpm} BPM · {t.mins}m{t.full ? " · full" : ""}</p>
+                <p className={`text-xs ${muted}`}>{t.artist ? `${t.artist} · ` : ""}{t.bpm} BPM · {t.mins}m{t.full ? " · full" : ""}</p>
               </div>
-              {/* ride zone for this track */}
-              <select value={t.zone || 3} onChange={e => trackZone(i, +e.target.value)}
-                title="Ride zone for this track"
-                className="text-xs font-semibold rounded-lg px-1.5 py-1 text-white border-0 flex-shrink-0"
-                style={{ background: ZONE_COLORS[(t.zone||3)-1] }}>
-                {ZONE_NAMES.map((zn, z) => <option key={z} value={z+1} style={{ background: darkMode ? "#1f2937" : "#fff", color: darkMode ? "#fff" : "#000" }}>Z{z+1} {zn}</option>)}
-              </select>
               <button onClick={() => trackFull(i)} title="Use the full song length"
                 className={`text-[10px] font-bold px-1.5 py-1 rounded-lg flex-shrink-0 transition-colors ${t.full ? "bg-[#00aa13] text-white" : darkMode ? "bg-gray-700 text-gray-400" : "bg-gray-200 text-gray-500"}`}>
                 full
-              </button>
-              <button onClick={() => trackDrop(i)} title="Build then beat-drop"
-                className={`text-[10px] font-bold px-1.5 py-1 rounded-lg flex-shrink-0 transition-colors ${t.drop ? "bg-[#00aa13] text-white" : darkMode ? "bg-gray-700 text-gray-400" : "bg-gray-200 text-gray-500"}`}>
-                ⏷ drop
               </button>
               <div className="flex items-center gap-0.5 flex-shrink-0" style={{ opacity: t.full ? 0.35 : 1, pointerEvents: t.full ? "none" : "auto" }}>
                 <button onClick={() => trackMins(i, -1)} className={`w-5 h-5 rounded flex items-center justify-center text-sm font-bold ${darkMode ? "bg-gray-700 text-gray-300" : "bg-gray-200 text-gray-600"}`}>−</button>
@@ -5464,35 +5507,61 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
         {tracks.length > 0 && (
           <button onClick={syncFromPlaylist}
             className="w-full mb-3 py-2.5 rounded-xl text-xs font-semibold border border-[#00aa13] text-[#00aa13] hover:bg-[#e6f9e8] transition-colors">
-            ⟲ Sync ride to playlist — each track becomes its zone{tracks.some(t=>t.drop) && ", drops build first"}
+            ⟲ Build ride from the music — each song's drops & breakdowns set the zones
           </button>
         )}
 
-        {/* Add track */}
-        <div className="flex flex-wrap gap-2 items-center">
-          <input value={newTrack} onChange={e => setNewTrack(e.target.value)} placeholder="Add a song…"
-            onKeyDown={e => e.key === "Enter" && addTrack()}
-            className={`flex-1 min-w-[140px] px-3 py-2 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-[#00aa13] ${darkMode ? "bg-gray-800 border-gray-700 text-white" : "bg-white border-gray-200 text-gray-900"}`} />
-          <div className="flex items-center gap-1">
-            <input type="number" value={newBpm} onChange={e => setNewBpm(e.target.value)} min={60} max={200}
-              className={`w-16 px-2 py-2 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-[#00aa13] ${darkMode ? "bg-gray-800 border-gray-700 text-white" : "bg-white border-gray-200 text-gray-900"}`} />
-            <span className={`text-xs ${muted}`}>BPM</span>
-          </div>
-          <div className="flex items-center gap-1" style={{ opacity: newFull ? 0.35 : 1, pointerEvents: newFull ? "none" : "auto" }}>
-            <input type="number" value={newMins} onChange={e => setNewMins(e.target.value)} min={2} max={4}
-              className={`w-14 px-2 py-2 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-[#00aa13] ${darkMode ? "bg-gray-800 border-gray-700 text-white" : "bg-white border-gray-200 text-gray-900"}`} />
-            <span className={`text-xs ${muted}`}>min</span>
-          </div>
-          <button onClick={() => setNewFull(!newFull)} title="Use the full song instead of trimming"
-            className={`text-xs font-semibold px-2.5 py-2 rounded-xl border transition-colors flex items-center gap-1.5 ${newFull ? "bg-[#e6f9e8] border-[#00aa13] text-[#00aa13]" : darkMode ? "border-gray-700 text-gray-400" : "border-gray-200 text-gray-500"}`}>
+        {/* YouTube search + add */}
+        <div className="flex items-center gap-2 mb-2">
+          <button onClick={() => setNewFull(!newFull)} title="Add songs at full length"
+            className={`text-xs font-semibold px-2.5 py-2 rounded-xl border transition-colors flex items-center gap-1.5 flex-shrink-0 ${newFull ? "bg-[#e6f9e8] border-[#00aa13] text-[#00aa13]" : darkMode ? "border-gray-700 text-gray-400" : "border-gray-200 text-gray-500"}`}>
             <span className={`w-3.5 h-3.5 rounded flex items-center justify-center border ${newFull ? "bg-[#00aa13] border-[#00aa13]" : darkMode ? "border-gray-600" : "border-gray-300"}`}>
               {newFull && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 6"/></svg>}
             </span>
-            Full song
+            Full songs
           </button>
-          <button onClick={addTrack} className="px-4 py-2 rounded-xl bg-[#00aa13] hover:bg-[#008a0f] text-white text-sm font-semibold transition-colors">Add</button>
         </div>
-        <p className={`text-xs mt-2.5 ${muted}`}>Trim songs to 2–4 mins, or tick <span className="font-medium">Full song</span> to play them in full. {crossfade ? "Tracks crossfade into each other." : "Tracks hard-cut."}</p>
+        <div className="relative">
+          <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${darkMode ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="#FF0000"><path d="M23 12s0-3.9-.5-5.8a3 3 0 00-2.1-2.1C18.5 3.5 12 3.5 12 3.5s-6.5 0-8.4.6A3 3 0 001.5 6.2C1 8.1 1 12 1 12s0 3.9.5 5.8a3 3 0 002.1 2.1c1.9.6 8.4.6 8.4.6s6.5 0 8.4-.6a3 3 0 002.1-2.1C23 15.9 23 12 23 12z"/><path d="M10 15.5l5-3.5-5-3.5z" fill="#fff"/></svg>
+            <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search YouTube for a song or playlist…"
+              className={`flex-1 bg-transparent text-sm focus:outline-none ${darkMode ? "text-white" : "text-gray-900"}`} />
+            {query && <button onClick={() => setQuery("")} className={`text-xs ${muted}`}>✕</button>}
+          </div>
+          {/* Results dropdown */}
+          {q && (songResults.length > 0 || plResults.length > 0) && (
+            <div className={`absolute left-0 right-0 mt-1 rounded-xl border shadow-lg z-20 overflow-hidden ${darkMode ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
+              {plResults.map((p, i) => (
+                <button key={"p"+i} onClick={() => addPlaylist(p)}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors ${darkMode ? "hover:bg-gray-700" : "hover:bg-gray-50"}`}>
+                  <span className="text-base">🎬</span>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-medium ${heading}`}>{p.name}</p>
+                    <p className={`text-xs ${muted}`}>Playlist · {p.songs.length} songs</p>
+                  </div>
+                  <span className="text-xs font-semibold text-[#00aa13]">+ Add all</span>
+                </button>
+              ))}
+              {songResults.map((s, i) => (
+                <button key={"s"+i} onClick={() => addSong(s)}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors ${darkMode ? "hover:bg-gray-700" : "hover:bg-gray-50"}`}>
+                  <span className="text-base">🎵</span>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-medium truncate ${heading}`}>{s.title}</p>
+                    <p className={`text-xs ${muted}`}>{s.artist} · {s.bpm} BPM detected</p>
+                  </div>
+                  <span className="text-xs font-semibold text-[#00aa13]">+ Add</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {q && songResults.length === 0 && plResults.length === 0 && (
+            <div className={`absolute left-0 right-0 mt-1 rounded-xl border shadow-lg z-20 px-3 py-3 ${darkMode ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
+              <p className={`text-xs ${muted}`}>No results — try "Avicii", "power" or "Spin Anthems"</p>
+            </div>
+          )}
+        </div>
+        <p className={`text-xs mt-2.5 ${muted}`}>BPM is detected automatically. Each song's energy (intro, build, drop, breakdown) hints at a zone — hit "Build ride from the music" to lay them in. {crossfade ? "Tracks crossfade." : "Tracks hard-cut."}</p>
       </div>
 
       {/* Live canvas */}
@@ -5535,14 +5604,16 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
           <div className={`relative w-full rounded-lg overflow-hidden mb-1.5 ${darkMode ? "bg-gray-800/60" : "bg-gray-50"}`} style={{ height: 44 }}>
             <div className="absolute inset-0 flex">
               {trackSegs.map((t, i) => (
-                <div key={i} className="relative flex items-end gap-0.5 px-1 border-r overflow-hidden"
+                <div key={i} className="relative flex items-end border-r overflow-hidden"
                   style={{ width: `${t.secs / scale * 100}%`, borderColor: darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)" }}
                   title={`${t.title} · ${t.bpm} BPM · ${t.mins}m`}>
-                  {/* bpm-driven mini bars */}
-                  {Array.from({ length: Math.max(3, Math.round(t.secs/30)) }).map((_, j) => (
-                    <div key={j} className="flex-1 rounded-full" style={{ height: `${(bpmNorm(t.bpm) * (0.7 + 0.3*Math.abs(Math.sin(j*1.3+t.bpm))))*70}%`, background: darkMode ? "#64748b" : "#cbd5e1", minWidth: 1 }} />
-                  ))}
-                  <span className={`absolute top-0.5 left-1.5 text-[8px] font-medium truncate ${darkMode ? "text-gray-400" : "text-gray-500"}`} style={{ maxWidth: "90%" }}>{t.title} · {t.bpm}{t.full ? " ·full" : ""}</span>
+                  {/* song sections — height = energy, colour = hinted zone */}
+                  {t.sections.map((s, j) => {
+                    const z = ENERGY_ZONE[s.energy]
+                    return <div key={j} title={`${s.name} · hints Z${z} ${ZONE_NAMES[z-1]}`}
+                      style={{ width: `${s.secs / t.secs * 100}%`, height: `${ZONE_HEIGHTS[z-1]*0.85+10}%`, background: ZONE_COLORS[z-1], opacity: 0.55 }} />
+                  })}
+                  <span className={`absolute top-0.5 left-1.5 text-[8px] font-medium truncate ${darkMode ? "text-gray-300" : "text-gray-600"}`} style={{ maxWidth: "90%" }}>{t.title} · {t.bpm}{t.full ? " ·full" : ""}</span>
                   {/* crossfade taper at the boundary into the next track */}
                   {crossfade && i < trackSegs.length - 1 && (
                     <div className="absolute top-0 bottom-0 right-0 pointer-events-none" style={{ width: 14, background: `linear-gradient(90deg, transparent, ${darkMode ? "rgba(0,170,19,0.5)" : "rgba(0,170,19,0.35)"})` }} />

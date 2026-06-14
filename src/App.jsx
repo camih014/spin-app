@@ -4623,6 +4623,19 @@ const instructorClasses = [
 
 const INSTRUCTOR_TODAY_ISO = "2026-02-26"
 
+// Recommended warm-up / cool-down by class length (minutes)
+const WARMUP_COOLDOWN = {
+  30: { warmMin: 3, warmMax: 5,  coolMin: 2, coolMax: 3 },
+  45: { warmMin: 5, warmMax: 7,  coolMin: 3, coolMax: 5 },
+  60: { warmMin: 5, warmMax: 10, coolMin: 5, coolMax: 5 },
+}
+
+const PROGRESSIONS = {
+  Gentle:   { label: "Gentle",   bump: w => Math.floor(w / 2), desc: "Small step up every other week" },
+  Standard: { label: "Standard", bump: w => Math.min(w, 2),    desc: "Builds for the first few weeks, then holds" },
+  Bootcamp: { label: "Bootcamp", bump: w => w,                 desc: "Harder every single week" },
+}
+
 // Target pedal cadence (RPM) — independent of intensity zone
 const CADENCE_BANDS = [
   { short: "60–70",  rpm: "60–70 rpm"  },
@@ -5167,7 +5180,14 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
   const [playing, setPlaying] = useState(false)
   const [dragging, setDragging] = useState(false)
   const [summaryOpen, setSummaryOpen] = useState(false)
+  const [autoWarm, setAutoWarm] = useState(false)
+  const [autoCool, setAutoCool] = useState(false)
+  const [programme, setProgramme] = useState(false)
+  const [weeks, setWeeks]     = useState(4)
+  const [progression, setProgression] = useState("Bootcamp")
   const rafRef = useRef(0), lastRef = useRef(0)
+
+  const wc = WARMUP_COOLDOWN[length] || WARMUP_COOLDOWN[45]
   const TARGET = length * 60
   const total  = strokes.reduce((s, st) => s + st[0], 0)
   const scale  = Math.max(TARGET, total)
@@ -5208,6 +5228,12 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
     return acc
   }, [])
 
+  // Warm-up = leading low-zone (Z1-2) run; cool-down = trailing low-zone run
+  const warmSecs = (() => { let s = 0; for (const [secs, z] of merged) { if (z <= 2) s += secs; else break } return s })()
+  const coolSecs = (() => { let s = 0; for (let i = merged.length-1; i >= 0; i--) { const [secs, z] = merged[i]; if (z <= 2) s += secs; else break } return s })()
+  const warmOk = warmSecs >= wc.warmMin * 60
+  const coolOk = coolSecs >= wc.coolMin * 60
+
   // Lay tracks across the timeline; each track occupies its duration in seconds
   const playlistSecs = tracks.reduce((s, t) => s + t.mins * 60, 0)
   let tAcc = 0
@@ -5217,16 +5243,56 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
   function addTrack() {
     const title = newTrack.trim() || `Track ${tracks.length + 1}`
     const mins = Math.max(2, Math.min(4, +newMins || 3))
-    setTracks(t => [...t, { title, bpm: +newBpm || 120, mins }])
+    setTracks(t => [...t, { title, bpm: +newBpm || 120, mins, zone: 3, drop: false }])
     setNewTrack("")
   }
   function removeTrack(i) { setTracks(t => t.filter((_, j) => j !== i)) }
-  function loadPreset(nm) { setTracks(presetTracks(nm)) }
+  function loadPreset(nm) { setTracks(presetTracks(nm).map(t => ({ ...t, zone: 3, drop: false }))) }
   function trackMins(i, d) { setTracks(t => t.map((tr, j) => j === i ? { ...tr, mins: Math.max(2, Math.min(4, tr.mins + d)) } : tr)) }
+  function trackZone(i, z) { setTracks(t => t.map((tr, j) => j === i ? { ...tr, zone: z } : tr)) }
+  function trackDrop(i)    { setTracks(t => t.map((tr, j) => j === i ? { ...tr, drop: !tr.drop } : tr)) }
+
+  // Music → ride sync: turn each track into a ride segment of its assigned zone.
+  // "Beat drop" tracks build (Z2) for the first 30s, then hit the assigned zone.
+  function syncFromPlaylist() {
+    if (!tracks.length) return
+    const out = []
+    tracks.forEach(t => {
+      const secs = t.mins * 60
+      const z = t.zone || 3
+      if (t.drop && secs > 45) { out.push([30, 2, 1]); out.push([secs - 30, z, z >= 5 ? 3 : 2]) }
+      else out.push([secs, z, z >= 5 ? 3 : z >= 3 ? 2 : 1])
+    })
+    setUndoStack(s => [...s, strokes])
+    setStrokes(out); setCursor(null)
+    if (length !== Math.round(playlistSecs/60)) setLength([30,45,60].reduce((a,b)=>Math.abs(b-playlistSecs/60)<Math.abs(a-playlistSecs/60)?b:a, 45))
+  }
+
+  // Warm-up / cool-down auto add (prepend / append a Z1 block)
+  function toggleWarm() {
+    if (autoWarm) { setUndoStack(s=>[...s,strokes]); setStrokes(p => p[0]?.[1] === 1 ? p.slice(1) : p); setAutoWarm(false) }
+    else { setUndoStack(s=>[...s,strokes]); setStrokes(p => [[wc.warmMin*60, 1, 1], ...p]); setAutoWarm(true) }
+    setCursor(null)
+  }
+  function toggleCool() {
+    if (autoCool) { setUndoStack(s=>[...s,strokes]); setStrokes(p => p[p.length-1]?.[1] === 1 ? p.slice(0,-1) : p); setAutoCool(false) }
+    else { setUndoStack(s=>[...s,strokes]); setStrokes(p => [...p, [wc.coolMin*60, 1, 0]]); setAutoCool(true) }
+    setCursor(null)
+  }
+
+  // Progressive series — bump work zones (Z3+) each week, leaving warm-up/cool-down alone
+  function weekStrokes(w) {
+    const bump = PROGRESSIONS[progression].bump(w)
+    return merged.map(([secs, z, c]) => z >= 3 ? [secs, Math.min(7, z + bump), c] : [secs, z, c])
+  }
 
   function publish() {
     if (!total) return
-    onPublish?.({ name, length, social })
+    if (programme) {
+      for (let w = 0; w < weeks; w++) onPublish?.({ name: `${name} · Wk ${w+1}`, length, social })
+    } else {
+      onPublish?.({ name, length, social })
+    }
     setPublished(true)
     setTimeout(() => setPublished(false), 2500)
   }
@@ -5350,21 +5416,38 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
             </div>
           )}
           {tracks.map((t, i) => (
-            <div key={i} className={`flex items-center gap-3 px-3 py-2 rounded-xl ${subtle}`}>
-              <span className={`text-xs font-bold w-5 text-center ${muted}`}>{i+1}</span>
+            <div key={i} className={`flex items-center gap-2 px-3 py-2 rounded-xl ${subtle}`}>
+              <span className={`text-xs font-bold w-4 text-center flex-shrink-0 ${muted}`}>{i+1}</span>
               <div className="flex-1 min-w-0">
                 <p className={`text-sm font-medium truncate ${heading}`}>{t.title}</p>
-                <p className={`text-xs ${muted}`}>{t.bpm} BPM</p>
+                <p className={`text-xs ${muted}`}>{t.bpm} BPM · {t.mins}m</p>
               </div>
-              <div className="flex items-center gap-1">
-                <button onClick={() => trackMins(i, -1)} className={`w-6 h-6 rounded flex items-center justify-center text-sm font-bold ${darkMode ? "bg-gray-700 text-gray-300" : "bg-gray-200 text-gray-600"}`}>−</button>
-                <span className={`text-xs font-bold w-10 text-center tabular-nums ${heading}`}>{t.mins}m</span>
-                <button onClick={() => trackMins(i, 1)} className={`w-6 h-6 rounded flex items-center justify-center text-sm font-bold ${darkMode ? "bg-gray-700 text-gray-300" : "bg-gray-200 text-gray-600"}`}>+</button>
+              {/* ride zone for this track */}
+              <select value={t.zone || 3} onChange={e => trackZone(i, +e.target.value)}
+                title="Ride zone for this track"
+                className="text-xs font-semibold rounded-lg px-1.5 py-1 text-white border-0 flex-shrink-0"
+                style={{ background: ZONE_COLORS[(t.zone||3)-1] }}>
+                {ZONE_NAMES.map((zn, z) => <option key={z} value={z+1} style={{ background: darkMode ? "#1f2937" : "#fff", color: darkMode ? "#fff" : "#000" }}>Z{z+1} {zn}</option>)}
+              </select>
+              <button onClick={() => trackDrop(i)} title="Build then beat-drop"
+                className={`text-[10px] font-bold px-1.5 py-1 rounded-lg flex-shrink-0 transition-colors ${t.drop ? "bg-[#00aa13] text-white" : darkMode ? "bg-gray-700 text-gray-400" : "bg-gray-200 text-gray-500"}`}>
+                ⏷ drop
+              </button>
+              <div className="flex items-center gap-0.5 flex-shrink-0">
+                <button onClick={() => trackMins(i, -1)} className={`w-5 h-5 rounded flex items-center justify-center text-sm font-bold ${darkMode ? "bg-gray-700 text-gray-300" : "bg-gray-200 text-gray-600"}`}>−</button>
+                <button onClick={() => trackMins(i, 1)} className={`w-5 h-5 rounded flex items-center justify-center text-sm font-bold ${darkMode ? "bg-gray-700 text-gray-300" : "bg-gray-200 text-gray-600"}`}>+</button>
               </div>
-              <button onClick={() => removeTrack(i)} className={`w-6 h-6 rounded flex items-center justify-center text-xs flex-shrink-0 ${darkMode ? "hover:bg-gray-700 text-gray-500" : "hover:bg-gray-200 text-gray-400"}`}>✕</button>
+              <button onClick={() => removeTrack(i)} className={`w-5 h-5 rounded flex items-center justify-center text-xs flex-shrink-0 ${darkMode ? "hover:bg-gray-700 text-gray-500" : "hover:bg-gray-200 text-gray-400"}`}>✕</button>
             </div>
           ))}
         </div>
+
+        {tracks.length > 0 && (
+          <button onClick={syncFromPlaylist}
+            className="w-full mb-3 py-2.5 rounded-xl text-xs font-semibold border border-[#00aa13] text-[#00aa13] hover:bg-[#e6f9e8] transition-colors">
+            ⟲ Sync ride to playlist — each track becomes its zone{tracks.some(t=>t.drop) && ", drops build first"}
+          </button>
+        )}
 
         {/* Add track */}
         <div className="flex flex-wrap gap-2 items-center">
@@ -5550,6 +5633,91 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
         </div>
       )}
 
+      {/* Warm-up & cool-down */}
+      <div className={`${card} p-5 mb-5`}>
+        <p className={`text-sm font-semibold mb-1 ${heading}`}>Warm-up & cool-down</p>
+        <p className={`text-xs mb-4 ${muted}`}>For a {length}-min class: warm-up {wc.warmMin}–{wc.warmMax} min · cool-down {wc.coolMin}–{wc.coolMax} min</p>
+
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div className={`rounded-xl p-3 ${warmOk ? (darkMode ? "bg-gray-800" : "bg-[#e6f9e8]") : "bg-amber-50"}`}>
+            <p className={`text-xs mb-0.5 ${warmOk ? muted : "text-amber-700"}`}>Warm-up</p>
+            <p className={`text-lg font-bold ${warmOk ? heading : "text-amber-700"}`}>{fmtSecs(warmSecs)}</p>
+            <p className={`text-xs mt-0.5 ${warmOk ? "text-[#00aa13]" : "text-amber-700"}`}>{warmOk ? "✓ Good" : `⚠ Add ${Math.ceil((wc.warmMin*60 - warmSecs)/60)} min`}</p>
+          </div>
+          <div className={`rounded-xl p-3 ${coolOk ? (darkMode ? "bg-gray-800" : "bg-[#e6f9e8]") : "bg-amber-50"}`}>
+            <p className={`text-xs mb-0.5 ${coolOk ? muted : "text-amber-700"}`}>Cool-down</p>
+            <p className={`text-lg font-bold ${coolOk ? heading : "text-amber-700"}`}>{fmtSecs(coolSecs)}</p>
+            <p className={`text-xs mt-0.5 ${coolOk ? "text-[#00aa13]" : "text-amber-700"}`}>{coolOk ? "✓ Good" : `⚠ Add ${Math.ceil((wc.coolMin*60 - coolSecs)/60)} min`}</p>
+          </div>
+        </div>
+
+        {[["Auto-add warm-up", autoWarm, toggleWarm, `${wc.warmMin} min easy spin at the start`],
+          ["Auto-add cool-down", autoCool, toggleCool, `${wc.coolMin} min easy spin at the end`]].map(([label, on, fn, sub]) => (
+          <button key={label} onClick={fn} className={`flex items-center gap-3 w-full text-left p-2 rounded-lg transition-colors ${darkMode ? "hover:bg-gray-800" : "hover:bg-gray-50"}`}>
+            <div className={`w-5 h-5 rounded flex items-center justify-center flex-shrink-0 border-2 ${on ? "bg-[#00aa13] border-[#00aa13]" : darkMode ? "border-gray-600" : "border-gray-300"}`}>
+              {on && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 6"/></svg>}
+            </div>
+            <div>
+              <p className={`text-sm font-medium ${heading}`}>{label}</p>
+              <p className={`text-xs ${muted}`}>{sub}</p>
+            </div>
+          </button>
+        ))}
+      </div>
+
+      {/* Progressive series */}
+      <div className={`${card} p-5 mb-5`}>
+        <button onClick={() => setProgramme(!programme)} className="flex items-center gap-3 w-full text-left">
+          <div style={{ width: 44, height: 24, borderRadius: 12, flexShrink: 0, background: programme ? "#00aa13" : darkMode ? "#4B5563" : "#D1D5DB", position: "relative", transition: "background 0.18s" }}>
+            <div style={{ position: "absolute", top: 2, left: programme ? 22 : 2, width: 20, height: 20, borderRadius: "50%", background: "#fff", transition: "left 0.18s" }} />
+          </div>
+          <div>
+            <p className={`text-sm font-medium ${heading}`}>Progressive series 📈</p>
+            <p className={`text-xs ${muted}`}>{programme ? "Builds week-on-week from this base class" : "Turn this into a multi-week programme (e.g. a bootcamp)"}</p>
+          </div>
+        </button>
+
+        {programme && (
+          <div className="mt-4">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-4">
+              <span className={`text-xs ${muted}`}>Weeks</span>
+              <div className="flex items-center gap-1">
+                <button onClick={() => setWeeks(w => Math.max(2, w-1))} className={`w-7 h-7 rounded-lg flex items-center justify-center text-sm font-bold ${darkMode ? "bg-gray-800 text-gray-300" : "bg-gray-100 text-gray-600"}`}>−</button>
+                <span className={`text-sm font-bold w-6 text-center ${heading}`}>{weeks}</span>
+                <button onClick={() => setWeeks(w => Math.min(8, w+1))} className={`w-7 h-7 rounded-lg flex items-center justify-center text-sm font-bold ${darkMode ? "bg-gray-800 text-gray-300" : "bg-gray-100 text-gray-600"}`}>+</button>
+              </div>
+              <div className={`inline-flex rounded-lg overflow-hidden border ${darkMode ? "border-gray-700" : "border-gray-200"}`}>
+                {Object.keys(PROGRESSIONS).map(p => (
+                  <button key={p} onClick={() => setProgression(p)}
+                    className={`px-2.5 py-1.5 text-xs font-semibold transition-colors ${progression === p ? "bg-[#00aa13] text-white" : darkMode ? "bg-gray-800 text-gray-400" : "bg-white text-gray-500"}`}>{p}</button>
+                ))}
+              </div>
+            </div>
+            <p className={`text-xs mb-3 ${muted}`}>{PROGRESSIONS[progression].desc}</p>
+
+            {/* Per-week previews */}
+            <div className="flex flex-col gap-2">
+              {Array.from({ length: weeks }).map((_, w) => {
+                const ws = weekStrokes(w)
+                const wScale = ws.reduce((s, st) => s + st[0], 0) || 1
+                const peak = Math.max(...ws.map(s => s[1]))
+                return (
+                  <div key={w} className={`flex items-center gap-3 p-2 rounded-xl ${subtle}`}>
+                    <span className={`text-xs font-bold w-12 flex-shrink-0 ${heading}`}>Wk {w+1}</span>
+                    <div className="flex items-end flex-1 rounded overflow-hidden" style={{ height: 28, gap: 1 }}>
+                      {ws.map(([secs, z], i) => (
+                        <div key={i} style={{ width: `${secs/wScale*100}%`, height: `${ZONE_HEIGHTS[z-1]}%`, background: ZONE_COLORS[z-1] }} />
+                      ))}
+                    </div>
+                    <span className={`text-xs ${muted} flex-shrink-0`}>peak Z{peak}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Instructor quote */}
       <div className={`${card} p-5 mb-5`}>
         <p className={`text-sm font-semibold mb-1 ${heading}`}>Your class quote</p>
@@ -5569,7 +5737,7 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
 
       <button disabled={total === 0} onClick={publish}
         className={`w-full py-3 rounded-xl text-white font-semibold text-sm transition-colors ${total === 0 ? "bg-gray-300 cursor-not-allowed" : "bg-[#00aa13] hover:bg-[#008a0f]"}`}>
-        {published ? "✓ Published — now bookable in Schedule" : "Publish class plan"}
+        {published ? "✓ Published — now bookable in Schedule" : programme ? `Publish ${weeks}-week series` : "Publish class plan"}
       </button>
     </div>
   )

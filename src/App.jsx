@@ -1906,6 +1906,7 @@ const ZONE_HEIGHTS = [12, 28, 46, 64, 80, 92, 100]
 const ZONE_NAMES   = ["Recovery","Endurance","Tempo","Threshold","VO₂ Max","Anaerobic","Sprint"]
 
 function fmtSecs(s) {
+  s = Math.round(s)
   if (s < 60) return `${s}s`
   const m = Math.floor(s / 60), r = s % 60
   return r ? `${m}m ${r}s` : `${m}m`

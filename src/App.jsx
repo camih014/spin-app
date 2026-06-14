@@ -4666,11 +4666,30 @@ const YT_CATALOG = [
   { title: "Wake Me Up",      artist: "Avicii",         bpm: 124 },
   { title: "Galvanize",       artist: "The Chemical Brothers", bpm: 130 },
   { title: "Praise You",      artist: "Fatboy Slim",    bpm: 122 },
+  { title: "Get Lucky",       artist: "Daft Punk",      bpm: 116 },
+  { title: "Clarity",         artist: "Zedd",           bpm: 128 },
+  { title: "Wake Up",         artist: "Rage Against the Machine", bpm: 88 },
+  { title: "Seven Nation Army", artist: "The White Stripes", bpm: 124 },
+  { title: "Animals",         artist: "Martin Garrix",  bpm: 128 },
+  { title: "Turn Down for What", artist: "DJ Snake & Lil Jon", bpm: 100 },
+  { title: "HUMBLE.",         artist: "Kendrick Lamar", bpm: 150 },
+  { title: "Believer",        artist: "Imagine Dragons", bpm: 125 },
+  { title: "Can't Hold Us",   artist: "Macklemore",     bpm: 146 },
+  { title: "Pump It",         artist: "Black Eyed Peas", bpm: 154 },
+  { title: "Cola",            artist: "CamelPhat",      bpm: 122 },
+  { title: "Opus",            artist: "Eric Prydz",     bpm: 126 },
+  { title: "Strobe",          artist: "deadmau5",       bpm: 128 },
+  { title: "Adagio for Strings", artist: "Tiësto",      bpm: 138 },
+  { title: "Around the World", artist: "Daft Punk",     bpm: 121 },
+  { title: "Eye of the Tiger", artist: "Survivor",      bpm: 109 },
+  { title: "Run the World",   artist: "Beyoncé",        bpm: 127 },
 ]
 const YT_PLAYLISTS = [
-  { name: "Spin Anthems",  songs: ["Titanium","Levels","One More Time","Sandstorm","Wake Me Up"] },
-  { name: "Hip-Hop Power", songs: ["Stronger","Power","Lose Yourself","Uptown Funk"] },
-  { name: "Peak Drops",    songs: ["Bangarang","Born Slippy","Insomnia","Galvanize"] },
+  { name: "Spin Anthems",   songs: ["Titanium","Levels","One More Time","Sandstorm","Wake Me Up","Clarity"] },
+  { name: "Hip-Hop Power",  songs: ["Stronger","Power","Lose Yourself","Uptown Funk","HUMBLE.","Can't Hold Us"] },
+  { name: "Peak Drops",     songs: ["Bangarang","Born Slippy","Insomnia","Galvanize","Animals","Strobe"] },
+  { name: "Climb Classics", songs: ["Eye of the Tiger","Seven Nation Army","Believer","Wake Up"] },
+  { name: "Techno Engine",  songs: ["Cola","Opus","Strobe","Adagio for Strings","Around the World"] },
 ]
 
 function hashBpm(title) {
@@ -5233,7 +5252,32 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
   const [programme, setProgramme] = useState(false)
   const [weeks, setWeeks]     = useState(4)
   const [progression, setProgression] = useState("Bootcamp")
+  const [previewIdx, setPreviewIdx] = useState(null)
   const rafRef = useRef(0), lastRef = useRef(0)
+  const audioRef = useRef(null), metroRef = useRef(null)
+
+  // Audible metronome at a song's BPM (real Web-Audio click track — actual song audio isn't licensable here)
+  function clickSound(freq = 1400) {
+    const ac = audioRef.current; if (!ac) return
+    const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime
+    o.frequency.value = freq; o.connect(g); g.connect(ac.destination)
+    g.gain.setValueAtTime(0.0001, t)
+    g.gain.exponentialRampToValueAtTime(0.35, t + 0.001)
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.06)
+    o.start(t); o.stop(t + 0.07)
+  }
+  function previewTrack(i) {
+    if (!audioRef.current) audioRef.current = new (window.AudioContext || window.webkitAudioContext)()
+    if (audioRef.current.state === "suspended") audioRef.current.resume()
+    clearInterval(metroRef.current)
+    if (previewIdx === i) { setPreviewIdx(null); return }
+    const bpm = tracks[i].bpm
+    let beat = 0
+    clickSound(1800)
+    metroRef.current = setInterval(() => { beat++; clickSound(beat % 4 === 0 ? 1800 : 1300) }, 60000 / bpm)
+    setPreviewIdx(i)
+  }
+  useEffect(() => () => clearInterval(metroRef.current), [])
 
   const wc = WARMUP_COOLDOWN[length] || WARMUP_COOLDOWN[45]
   const TARGET = length * 60
@@ -5309,7 +5353,7 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
     const songs = p.songs.map(name => YT_CATALOG.find(s => s.title === name)).filter(Boolean)
     setTracks(t => [...t, ...songs.map(makeTrack)]); setQuery("")
   }
-  function removeTrack(i) { setTracks(t => t.filter((_, j) => j !== i)) }
+  function removeTrack(i) { clearInterval(metroRef.current); setPreviewIdx(null); setTracks(t => t.filter((_, j) => j !== i)) }
   function trackMins(i, d) { setTracks(t => t.map((tr, j) => j === i ? { ...tr, mins: Math.max(2, Math.min(tr.fullMins, tr.mins + d)), full: false } : tr)) }
   function trackFull(i) { setTracks(t => t.map((tr, j) => j === i ? { ...tr, full: !tr.full, mins: !tr.full ? tr.fullMins : Math.min(4, tr.fullMins) } : tr)) }
 
@@ -5322,19 +5366,22 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
       out.push([s.secs, z, cadFor(z)])
     }))
     setUndoStack(s => [...s, strokes])
-    setStrokes(out); setCursor(null)
+    setStrokes(out); setCursor(null); setAutoWarm(false); setAutoCool(false)
     setLength([30,45,60].reduce((a,b)=>Math.abs(b-playlistSecs/60)<Math.abs(a-playlistSecs/60)?b:a, 45))
   }
 
-  // Warm-up / cool-down auto add (prepend / append a Z1 block)
+  // Warm-up auto-add (prepend a Z1 block at the very start)
   function toggleWarm() {
-    if (autoWarm) { setUndoStack(s=>[...s,strokes]); setStrokes(p => p[0]?.[1] === 1 ? p.slice(1) : p); setAutoWarm(false) }
-    else { setUndoStack(s=>[...s,strokes]); setStrokes(p => [[wc.warmMin*60, 1, 1], ...p]); setAutoWarm(true) }
+    setUndoStack(s=>[...s,strokes])
+    if (autoWarm) { setStrokes(p => p[0]?.[1] === 1 ? p.slice(1) : p); setAutoWarm(false) }
+    else { setStrokes(p => [[wc.warmMin*60, 1, 1], ...p]); setAutoWarm(true) }
     setCursor(null)
   }
+  // Cool-down auto-add (always appended at the very end of the class)
   function toggleCool() {
-    if (autoCool) { setUndoStack(s=>[...s,strokes]); setStrokes(p => p[p.length-1]?.[1] === 1 ? p.slice(0,-1) : p); setAutoCool(false) }
-    else { setUndoStack(s=>[...s,strokes]); setStrokes(p => [...p, [wc.coolMin*60, 1, 0]]); setAutoCool(true) }
+    setUndoStack(s=>[...s,strokes])
+    if (autoCool) { setStrokes(p => p[p.length-1]?.[1] === 1 ? p.slice(0,-1) : p); setAutoCool(false) }
+    else { setStrokes(p => [...p, [wc.coolMin*60, 1, 0]]); setAutoCool(true) }
     setCursor(null)
   }
 
@@ -5383,8 +5430,9 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
     if (playing) setCursor(c => (c == null ? at : c) + brush)
   }
   function undo()  { setUndoStack(s => { if (!s.length) return s; setStrokes(s[s.length-1]); setCursor(null); return s.slice(0,-1) }) }
-  function clear() { commit([], null) }
+  function clear() { commit([], null); setAutoWarm(false); setAutoCool(false) }
   function loadTemplate(t) {
+    setAutoWarm(false); setAutoCool(false)
     setUndoStack(s => [...s, strokes])
     setName(t.name); setLength(t.length); setCursor(null)
     setStrokes(t.strokes.map(s => [s[0], s[1], s[2] ?? 1]))
@@ -5487,8 +5535,14 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
           {tracks.map((t, i) => (
             <div key={i} className={`flex items-center gap-2 px-3 py-2 rounded-xl ${subtle}`}>
               <span className={`text-xs font-bold w-4 text-center flex-shrink-0 ${muted}`}>{i+1}</span>
+              <button onClick={() => previewTrack(i)} title="Hear the tempo"
+                className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${previewIdx === i ? "bg-[#00aa13] text-white" : darkMode ? "bg-gray-700 text-gray-300" : "bg-gray-200 text-gray-600"}`}>
+                {previewIdx === i
+                  ? <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+                  : <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5l12 7-12 7z"/></svg>}
+              </button>
               <div className="flex-1 min-w-0">
-                <p className={`text-sm font-medium truncate ${heading}`}>{t.title}</p>
+                <p className={`text-sm font-medium truncate ${heading}`}>{t.title}{previewIdx === i && <span className="ml-1.5 text-[#00aa13]">♪</span>}</p>
                 <p className={`text-xs ${muted}`}>{t.artist ? `${t.artist} · ` : ""}{t.bpm} BPM · {t.mins}m{t.full ? " · full" : ""}</p>
               </div>
               <button onClick={() => trackFull(i)} title="Use the full song length"

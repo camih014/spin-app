@@ -4632,9 +4632,9 @@ const WARMUP_COOLDOWN = {
 }
 
 const PROGRESSIONS = {
-  Gentle:   { label: "Gentle",   bump: w => Math.floor(w / 2), desc: "Small step up every other week" },
-  Standard: { label: "Standard", bump: w => Math.min(w, 2),    desc: "Builds for the first few weeks, then holds" },
-  Bootcamp: { label: "Bootcamp", bump: w => w,                 desc: "Harder every single week" },
+  Gentle:   { label: "Gentle",   bump: w => Math.floor(w / 2), desc: "A little more work every other week — same peaks" },
+  Standard: { label: "Standard", bump: w => Math.min(w, 2),    desc: "Adds work for the first few weeks, then holds" },
+  Bootcamp: { label: "Bootcamp", bump: w => w,                 desc: "More time at work & less recovery each week" },
 }
 
 // Target pedal cadence (RPM) — independent of intensity zone
@@ -5254,6 +5254,8 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
   const [progression, setProgression] = useState("Bootcamp")
   const [weekAdjust, setWeekAdjust] = useState({})   // per-week manual intensity offset
   const [previewIdx, setPreviewIdx] = useState(null)
+  const [dragI, setDragI] = useState(null)
+  const [dropI, setDropI] = useState(null)
   const rafRef = useRef(0), lastRef = useRef(0)
   const audioRef = useRef(null), metroRef = useRef(null)
 
@@ -5355,12 +5357,9 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
     setTracks(t => [...t, ...songs.map(makeTrack)]); setQuery("")
   }
   function removeTrack(i) { clearInterval(metroRef.current); setPreviewIdx(null); setTracks(t => t.filter((_, j) => j !== i)) }
-  function moveTrack(i, dir) {
-    setTracks(t => {
-      const j = i + dir
-      if (j < 0 || j >= t.length) return t
-      const n = [...t];[n[i], n[j]] = [n[j], n[i]]; return n
-    })
+  function moveTo(from, to) {
+    if (from == null || to == null || from === to) return
+    setTracks(t => { const n = [...t]; const [x] = n.splice(from, 1); n.splice(to, 0, x); return n })
     setPreviewIdx(null); clearInterval(metroRef.current)
   }
 
@@ -5392,12 +5391,19 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
     setCursor(null)
   }
 
-  // Progressive series — bump work zones (Z3+) each week, leaving warm-up/cool-down alone
+  // Progressive series — build work density each week (longer efforts, less recovery).
+  // Peaks stay the same; raising peaks would just demand more recovery.
   function weekBump(w) { return Math.max(0, PROGRESSIONS[progression].bump(w) + (weekAdjust[w] || 0)) }
   function weekStrokes(w) {
-    const bump = weekBump(w)
-    return merged.map(([secs, z, c]) => z >= 3 ? [secs, Math.min(7, z + bump), c] : [secs, z, c])
+    const b = weekBump(w)
+    if (b === 0) return merged.map(s => [...s])
+    return merged.map(([secs, z, c], i) => {
+      if (i === 0 || i === merged.length - 1) return [secs, z, c]        // keep warm-up / cool-down
+      if (z >= 3) return [Math.round(secs * (1 + 0.12 * b)), z, c]       // longer work blocks
+      return [Math.max(15, Math.round(secs * (1 - 0.10 * b))), z, c]     // shorter recovery
+    })
   }
+  function weekWorkSecs(w) { return weekStrokes(w).reduce((s, [secs, z]) => s + (z >= 3 ? secs : 0), 0) }
   function adjustWeek(w, d) { setWeekAdjust(a => ({ ...a, [w]: Math.max(-3, Math.min(4, (a[w] || 0) + d)) })) }
 
   function publish() {
@@ -5542,13 +5548,15 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
             </div>
           )}
           {tracks.map((t, i) => (
-            <div key={i} className={`flex items-center gap-2 px-3 py-2 rounded-xl ${subtle}`}>
-              <div className="flex flex-col flex-shrink-0">
-                <button onClick={() => moveTrack(i, -1)} disabled={i === 0}
-                  className={`leading-none text-[10px] ${i === 0 ? "opacity-20" : muted} hover:text-[#00aa13]`}>▲</button>
-                <button onClick={() => moveTrack(i, 1)} disabled={i === tracks.length-1}
-                  className={`leading-none text-[10px] ${i === tracks.length-1 ? "opacity-20" : muted} hover:text-[#00aa13]`}>▼</button>
-              </div>
+            <div key={i}
+              draggable
+              onDragStart={() => setDragI(i)}
+              onDragOver={e => { e.preventDefault(); if (dropI !== i) setDropI(i) }}
+              onDrop={() => { moveTo(dragI, i); setDragI(null); setDropI(null) }}
+              onDragEnd={() => { setDragI(null); setDropI(null) }}
+              className={`flex items-center gap-2 px-3 py-2 rounded-xl transition-all ${subtle}
+                ${dragI === i ? "opacity-40" : ""} ${dropI === i && dragI !== i ? "ring-2 ring-[#00aa13]" : ""}`}>
+              <span className="flex-shrink-0 cursor-grab active:cursor-grabbing select-none leading-none text-base" style={{ color: darkMode ? "#6b7280" : "#9ca3af" }} title="Drag to reorder">⠿</span>
               <span className={`text-xs font-bold w-4 text-center flex-shrink-0 ${muted}`}>{i+1}</span>
               <button onClick={() => previewTrack(i)} title="Hear the tempo"
                 className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${previewIdx === i ? "bg-[#00aa13] text-white" : darkMode ? "bg-gray-700 text-gray-300" : "bg-gray-200 text-gray-600"}`}>
@@ -5810,7 +5818,7 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
           </div>
           <div>
             <p className={`text-sm font-medium ${heading}`}>Progressive series 📈</p>
-            <p className={`text-xs ${muted}`}>{programme ? "Builds week-on-week from this base class" : "Turn this into a multi-week programme (e.g. a bootcamp)"}</p>
+            <p className={`text-xs ${muted}`}>{programme ? "Builds work week-on-week — swap in fresh songs of a similar style each week" : "Turn this into a multi-week programme (e.g. a bootcamp)"}</p>
           </div>
         </button>
 
@@ -5837,7 +5845,7 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
               {Array.from({ length: weeks }).map((_, w) => {
                 const ws = weekStrokes(w)
                 const wScale = ws.reduce((s, st) => s + st[0], 0) || 1
-                const peak = Math.max(...ws.map(s => s[1]))
+                const work = weekWorkSecs(w)
                 const adj = weekAdjust[w] || 0
                 return (
                   <div key={w} className={`flex items-center gap-2 p-2 rounded-xl ${subtle}`}>
@@ -5847,7 +5855,7 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
                         <div key={i} style={{ width: `${secs/wScale*100}%`, height: `${ZONE_HEIGHTS[z-1]}%`, background: ZONE_COLORS[z-1] }} />
                       ))}
                     </div>
-                    <span className={`text-xs ${muted} flex-shrink-0 w-12 text-right`}>peak Z{peak}</span>
+                    <span className={`text-xs ${muted} flex-shrink-0 w-16 text-right`}>{fmtSecs(work)} work</span>
                     <div className="flex items-center gap-0.5 flex-shrink-0">
                       <button onClick={() => adjustWeek(w, -1)} className={`w-5 h-5 rounded flex items-center justify-center text-sm font-bold ${darkMode ? "bg-gray-700 text-gray-300" : "bg-gray-200 text-gray-600"}`}>−</button>
                       <span className={`text-[10px] font-bold w-6 text-center tabular-nums ${adj === 0 ? muted : "text-[#00aa13]"}`}>{adj > 0 ? `+${adj}` : adj}</span>

@@ -5234,7 +5234,6 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
   const [length, setLength]   = useState(45)          // minutes
   const [tracks, setTracks]   = useState([])
   const [query, setQuery]     = useState("")
-  const [newFull, setNewFull] = useState(false)
   const [crossfade, setCrossfade] = useState(true)
   const [published, setPublished] = useState(false)
   const [brush, setBrush]     = useState(30)          // seconds added per tap
@@ -5342,10 +5341,10 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
   const plResults   = q ? YT_PLAYLISTS.filter(p => p.name.toLowerCase().includes(q)).slice(0, 3) : []
 
   function makeTrack(song) {
-    const fullMins = 3 + (titleSeed(song.title) % 3)   // 3–5 min full length
+    const fullMins = 3 + (titleSeed(song.title) % 3)   // realistic full length 3–5 min
     return {
       title: song.title, artist: song.artist || "", bpm: song.bpm || hashBpm(song.title),
-      mins: newFull ? fullMins : 3, fullMins, full: newFull, seed: titleSeed(song.title),
+      mins: fullMins, fullMins, full: true, seed: titleSeed(song.title),
     }
   }
   function addSong(song) { setTracks(t => [...t, makeTrack(song)]); setQuery("") }
@@ -5354,8 +5353,6 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
     setTracks(t => [...t, ...songs.map(makeTrack)]); setQuery("")
   }
   function removeTrack(i) { clearInterval(metroRef.current); setPreviewIdx(null); setTracks(t => t.filter((_, j) => j !== i)) }
-  function trackMins(i, d) { setTracks(t => t.map((tr, j) => j === i ? { ...tr, mins: Math.max(2, Math.min(tr.fullMins, tr.mins + d)), full: false } : tr)) }
-  function trackFull(i) { setTracks(t => t.map((tr, j) => j === i ? { ...tr, full: !tr.full, mins: !tr.full ? tr.fullMins : Math.min(4, tr.fullMins) } : tr)) }
 
   // Music → ride sync: build the ride from each song's sections (energy → zone)
   function syncFromPlaylist() {
@@ -5543,15 +5540,7 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
               </button>
               <div className="flex-1 min-w-0">
                 <p className={`text-sm font-medium truncate ${heading}`}>{t.title}{previewIdx === i && <span className="ml-1.5 text-[#00aa13]">♪</span>}</p>
-                <p className={`text-xs ${muted}`}>{t.artist ? `${t.artist} · ` : ""}{t.bpm} BPM · {t.mins}m{t.full ? " · full" : ""}</p>
-              </div>
-              <button onClick={() => trackFull(i)} title="Use the full song length"
-                className={`text-[10px] font-bold px-1.5 py-1 rounded-lg flex-shrink-0 transition-colors ${t.full ? "bg-[#00aa13] text-white" : darkMode ? "bg-gray-700 text-gray-400" : "bg-gray-200 text-gray-500"}`}>
-                full
-              </button>
-              <div className="flex items-center gap-0.5 flex-shrink-0" style={{ opacity: t.full ? 0.35 : 1, pointerEvents: t.full ? "none" : "auto" }}>
-                <button onClick={() => trackMins(i, -1)} className={`w-5 h-5 rounded flex items-center justify-center text-sm font-bold ${darkMode ? "bg-gray-700 text-gray-300" : "bg-gray-200 text-gray-600"}`}>−</button>
-                <button onClick={() => trackMins(i, 1)} className={`w-5 h-5 rounded flex items-center justify-center text-sm font-bold ${darkMode ? "bg-gray-700 text-gray-300" : "bg-gray-200 text-gray-600"}`}>+</button>
+                <p className={`text-xs ${muted}`}>{t.artist ? `${t.artist} · ` : ""}{t.bpm} BPM · {t.mins}:00</p>
               </div>
               <button onClick={() => removeTrack(i)} className={`w-5 h-5 rounded flex items-center justify-center text-xs flex-shrink-0 ${darkMode ? "hover:bg-gray-700 text-gray-500" : "hover:bg-gray-200 text-gray-400"}`}>✕</button>
             </div>
@@ -5566,15 +5555,6 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
         )}
 
         {/* YouTube search + add */}
-        <div className="flex items-center gap-2 mb-2">
-          <button onClick={() => setNewFull(!newFull)} title="Add songs at full length"
-            className={`text-xs font-semibold px-2.5 py-2 rounded-xl border transition-colors flex items-center gap-1.5 flex-shrink-0 ${newFull ? "bg-[#e6f9e8] border-[#00aa13] text-[#00aa13]" : darkMode ? "border-gray-700 text-gray-400" : "border-gray-200 text-gray-500"}`}>
-            <span className={`w-3.5 h-3.5 rounded flex items-center justify-center border ${newFull ? "bg-[#00aa13] border-[#00aa13]" : darkMode ? "border-gray-600" : "border-gray-300"}`}>
-              {newFull && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 6"/></svg>}
-            </span>
-            Full songs
-          </button>
-        </div>
         <div className="relative">
           <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${darkMode ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="#FF0000"><path d="M23 12s0-3.9-.5-5.8a3 3 0 00-2.1-2.1C18.5 3.5 12 3.5 12 3.5s-6.5 0-8.4.6A3 3 0 001.5 6.2C1 8.1 1 12 1 12s0 3.9.5 5.8a3 3 0 002.1 2.1c1.9.6 8.4.6 8.4.6s6.5 0 8.4-.6a3 3 0 002.1-2.1C23 15.9 23 12 23 12z"/><path d="M10 15.5l5-3.5-5-3.5z" fill="#fff"/></svg>
@@ -5615,7 +5595,7 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
             </div>
           )}
         </div>
-        <p className={`text-xs mt-2.5 ${muted}`}>BPM is detected automatically. Each song's energy (intro, build, drop, breakdown) hints at a zone — hit "Build ride from the music" to lay them in. {crossfade ? "Tracks crossfade." : "Tracks hard-cut."}</p>
+        <p className={`text-xs mt-2.5 ${muted}`}>Songs play in full with BPM detected automatically. Each song's energy (intro, build, drop, breakdown) hints at a zone — hit "Build ride from the music" to lay them in. {crossfade ? "Tracks crossfade." : "Tracks hard-cut."}</p>
       </div>
 
       {/* Live canvas */}

@@ -5252,6 +5252,7 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
   const [programme, setProgramme] = useState(false)
   const [weeks, setWeeks]     = useState(4)
   const [progression, setProgression] = useState("Bootcamp")
+  const [weekAdjust, setWeekAdjust] = useState({})   // per-week manual intensity offset
   const [previewIdx, setPreviewIdx] = useState(null)
   const rafRef = useRef(0), lastRef = useRef(0)
   const audioRef = useRef(null), metroRef = useRef(null)
@@ -5354,6 +5355,14 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
     setTracks(t => [...t, ...songs.map(makeTrack)]); setQuery("")
   }
   function removeTrack(i) { clearInterval(metroRef.current); setPreviewIdx(null); setTracks(t => t.filter((_, j) => j !== i)) }
+  function moveTrack(i, dir) {
+    setTracks(t => {
+      const j = i + dir
+      if (j < 0 || j >= t.length) return t
+      const n = [...t];[n[i], n[j]] = [n[j], n[i]]; return n
+    })
+    setPreviewIdx(null); clearInterval(metroRef.current)
+  }
 
   // Music → ride sync: build the ride from each song's sections (energy → zone)
   function syncFromPlaylist() {
@@ -5384,10 +5393,12 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
   }
 
   // Progressive series — bump work zones (Z3+) each week, leaving warm-up/cool-down alone
+  function weekBump(w) { return Math.max(0, PROGRESSIONS[progression].bump(w) + (weekAdjust[w] || 0)) }
   function weekStrokes(w) {
-    const bump = PROGRESSIONS[progression].bump(w)
+    const bump = weekBump(w)
     return merged.map(([secs, z, c]) => z >= 3 ? [secs, Math.min(7, z + bump), c] : [secs, z, c])
   }
+  function adjustWeek(w, d) { setWeekAdjust(a => ({ ...a, [w]: Math.max(-3, Math.min(4, (a[w] || 0) + d)) })) }
 
   function publish() {
     if (!total) return
@@ -5532,6 +5543,12 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
           )}
           {tracks.map((t, i) => (
             <div key={i} className={`flex items-center gap-2 px-3 py-2 rounded-xl ${subtle}`}>
+              <div className="flex flex-col flex-shrink-0">
+                <button onClick={() => moveTrack(i, -1)} disabled={i === 0}
+                  className={`leading-none text-[10px] ${i === 0 ? "opacity-20" : muted} hover:text-[#00aa13]`}>▲</button>
+                <button onClick={() => moveTrack(i, 1)} disabled={i === tracks.length-1}
+                  className={`leading-none text-[10px] ${i === tracks.length-1 ? "opacity-20" : muted} hover:text-[#00aa13]`}>▼</button>
+              </div>
               <span className={`text-xs font-bold w-4 text-center flex-shrink-0 ${muted}`}>{i+1}</span>
               <button onClick={() => previewTrack(i)} title="Hear the tempo"
                 className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${previewIdx === i ? "bg-[#00aa13] text-white" : darkMode ? "bg-gray-700 text-gray-300" : "bg-gray-200 text-gray-600"}`}>
@@ -5744,6 +5761,22 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
             </button>
           ))}
         </div>
+
+        {/* Compact warm-up / cool-down ticks */}
+        <div className={`flex flex-wrap items-center gap-2 mt-3 pt-3 border-t ${darkMode ? "border-gray-800" : "border-gray-100"}`}>
+          {[["Warm-up", autoWarm, toggleWarm, warmSecs, warmOk, `${wc.warmMin}–${wc.warmMax}m`],
+            ["Cool-down", autoCool, toggleCool, coolSecs, coolOk, `${wc.coolMin}–${wc.coolMax}m`]].map(([label, on, fn, secs, ok, range]) => (
+            <button key={label} onClick={fn}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs transition-colors ${darkMode ? "border-gray-700 hover:bg-gray-800" : "border-gray-200 hover:bg-gray-50"}`}>
+              <span className={`w-4 h-4 rounded flex items-center justify-center border ${on ? "bg-[#00aa13] border-[#00aa13]" : darkMode ? "border-gray-600" : "border-gray-300"}`}>
+                {on && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 6"/></svg>}
+              </span>
+              <span className={`font-medium ${heading}`}>{label}</span>
+              <span className={ok ? "text-[#00aa13]" : "text-amber-500"}>{ok ? "✓" : "⚠"} {fmtSecs(secs)}</span>
+              <span className={muted}>/ {range}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Plan summary — donut + collapsible detail */}
@@ -5768,38 +5801,6 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
           ))}
         </div>
       )}
-
-      {/* Warm-up & cool-down */}
-      <div className={`${card} p-5 mb-5`}>
-        <p className={`text-sm font-semibold mb-1 ${heading}`}>Warm-up & cool-down</p>
-        <p className={`text-xs mb-4 ${muted}`}>For a {length}-min class: warm-up {wc.warmMin}–{wc.warmMax} min · cool-down {wc.coolMin}–{wc.coolMax} min</p>
-
-        <div className="grid grid-cols-2 gap-3 mb-4">
-          <div className={`rounded-xl p-3 ${warmOk ? (darkMode ? "bg-gray-800" : "bg-[#e6f9e8]") : "bg-amber-50"}`}>
-            <p className={`text-xs mb-0.5 ${warmOk ? muted : "text-amber-700"}`}>Warm-up</p>
-            <p className={`text-lg font-bold ${warmOk ? heading : "text-amber-700"}`}>{fmtSecs(warmSecs)}</p>
-            <p className={`text-xs mt-0.5 ${warmOk ? "text-[#00aa13]" : "text-amber-700"}`}>{warmOk ? "✓ Good" : `⚠ Add ${Math.ceil((wc.warmMin*60 - warmSecs)/60)} min`}</p>
-          </div>
-          <div className={`rounded-xl p-3 ${coolOk ? (darkMode ? "bg-gray-800" : "bg-[#e6f9e8]") : "bg-amber-50"}`}>
-            <p className={`text-xs mb-0.5 ${coolOk ? muted : "text-amber-700"}`}>Cool-down</p>
-            <p className={`text-lg font-bold ${coolOk ? heading : "text-amber-700"}`}>{fmtSecs(coolSecs)}</p>
-            <p className={`text-xs mt-0.5 ${coolOk ? "text-[#00aa13]" : "text-amber-700"}`}>{coolOk ? "✓ Good" : `⚠ Add ${Math.ceil((wc.coolMin*60 - coolSecs)/60)} min`}</p>
-          </div>
-        </div>
-
-        {[["Auto-add warm-up", autoWarm, toggleWarm, `${wc.warmMin} min easy spin at the start`],
-          ["Auto-add cool-down", autoCool, toggleCool, `${wc.coolMin} min easy spin at the end`]].map(([label, on, fn, sub]) => (
-          <button key={label} onClick={fn} className={`flex items-center gap-3 w-full text-left p-2 rounded-lg transition-colors ${darkMode ? "hover:bg-gray-800" : "hover:bg-gray-50"}`}>
-            <div className={`w-5 h-5 rounded flex items-center justify-center flex-shrink-0 border-2 ${on ? "bg-[#00aa13] border-[#00aa13]" : darkMode ? "border-gray-600" : "border-gray-300"}`}>
-              {on && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 6"/></svg>}
-            </div>
-            <div>
-              <p className={`text-sm font-medium ${heading}`}>{label}</p>
-              <p className={`text-xs ${muted}`}>{sub}</p>
-            </div>
-          </button>
-        ))}
-      </div>
 
       {/* Progressive series */}
       <div className={`${card} p-5 mb-5`}>
@@ -5829,23 +5830,29 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
                 ))}
               </div>
             </div>
-            <p className={`text-xs mb-3 ${muted}`}>{PROGRESSIONS[progression].desc}</p>
+            <p className={`text-xs mb-3 ${muted}`}>{PROGRESSIONS[progression].desc} · tap +/− to fine-tune any week</p>
 
-            {/* Per-week previews */}
+            {/* Per-week previews — adjustable */}
             <div className="flex flex-col gap-2">
               {Array.from({ length: weeks }).map((_, w) => {
                 const ws = weekStrokes(w)
                 const wScale = ws.reduce((s, st) => s + st[0], 0) || 1
                 const peak = Math.max(...ws.map(s => s[1]))
+                const adj = weekAdjust[w] || 0
                 return (
-                  <div key={w} className={`flex items-center gap-3 p-2 rounded-xl ${subtle}`}>
-                    <span className={`text-xs font-bold w-12 flex-shrink-0 ${heading}`}>Wk {w+1}</span>
+                  <div key={w} className={`flex items-center gap-2 p-2 rounded-xl ${subtle}`}>
+                    <span className={`text-xs font-bold w-10 flex-shrink-0 ${heading}`}>Wk {w+1}</span>
                     <div className="flex items-end flex-1 rounded overflow-hidden" style={{ height: 28, gap: 1 }}>
                       {ws.map(([secs, z], i) => (
                         <div key={i} style={{ width: `${secs/wScale*100}%`, height: `${ZONE_HEIGHTS[z-1]}%`, background: ZONE_COLORS[z-1] }} />
                       ))}
                     </div>
-                    <span className={`text-xs ${muted} flex-shrink-0`}>peak Z{peak}</span>
+                    <span className={`text-xs ${muted} flex-shrink-0 w-12 text-right`}>peak Z{peak}</span>
+                    <div className="flex items-center gap-0.5 flex-shrink-0">
+                      <button onClick={() => adjustWeek(w, -1)} className={`w-5 h-5 rounded flex items-center justify-center text-sm font-bold ${darkMode ? "bg-gray-700 text-gray-300" : "bg-gray-200 text-gray-600"}`}>−</button>
+                      <span className={`text-[10px] font-bold w-6 text-center tabular-nums ${adj === 0 ? muted : "text-[#00aa13]"}`}>{adj > 0 ? `+${adj}` : adj}</span>
+                      <button onClick={() => adjustWeek(w, 1)} className={`w-5 h-5 rounded flex items-center justify-center text-sm font-bold ${darkMode ? "bg-gray-700 text-gray-300" : "bg-gray-200 text-gray-600"}`}>+</button>
+                    </div>
                   </div>
                 )
               })}

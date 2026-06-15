@@ -5256,7 +5256,8 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
   const [previewIdx, setPreviewIdx] = useState(null)
   const [dragI, setDragI] = useState(null)
   const [dropI, setDropI] = useState(null)
-  const rafRef = useRef(0), lastRef = useRef(0)
+  const [selBars, setSelBars] = useState(() => new Set())   // selected merged-bar indices
+  const rafRef = useRef(0), lastRef = useRef(0), wrapRef = useRef(null)
   const audioRef = useRef(null), metroRef = useRef(null)
 
   // Audible metronome at a song's BPM (real Web-Audio click track — actual song audio isn't licensable here)
@@ -5374,7 +5375,7 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
     // auto warm-up at the start + cool-down at the end
     const withEnds = [[wc.warmMin*60, 1, 1], ...out, [wc.coolMin*60, 1, 0]]
     setUndoStack(s => [...s, strokes])
-    setStrokes(withEnds); setCursor(null); setAutoWarm(true); setAutoCool(true)
+    setStrokes(withEnds); setCursor(null); setSelBars(new Set()); setAutoWarm(true); setAutoCool(true)
     setLength([30,45,60].reduce((a,b)=>Math.abs(b-playlistSecs/60)<Math.abs(a-playlistSecs/60)?b:a, 45))
   }
 
@@ -5418,7 +5419,18 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
   function commit(nextStrokes, newCursor) {
     setUndoStack(s => [...s, strokes])
     setStrokes(nextStrokes)
+    setSelBars(new Set())
     if (newCursor !== undefined) setCursor(newCursor)
+  }
+
+  function toggleSelect(i) {
+    setSelBars(s => { const n = new Set(s); n.has(i) ? n.delete(i) : n.add(i); return n })
+  }
+  function deleteSelected() {
+    if (!selBars.size) return
+    setUndoStack(s => [...s, strokes])
+    setStrokes(merged.filter((_, i) => !selBars.has(i)))
+    setSelBars(new Set()); setCursor(null); setAutoWarm(false); setAutoCool(false)
   }
 
   function addZone(zone) {
@@ -5445,7 +5457,7 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
   function undo()  { setUndoStack(s => { if (!s.length) return s; setStrokes(s[s.length-1]); setCursor(null); return s.slice(0,-1) }) }
   function clear() { commit([], null); setAutoWarm(false); setAutoCool(false) }
   function loadTemplate(t) {
-    setAutoWarm(false); setAutoCool(false)
+    setAutoWarm(false); setAutoCool(false); setSelBars(new Set())
     setUndoStack(s => [...s, strokes])
     setName(t.name); setLength(t.length); setCursor(null)
     setStrokes(t.strokes.map(s => [s[0], s[1], s[2] ?? 1]))
@@ -5629,18 +5641,11 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
           <span className={`text-xs font-semibold ${total > TARGET ? "text-orange-500" : muted}`}>{fmtSecs(total)} / {length}m</span>
         </div>
 
-        {/* Combined wrapper: waveform + bars share one draggable playhead */}
-        <div className="relative select-none" style={{ cursor: total > 0 ? "ew-resize" : "default", touchAction: "none" }}
-          onPointerDown={e => {
-            if (total === 0) return
-            setPlaying(false); setDragging(true)
-            const rect = e.currentTarget.getBoundingClientRect()
-            const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
-            setCursor(Math.min(Math.round(frac*scale/15)*15, total))
-            try { e.currentTarget.setPointerCapture(e.pointerId) } catch {}
-          }}
+        {/* Combined wrapper: waveform + bars + draggable playhead */}
+        <div ref={wrapRef} className="relative select-none" style={{ touchAction: "none" }}
           onPointerMove={e => {
-            const rect = e.currentTarget.getBoundingClientRect()
+            if (!wrapRef.current) return
+            const rect = wrapRef.current.getBoundingClientRect()
             const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
             if (dragging) { setCursor(Math.min(Math.round(frac*scale/15)*15, total)); return }
             const t = frac*scale; let acc = 0, h = null
@@ -5692,22 +5697,34 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
               </div>
             ) : (
               <div className="absolute inset-0 flex items-end">
-                {merged.map(([secs, zone], i) => (
-                  <div key={i} className="flex items-end justify-center transition-all"
-                    style={{ width: `${secs / scale * 100}%`, height: `${ZONE_HEIGHTS[zone-1]}%`, background: ZONE_COLORS[zone-1] }}
-                    title={`Z${zone} ${ZONE_NAMES[zone-1]} · ${fmtSecs(secs)}`} />
-                ))}
+                {merged.map(([secs, zone], i) => {
+                  const sel = selBars.has(i)
+                  return (
+                    <div key={i} onClick={() => toggleSelect(i)}
+                      className="flex items-start justify-center transition-all cursor-pointer"
+                      style={{ width: `${secs / scale * 100}%`, height: `${ZONE_HEIGHTS[zone-1]}%`, background: ZONE_COLORS[zone-1],
+                        boxShadow: sel ? "inset 0 0 0 2px #fff, inset 0 0 0 4px #1b2333" : "none" }}
+                      title={`Z${zone} ${ZONE_NAMES[zone-1]} · ${fmtSecs(secs)} · tap to select`}>
+                      {sel && <span className="text-white text-[9px] font-bold mt-0.5">✓</span>}
+                    </div>
+                  )
+                })}
               </div>
             )}
           </div>
 
           {/* hover guide line (spans both lanes) */}
           {hover && !dragging && <div className="absolute top-0 bottom-0 w-px bg-white/50 pointer-events-none z-10" style={{ left: `${hover.frac*100}%` }} />}
-          {/* playhead / insert cursor (spans both lanes) */}
+          {/* playhead / insert cursor — handle is draggable */}
           {total > 0 && (
-            <div className="absolute top-0 bottom-0 pointer-events-none z-10" style={{ left: `${insertPos/scale*100}%` }}>
-              <div className={`w-0.5 h-full ${playing ? "bg-[#00aa13]" : "bg-[#00aa13]"}`} style={{ boxShadow: playing ? "0 0 6px #00aa13" : "none" }} />
-              <div className="absolute -top-1 -translate-x-1/2 w-3 h-3 rounded-full bg-[#00aa13] border-2 border-white shadow" style={{ left: 1 }} />
+            <div className="absolute top-0 bottom-0 z-10" style={{ left: `${insertPos/scale*100}%` }}>
+              <div className="w-0.5 h-full bg-[#00aa13] pointer-events-none" style={{ boxShadow: playing ? "0 0 6px #00aa13" : "none" }} />
+              <div
+                onPointerDown={e => { e.stopPropagation(); setPlaying(false); setDragging(true); try { e.currentTarget.setPointerCapture(e.pointerId) } catch {} }}
+                onPointerMove={e => { if (!dragging || !wrapRef.current) return; const rect = wrapRef.current.getBoundingClientRect(); const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)); setCursor(Math.min(Math.round(frac*scale/15)*15, total)) }}
+                onPointerUp={() => setDragging(false)}
+                className="absolute -top-1.5 -translate-x-1/2 w-4 h-4 rounded-full bg-[#00aa13] border-2 border-white shadow cursor-grab active:cursor-grabbing"
+                style={{ left: 1, touchAction: "none" }} title="Drag to move insert point" />
             </div>
           )}
         </div>
@@ -5746,12 +5763,16 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
             ))}
           </div>
           <div className="flex-1" />
-          <button onClick={undo} disabled={!strokes.length}
-            className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${!strokes.length ? "opacity-30 cursor-not-allowed" : ""} ${darkMode ? "bg-gray-800 text-gray-300 hover:bg-gray-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>Undo</button>
+          {selBars.size > 0 && (
+            <button onClick={deleteSelected}
+              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white transition-colors">
+              Delete {selBars.size} selected
+            </button>
+          )}
           <button onClick={clear} disabled={!strokes.length}
             className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${!strokes.length ? "opacity-30 cursor-not-allowed" : ""} ${darkMode ? "bg-gray-800 text-gray-300 hover:bg-gray-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>Clear</button>
         </div>
-        <p className={`text-xs mt-2 ${muted}`}>Painting at <span className="font-semibold" style={{ color: "#00aa13" }}>{CADENCE_BANDS[cadence].rpm}</span>{cursor != null && cur < total && <span> · inserting at {fmtSecs(cur)}</span>}</p>
+        <p className={`text-xs mt-2 ${muted}`}>Tap a bar to select it (tap more to multi-select), then Delete. Drag the green dot into a bar and tap a zone to insert there.{cursor != null && cur < total && <span className="font-semibold" style={{ color: "#00aa13" }}> · inserting at {fmtSecs(cur)}</span>}</p>
       </div>
 
       {/* Zone palette */}

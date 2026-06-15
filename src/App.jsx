@@ -4760,14 +4760,36 @@ const QUOTE_PRESETS = [
   "The hardest classes make the strongest riders.",
 ]
 
-// Reusable class templates — strokes as [secs, zone, rpmIndex]
+// Reusable class template library — strokes as [secs, zone, rpmIndex]
 const CLASS_TEMPLATES = [
   { name: "Sunrise Power", length: 45, strokes: [
     [420,1,1],[420,2,2],[180,3,2],[120,4,1],[180,3,2],[120,4,1],[60,5,3],[120,1,0],[60,5,3],[120,1,0],[300,2,1],[180,1,0],
   ]},
-  { name: "HIIT Blast", length: 30, strokes: [
-    [300,1,1],[120,2,2],[30,5,3],[30,1,0],[30,5,3],[30,1,0],[30,6,3],[30,1,0],[30,6,3],[120,2,1],
-    [30,7,3],[30,1,0],[30,7,3],[30,1,0],[30,6,3],[180,1,0],
+  { name: "45 min HIIT", length: 45, strokes: [
+    [300,1,1],[180,2,2],
+    [40,5,3],[80,1,0],[40,5,3],[80,1,0],[40,5,3],[80,1,0],[40,5,3],[80,1,0],
+    [180,2,1],
+    [30,6,3],[90,1,0],[30,6,3],[90,1,0],[30,6,3],[90,1,0],[30,6,3],[90,1,0],
+    [180,2,1],
+    [20,7,3],[100,1,0],[20,7,3],[100,1,0],[20,7,3],[100,1,0],
+    [300,1,0],
+  ]},
+  { name: "60 min Power Zone", length: 60, strokes: [
+    [420,1,1],[300,2,1],[600,4,2],[180,2,1],[600,4,2],[180,2,1],[480,4,2],[180,2,1],[300,3,2],[300,1,0],
+  ]},
+  { name: "Beginner Ride", length: 45, strokes: [
+    [360,1,1],[600,2,1],[120,3,2],[300,2,1],[120,3,2],[300,2,1],[180,2,1],[300,1,0],
+  ]},
+  { name: "Climb Day", length: 45, strokes: [
+    [360,1,1],[180,2,1],[360,4,0],[120,1,0],[420,4,0],[120,1,0],[300,5,0],[120,1,0],[240,4,0],[300,1,0],
+  ]},
+  { name: "Taylor Swift Ride", length: 45, strokes: [
+    [300,1,1],[180,2,2],[120,3,2],[60,4,3],[120,3,2],[60,4,3],[120,3,2],[180,2,1],
+    [90,3,2],[30,5,3],[90,3,2],[30,5,3],[90,3,2],[180,2,1],[120,3,2],[60,4,3],[120,3,2],[300,1,0],
+  ]},
+  { name: "EDM Intervals", length: 45, strokes: [
+    [300,1,1],[180,2,2],[60,3,2],[30,6,3],[90,2,1],[60,3,2],[30,6,3],[90,2,1],
+    [60,3,2],[40,7,3],[90,2,1],[60,3,2],[40,7,3],[90,2,1],[120,4,2],[60,5,3],[120,2,1],[300,1,0],
   ]},
   { name: "Endurance Builder", length: 60, strokes: [
     [420,1,1],[600,2,1],[120,3,2],[600,2,1],[120,3,2],[600,2,1],[300,3,2],[300,1,0],
@@ -4938,88 +4960,133 @@ function ClassRoster({ cls, darkMode }) {
   const divider = darkMode ? "border-gray-800" : "border-gray-100"
 
   const isToday = cls.dateIso === INSTRUCTOR_TODAY_ISO && cls.status !== "done"
+  const past    = cls.status === "done"
   const roster  = rosterFor(cls.seed, cls.booked, isToday)
   const layout  = STUDIO_LAYOUTS[cls.studio] || STUDIO_LAYOUTS["Studio 1"]
   const bikeMap = {}
   roster.forEach(r => { bikeMap[r.bike] = r })
+  const [showLayout, setShowLayout] = useState(false)
 
-  return (
-    <div className="flex flex-col gap-4">
-      {/* Class header */}
-      <div className={`${card} p-5`}>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className={`text-lg font-bold ${heading}`}>{cls.name}</h2>
-              {isSocialClass(cls.name) && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-[#e6f9e8] text-[#00aa13]">🎲 Social</span>}
-            </div>
-            <p className={`text-xs mt-0.5 ${muted}`}>{cls.dateLabel} · {cls.time} · {cls.studio} · 45 mins</p>
-            {isSocialClass(cls.name) && <p className={`text-xs mt-1 ${muted}`}>Random seating — riders are assigned a bike on arrival</p>}
+  // Post-class stats (deterministic from seed)
+  const attended  = cls.attended || Math.round(cls.booked * 0.9)
+  const attendPct = Math.round(attended / cls.booked * 100)
+  const avgEffort = 70 + (cls.seed % 15)
+  const completion = 86 + (cls.seed % 12)
+  const intensity = getIntensity(cls.name)
+  const zt = [0,0,0,0,0]
+  intensity.forEach(v => { const z = v <= 2 ? 0 : v <= 4 ? 1 : v <= 6 ? 2 : v <= 8 ? 3 : 4; zt[z]++ })
+  const zoneHeat = zt.map(c => Math.round(c / intensity.length * 100))
+  const improved = roster.slice(0, 3).map((r, i) => {
+    const [first, last] = r.name.split(" ")
+    return { name: `${first} ${last ? last[0] + "." : ""}`, metric: ["+12% avg output", "+8% attendance", "+15% peak power"][i] }
+  })
+
+  const Header = (
+    <div className={`${card} p-5`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <h2 className={`text-lg font-bold ${heading}`}>{cls.name}</h2>
+            {isSocialClass(cls.name) && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-[#e6f9e8] text-[#00aa13]">🎲 Social</span>}
           </div>
-          {cls.status === "done"
-            ? <span className="text-xs font-semibold text-amber-500 flex-shrink-0">{cls.rating} ★</span>
-            : <span className={`text-xs font-semibold flex-shrink-0 ${cls.booked >= cls.capacity ? "text-orange-500" : "text-[#00aa13]"}`}>{cls.booked >= cls.capacity ? "Full" : `${cls.capacity - cls.booked} spaces`}</span>}
+          <p className={`text-xs mt-0.5 ${muted}`}>{cls.dateLabel} · {cls.time} · {cls.location?.replace("SpinOut · ","")} · {cls.studio}</p>
         </div>
-        <div className="flex items-center justify-between mt-3 mb-1.5">
-          <span className={`text-xs ${muted}`}>{cls.booked} / {cls.capacity} booked{cls.waitlist > 0 && ` · ${cls.waitlist} waitlist`}</span>
-        </div>
-        <CapacityBar booked={cls.booked} capacity={cls.capacity} darkMode={darkMode} />
+        {past
+          ? <span className="text-xs font-semibold text-amber-500 flex-shrink-0">{cls.rating} ★</span>
+          : <span className={`text-xs font-semibold flex-shrink-0 ${cls.booked >= cls.capacity ? "text-orange-500" : "text-[#00aa13]"}`}>{cls.booked >= cls.capacity ? "Full" : `${cls.capacity - cls.booked} spaces`}</span>}
       </div>
+      <div className="flex items-center justify-between mt-3 mb-1.5">
+        <span className={`text-xs ${muted}`}>{cls.booked} / {cls.capacity} booked{cls.waitlist > 0 && ` · ${cls.waitlist} waitlist`}</span>
+      </div>
+      <CapacityBar booked={cls.booked} capacity={cls.capacity} darkMode={darkMode} />
+    </div>
+  )
 
-      {/* Bike layout */}
+  // ── PAST CLASS — stats & insights ──
+  if (past) return (
+    <div className="flex flex-col gap-4">
+      {Header}
+
       <div className={`${card} p-5`}>
-        <div className="flex items-center justify-between mb-4">
-          <p className={`text-sm font-semibold ${heading}`}>Studio layout</p>
-          <span className={`text-xs ${muted}`}>{layout.label}</span>
-        </div>
-        <div className="flex flex-col gap-2">
-          <div className="flex justify-center mb-2">
-            <div className="flex flex-col items-center gap-1">
-              <span className={`text-xs ${muted}`}>You</span>
-              <div className="w-9 h-11 rounded-lg bg-[#00aa13] flex items-center justify-center text-white text-xs font-bold">JIM</div>
-            </div>
-          </div>
-          {layout.rows.map((row, ri) => (
-            <div key={ri} className="flex gap-1.5 justify-center">
-              {row.map(num => {
-                const rider = bikeMap[num]
-                return (
-                  <div key={num} title={rider ? `${rider.name} · Bike ${num}` : `Bike ${num} · empty`}
-                    className={`w-9 h-11 rounded-lg flex items-center justify-center text-[10px] font-bold transition-colors
-                      ${rider
-                        ? rider.checkedIn ? "bg-[#00aa13] text-white" : "bg-[#e6f9e8] text-[#00aa13] border border-[#00aa13]"
-                        : darkMode ? "bg-gray-800 text-gray-600" : "bg-gray-100 text-gray-400"}`}>
-                    {rider ? rider.name.split(" ").map(w=>w[0]).join("") : num}
-                  </div>
-                )
-              })}
+        <p className={`text-sm font-semibold mb-4 ${heading}`}>Class stats</p>
+        <div className="grid grid-cols-3 gap-3">
+          {[["Attendance", `${attendPct}%`, `${attended}/${cls.booked} rode`],
+            ["Avg effort", `${avgEffort}%`, "of FTP"],
+            ["Completion", `${completion}%`, "finished the ride"]].map(([l,v,s],i) => (
+            <div key={i} className={`rounded-xl p-3.5 ${subtle}`}>
+              <p className={`text-xs ${muted} mb-1`}>{l}</p>
+              <p className={`text-2xl font-bold ${heading}`}>{v}</p>
+              <p className={`text-xs mt-0.5 ${muted}`}>{s}</p>
             </div>
           ))}
         </div>
-        <div className="flex items-center gap-4 mt-4 flex-wrap">
-          {isToday && <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-[#00aa13]" /><span className={`text-xs ${muted}`}>Checked in</span></div>}
-          <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-[#e6f9e8] border border-[#00aa13]" /><span className={`text-xs ${muted}`}>{cls.status === "done" ? "Attended" : "Booked"}</span></div>
-          <div className="flex items-center gap-1.5"><div className={`w-3 h-3 rounded ${darkMode ? "bg-gray-800" : "bg-gray-100"}`} /><span className={`text-xs ${muted}`}>Empty</span></div>
+      </div>
+
+      {/* Zone heatmap */}
+      <div className={`${card} p-5`}>
+        <p className={`text-sm font-semibold mb-4 ${heading}`}>Time in zone</p>
+        <div className="flex flex-col gap-2.5">
+          {zoneHeat.map((p, z) => (
+            <div key={z} className="flex items-center gap-3">
+              <span className={`text-xs font-semibold w-6 ${heading}`}>Z{z+1}</span>
+              <div className={`flex-1 h-3 rounded-full ${darkMode ? "bg-gray-800" : "bg-gray-100"}`}>
+                <div className="h-3 rounded-full" style={{ width: `${p}%`, background: ZONE_COLORS[z === 4 ? 5 : z === 3 ? 3 : z] }} />
+              </div>
+              <span className={`text-xs font-semibold tabular-nums w-9 text-right ${muted}`}>{p}%</span>
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* Rider list */}
+      {/* Rider engagement */}
+      <div className={`${card} p-5`}>
+        <p className={`text-sm font-semibold mb-1 ${heading}`}>Rider engagement</p>
+        <p className={`text-xs mb-4 ${muted}`}>Most improved this class</p>
+        <div className="flex flex-col gap-3">
+          {improved.map((r, i) => (
+            <div key={i} className="flex items-center gap-3">
+              <Avatar name={r.name} size={36} />
+              <p className={`text-sm font-medium flex-1 ${heading}`}>{r.name}</p>
+              <span className="text-sm font-bold text-[#00aa13]">{r.metric}</span>
+            </div>
+          ))}
+        </div>
+        <p className={`text-[11px] mt-4 ${muted}`}>🔒 Stats are aggregated &amp; anonymised. Individual progress is shown by first name only, to riders' instructors, with rider consent (GDPR).</p>
+      </div>
+    </div>
+  )
+
+  // ── UPCOMING CLASS — ride plan is the focus ──
+  return (
+    <div className="flex flex-col gap-4">
+      {Header}
+
+      {/* Ride plan / chart */}
+      <div className={`${card} p-5`}>
+        <p className={`text-sm font-semibold mb-3 ${heading}`}>Ride plan</p>
+        <div className="overflow-x-auto"><div style={{ minWidth: 360 }}>
+          <WorkoutChart sessionName={cls.name} darkMode={darkMode} />
+        </div></div>
+        <div className="mt-4 pt-4 border-t" style={{ borderColor: darkMode ? "#1f2937" : "#f3f4f6" }}>
+          <ZoneMixDonut segments={SESSION_INTERVALS[cls.name] || SESSION_INTERVALS._default} darkMode={darkMode} />
+        </div>
+      </div>
+
+      {/* Booked riders */}
       <div className={`${card} overflow-hidden`}>
         <div className={`flex items-center justify-between px-5 py-3.5 border-b ${divider}`}>
           <p className={`text-sm font-semibold ${heading}`}>Booked riders</p>
           <span className={`text-xs ${muted}`}>{isToday ? `${roster.filter(r=>r.checkedIn).length} checked in · ${cls.booked} total` : `${cls.booked} booked`}</span>
         </div>
-        <div className="max-h-[420px] overflow-y-auto">
+        <div className="max-h-[320px] overflow-y-auto">
           {roster.map((r, i) => (
             <div key={i} className={`flex items-center gap-3 px-5 py-3 border-b last:border-b-0 ${divider}`}>
               <Avatar name={r.name} size={34} />
               <div className="flex-1 min-w-0">
                 <p className={`text-sm font-medium ${heading}`}>{r.name}</p>
-                <p className={`text-xs ${muted}`}>Bike {r.bike}</p>
+                <p className={`text-xs ${muted}`}>{isSocialClass(cls.name) ? "Random seat" : `Bike ${r.bike}`}</p>
               </div>
-              {cls.status === "done"
-                ? <span className={`text-xs ${muted}`}>Attended</span>
-                : r.checkedIn
+              {r.checkedIn
                 ? <span className="text-xs font-semibold text-[#00aa13] flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#00aa13]" />Checked in</span>
                 : <span className={`text-xs ${muted}`}>Booked</span>}
             </div>
@@ -5031,6 +5098,42 @@ function ClassRoster({ cls, darkMode }) {
           </div>
         )}
       </div>
+
+      {/* Studio layout — collapsed by default (not the focus) */}
+      {!isSocialClass(cls.name) && (
+        <div className={`${card} overflow-hidden`}>
+          <button onClick={() => setShowLayout(s => !s)} className={`w-full flex items-center justify-between px-5 py-3.5 transition-colors ${darkMode ? "hover:bg-gray-800" : "hover:bg-gray-50"}`}>
+            <span className={`text-sm font-semibold ${heading}`}>Studio layout</span>
+            <ChevronDown size={15} className={`transition-transform ${showLayout ? "rotate-180" : ""} ${muted}`} />
+          </button>
+          {showLayout && (
+            <div className="px-5 pb-5">
+              <div className="flex flex-col gap-2">
+                <div className="flex justify-center mb-2">
+                  <div className="flex flex-col items-center gap-1">
+                    <span className={`text-xs ${muted}`}>You</span>
+                    <div className="w-9 h-11 rounded-lg bg-[#00aa13] flex items-center justify-center text-white text-xs font-bold">JIM</div>
+                  </div>
+                </div>
+                {layout.rows.map((row, ri) => (
+                  <div key={ri} className="flex gap-1.5 justify-center">
+                    {row.map(num => {
+                      const rider = bikeMap[num]
+                      return (
+                        <div key={num} title={rider ? `${rider.name} · Bike ${num}` : `Bike ${num} · empty`}
+                          className={`w-9 h-11 rounded-lg flex items-center justify-center text-[10px] font-bold
+                            ${rider ? rider.checkedIn ? "bg-[#00aa13] text-white" : "bg-[#e6f9e8] text-[#00aa13] border border-[#00aa13]" : darkMode ? "bg-gray-800 text-gray-600" : "bg-gray-100 text-gray-400"}`}>
+                          {rider ? rider.name.split(" ").map(w=>w[0]).join("") : num}
+                        </div>
+                      )
+                    })}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -5257,6 +5360,7 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
   const [dragI, setDragI] = useState(null)
   const [dropI, setDropI] = useState(null)
   const [selBars, setSelBars] = useState(() => new Set())   // selected merged-bar indices
+  const [zoom, setZoom] = useState(1)                        // canvas horizontal zoom
   const rafRef = useRef(0), lastRef = useRef(0), wrapRef = useRef(null)
   const audioRef = useRef(null), metroRef = useRef(null)
 
@@ -5560,9 +5664,10 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
           {tracks.map((t, i) => (
             <div key={i}
               draggable
-              onDragStart={() => setDragI(i)}
-              onDragOver={e => { e.preventDefault(); if (dropI !== i) setDropI(i) }}
-              onDrop={() => { moveTo(dragI, i); setDragI(null); setDropI(null) }}
+              onDragStart={e => { setDragI(i); e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", String(i)) } catch {} }}
+              onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; if (dropI !== i) setDropI(i) }}
+              onDragEnter={e => { e.preventDefault(); if (dropI !== i) setDropI(i) }}
+              onDrop={e => { e.preventDefault(); moveTo(dragI, i); setDragI(null); setDropI(null) }}
               onDragEnd={() => { setDragI(null); setDropI(null) }}
               className={`flex items-center gap-2 px-3 py-2 rounded-xl transition-all ${subtle}
                 ${dragI === i ? "opacity-40" : ""} ${dropI === i && dragI !== i ? "ring-2 ring-[#00aa13]" : ""}`}>
@@ -5641,8 +5746,9 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
           <span className={`text-xs font-semibold ${total > TARGET ? "text-orange-500" : muted}`}>{fmtSecs(total)} / {length}m</span>
         </div>
 
-        {/* Combined wrapper: waveform + bars + draggable playhead */}
-        <div ref={wrapRef} className="relative select-none" style={{ touchAction: "none" }}
+        {/* Combined wrapper: waveform + bars + draggable playhead (zoomable, scrolls horizontally) */}
+        <div className="overflow-x-auto" style={{ overflowY: "visible" }}>
+        <div ref={wrapRef} className="relative select-none" style={{ touchAction: "none", width: `${zoom*100}%`, minWidth: "100%" }}
           onPointerMove={e => {
             if (!wrapRef.current) return
             const rect = wrapRef.current.getBoundingClientRect()
@@ -5727,6 +5833,17 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
                 style={{ left: 1, touchAction: "none" }} title="Drag to move insert point" />
             </div>
           )}
+        </div>
+        </div>
+
+        {/* Zoom control */}
+        <div className="flex items-center justify-end gap-1.5 mt-2">
+          <span className={`text-[10px] ${muted}`}>Zoom</span>
+          <button onClick={() => setZoom(z => Math.max(1, +(z - 0.5).toFixed(1)))} disabled={zoom <= 1}
+            className={`w-6 h-6 rounded-lg flex items-center justify-center text-sm font-bold ${zoom <= 1 ? "opacity-30" : ""} ${darkMode ? "bg-gray-800 text-gray-300" : "bg-gray-100 text-gray-600"}`}>−</button>
+          <span className={`text-[10px] font-semibold w-7 text-center tabular-nums ${muted}`}>{zoom}×</span>
+          <button onClick={() => setZoom(z => Math.min(5, +(z + 0.5).toFixed(1)))} disabled={zoom >= 5}
+            className={`w-6 h-6 rounded-lg flex items-center justify-center text-sm font-bold ${zoom >= 5 ? "opacity-30" : ""} ${darkMode ? "bg-gray-800 text-gray-300" : "bg-gray-100 text-gray-600"}`}>+</button>
         </div>
 
         {/* Play + insert controls */}

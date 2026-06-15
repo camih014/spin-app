@@ -1012,7 +1012,7 @@ export default function App() {
   function publishClass(cls) {
     setBuiltClasses(prev => {
       const without = prev.filter(c => c.name !== cls.name)
-      return [{ name: cls.name, length: cls.length, social: cls.social }, ...without]
+      return [{ name: cls.name, length: cls.length, social: cls.social, series: cls.series, weeks: cls.weeks || 1 }, ...without]
     })
   }
 
@@ -4745,11 +4745,11 @@ function presetTracks(name) {
 }
 
 const SEED_BUILT_CLASSES = [
-  { name: "Sunrise Power",     length: 45, social: false },
-  { name: "HIIT Blast",        length: 30, social: false },
-  { name: "Rhythm Ride",       length: 45, social: true  },
-  { name: "Threshold Push",    length: 45, social: false },
-  { name: "Endurance Builder", length: 60, social: false },
+  { name: "Sunrise Power",     length: 45, social: false, weeks: 1 },
+  { name: "HIIT Blast",        length: 30, social: false, weeks: 1 },
+  { name: "Rhythm Ride",       length: 45, social: true,  weeks: 1 },
+  { name: "Threshold Push",    length: 45, social: false, weeks: 1 },
+  { name: "4-Week Bootcamp",   length: 45, social: false, series: true, weeks: 4 },
 ]
 
 const QUOTE_PRESETS = [
@@ -5371,8 +5371,10 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
       const z = ENERGY_ZONE[s.energy]
       out.push([s.secs, z, cadFor(z)])
     }))
+    // auto warm-up at the start + cool-down at the end
+    const withEnds = [[wc.warmMin*60, 1, 1], ...out, [wc.coolMin*60, 1, 0]]
     setUndoStack(s => [...s, strokes])
-    setStrokes(out); setCursor(null); setAutoWarm(false); setAutoCool(false)
+    setStrokes(withEnds); setCursor(null); setAutoWarm(true); setAutoCool(true)
     setLength([30,45,60].reduce((a,b)=>Math.abs(b-playlistSecs/60)<Math.abs(a-playlistSecs/60)?b:a, 45))
   }
 
@@ -5408,11 +5410,7 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
 
   function publish() {
     if (!total) return
-    if (programme) {
-      for (let w = 0; w < weeks; w++) onPublish?.({ name: `${name} · Wk ${w+1}`, length, social })
-    } else {
-      onPublish?.({ name, length, social })
-    }
+    onPublish?.({ name, length, social, series: programme, weeks: programme ? weeks : 1 })
     setPublished(true)
     setTimeout(() => setPublished(false), 2500)
   }
@@ -5978,6 +5976,22 @@ function reqSortKey(r) {
   return DAY_ORDER.indexOf(s.day) * 10000 + parseInt(s.time.replace(":", ""), 10)
 }
 
+// Lay a multi-week set across the weekly slots, in order, week by week
+function setPlan(slots, weeks) {
+  const ordered = [...slots].sort((a, b) => DAY_ORDER.indexOf(a.day) - DAY_ORDER.indexOf(b.day))
+  const out = []
+  let s = 0, calWeek = 0
+  while (s < weeks && ordered.length) {
+    for (const sl of ordered) {
+      if (s >= weeks) break
+      out.push({ set: s + 1, day: sl.day, time: sl.time, calWeek: calWeek + 1 })
+      s++
+    }
+    calWeek++
+  }
+  return out
+}
+
 function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] }) {
   const heading = darkMode ? "text-white"    : "text-gray-900"
   const muted   = darkMode ? "text-gray-400" : "text-gray-500"
@@ -5996,6 +6010,8 @@ function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] 
   const [toast, setToast]     = useState(false)
 
   const selectedClass = builtClasses.find(b => b.name === className)
+  const isSet = !!selectedClass?.series
+  const plan = isSet ? setPlan(slots, selectedClass.weeks) : null
   const sortedRequests = [...requests].sort((a, b) => reqSortKey(a) - reqSortKey(b))
 
   function addSlot()  { setSlots(s => [...s, { day: "Mon", time: "18:00" }]) }
@@ -6004,7 +6020,8 @@ function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] 
 
   function submit() {
     if (!className) return
-    setRequests(p => [{ name: className, studio, location, recurring, social: selectedClass?.social, slots: slots.map(s => ({ ...s })), status: "pending" }, ...p])
+    setRequests(p => [{ name: className, studio, location, recurring, social: selectedClass?.social,
+      series: isSet, weeks: selectedClass?.weeks, slots: slots.map(s => ({ ...s })), status: "pending" }, ...p])
     setToast(true)
     setTimeout(() => setToast(false), 2500)
   }
@@ -6021,9 +6038,9 @@ function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] 
             <label className={`block text-xs font-semibold mb-1.5 ${muted}`}>Class</label>
             <select value={className} onChange={e => setClassName(e.target.value)} className={selectCls}>
               {builtClasses.length === 0 && <option value="">No classes built yet</option>}
-              {builtClasses.map(c => <option key={c.name} value={c.name}>{c.name} · {c.length} min{c.social ? " · Social" : ""}</option>)}
+              {builtClasses.map(c => <option key={c.name} value={c.name}>{c.name} · {c.length} min{c.series ? ` · ${c.weeks}-week set` : ""}{c.social ? " · Social" : ""}</option>)}
             </select>
-            <p className={`text-xs mt-1.5 ${muted}`}>Pick from classes you've built in Class Builder{selectedClass?.social && " · 🎲 random seating"}</p>
+            <p className={`text-xs mt-1.5 ${muted}`}>Pick from classes you've built in Class Builder{selectedClass?.social && " · 🎲 random seating"}{isSet && ` · 📈 ${selectedClass.weeks}-session set`}</p>
           </div>
           <div className="sm:col-span-2">
             <label className={`block text-xs font-semibold mb-1.5 ${muted}`}>Location</label>
@@ -6046,7 +6063,7 @@ function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] 
         {/* Day + time slots */}
         <div className="mt-4">
           <div className="flex items-center justify-between mb-2">
-            <label className={`text-xs font-semibold ${muted}`}>Day & time{recurring ? " · repeats weekly" : ""}</label>
+            <label className={`text-xs font-semibold ${muted}`}>{isSet ? "Weekly slots · the set fills these in order" : `Day & time${recurring ? " · repeats weekly" : ""}`}</label>
             <button onClick={addSlot} className="text-xs font-semibold text-[#00aa13] hover:underline">+ Add another time</button>
           </div>
           <div className="flex flex-col gap-2">
@@ -6066,6 +6083,20 @@ function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] 
               </div>
             ))}
           </div>
+
+          {/* Set rollout preview */}
+          {isSet && plan && (
+            <div className={`mt-3 rounded-xl p-3 ${subtle}`}>
+              <p className={`text-xs font-semibold mb-2 ${heading}`}>Set rollout · {selectedClass.weeks} sessions over {plan[plan.length-1].calWeek} week{plan[plan.length-1].calWeek > 1 ? "s" : ""}</p>
+              <div className="flex flex-wrap gap-1.5">
+                {plan.map((p, i) => (
+                  <span key={i} className={`text-[11px] font-medium px-2 py-1 rounded-lg ${darkMode ? "bg-gray-900 text-gray-300" : "bg-white text-gray-600"}`}>
+                    <span className="text-[#00aa13] font-bold">Set {p.set}</span> · {p.day} {p.time}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Recurring */}
@@ -6095,8 +6126,8 @@ function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] 
               <p className={`text-sm font-bold tabular-nums ${heading}`}>{r.slots[0].time}</p>
             </div>
             <div className="flex-1 min-w-0">
-              <p className={`text-sm font-semibold ${heading}`}>{r.name}{r.social && <span className="ml-1.5">🎲</span>}</p>
-              <p className={`text-xs mt-0.5 ${muted}`}>{r.location ? `${r.location.replace("SpinOut · ","")} · ` : ""}{r.studio}{r.recurring && ` · Weekly · ${r.slots.length} slot${r.slots.length > 1 ? "s" : ""}`}</p>
+              <p className={`text-sm font-semibold ${heading}`}>{r.name}{r.series && <span className="ml-1.5">📈</span>}{r.social && <span className="ml-1.5">🎲</span>}</p>
+              <p className={`text-xs mt-0.5 ${muted}`}>{r.location ? `${r.location.replace("SpinOut · ","")} · ` : ""}{r.studio}{r.series ? ` · ${r.weeks}-session set across ${r.slots.map(s=>s.day).join(" & ")}` : r.recurring ? ` · Weekly · ${r.slots.length} slot${r.slots.length > 1 ? "s" : ""}` : ""}</p>
             </div>
             {r.status === "approved"
               ? <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-[#e6f9e8] text-[#00aa13] flex-shrink-0">Approved</span>

@@ -1905,6 +1905,11 @@ const ZONE_COLORS  = ["#36aee2","#82ed3c","#fde53d","#fb7512","#e91236","#741a10
 const ZONE_HEIGHTS = [12, 28, 46, 64, 80, 92, 100]
 const ZONE_NAMES   = ["Recovery","Endurance","Tempo","Threshold","VO₂ Max","Anaerobic","Sprint"]
 
+// Hard efforts (Z5 VO₂, Z6 Anaerobic, Z7 Sprint) must stay short with recovery after — like a real spin class.
+const HARD_ZONE_MIN  = 5    // Z5 and above are "hard"
+const HARD_BURST_MAX = 60   // seconds — max continuous time in a hard zone
+const HARD_RECOVERY_Z = 2   // zone the remainder of an over-long burst drops to
+
 function fmtSecs(s) {
   s = Math.round(s)
   if (s < 60) return `${s}s`
@@ -5356,9 +5361,11 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
   const [weeks, setWeeks]     = useState(4)
   const [progression, setProgression] = useState("Bootcamp")
   const [weekAdjust, setWeekAdjust] = useState({})   // per-week manual intensity offset
+  const [weekEdits, setWeekEdits]   = useState({})   // per-week block-level overrides { [w]: strokes }
+  const [weekOpen, setWeekOpen]     = useState(null) // which week is expanded for editing
   const [previewIdx, setPreviewIdx] = useState(null)
   const [dragI, setDragI] = useState(null)
-  const [dropI, setDropI] = useState(null)
+  const [dropLine, setDropLine] = useState(null)   // insertion index (0..n) shown while dragging a song
   const [selBars, setSelBars] = useState(() => new Set())   // selected merged-bar indices
   const [zoom, setZoom] = useState(1)                        // canvas horizontal zoom
   const rafRef = useRef(0), lastRef = useRef(0), wrapRef = useRef(null)
@@ -5393,6 +5400,7 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
   const scale  = Math.max(TARGET, total)
   const insertPos = cursor == null ? total : Math.min(cursor, total)
   const cur    = insertPos
+  const snap   = zoom >= 4 ? 1 : zoom >= 2 ? 5 : 15   // finer cursor snapping as you zoom in to catch a beat drop
 
   // Playback — sweeps the insert cursor across the timeline so you can lay zones down in time
   useEffect(() => {
@@ -5434,15 +5442,34 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
   const warmOk = warmSecs >= wc.warmMin * 60
   const coolOk = coolSecs >= wc.coolMin * 60
 
+  // When a ride is built from music the warm-up/cool-down push the songs in from the ends — offset the audio
+  // lane by the same amount so each song sits directly above the intensity it produced.
+  const musicLeadIn  = tracks.length && autoWarm && merged.length && merged[0][1] === 1 ? merged[0][0] : 0
+  const musicTailOut = tracks.length && autoCool && merged.length && merged[merged.length-1][1] === 1 ? merged[merged.length-1][0] : 0
+
   // Lay tracks across the timeline; each track's audio sections hint at a zone
   const playlistSecs = tracks.reduce((s, t) => s + t.mins * 60, 0)
   let tAcc = 0
   const trackSegs = tracks.map(t => {
-    const secs = t.mins * 60
+    const sections = songSections(t.mins * 60, t.seed)
+    const secs = sections.reduce((a, s) => a + s.secs, 0)   // exact section sum so song aligns with derived bars
     const start = tAcc; tAcc += secs
-    return { ...t, start, secs, sections: songSections(secs, t.seed) }
+    return { ...t, start, secs, sections }
   })
   const cadFor = z => z >= 5 ? 3 : z >= 3 ? 2 : 1
+
+  // No long bursts of Z5+ — cap at 60s, the rest of the burst becomes recovery (keeps total length, so the
+  // music lane stays aligned). The natural breakdown that follows a drop merges into a decent break.
+  function capHardZones(list) {
+    const out = []
+    for (const [secs, z, c] of list) {
+      if (z >= HARD_ZONE_MIN && secs > HARD_BURST_MAX) {
+        out.push([HARD_BURST_MAX, z, c])
+        out.push([secs - HARD_BURST_MAX, HARD_RECOVERY_Z, cadFor(HARD_RECOVERY_Z)])
+      } else out.push([secs, z, c])
+    }
+    return out
+  }
 
   // Search the YT catalogue + playlists
   const q = query.trim().toLowerCase()
@@ -5462,9 +5489,14 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
     setTracks(t => [...t, ...songs.map(makeTrack)]); setQuery("")
   }
   function removeTrack(i) { clearInterval(metroRef.current); setPreviewIdx(null); setTracks(t => t.filter((_, j) => j !== i)) }
-  function moveTo(from, to) {
-    if (from == null || to == null || from === to) return
-    setTracks(t => { const n = [...t]; const [x] = n.splice(from, 1); n.splice(to, 0, x); return n })
+  function moveToIndex(from, insertIdx) {
+    if (from == null || insertIdx == null) return
+    setTracks(t => {
+      const n = [...t]; const [x] = n.splice(from, 1)
+      let idx = from < insertIdx ? insertIdx - 1 : insertIdx
+      idx = Math.max(0, Math.min(n.length, idx))
+      n.splice(idx, 0, x); return n
+    })
     setPreviewIdx(null); clearInterval(metroRef.current)
   }
 
@@ -5476,8 +5508,8 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
       const z = ENERGY_ZONE[s.energy]
       out.push([s.secs, z, cadFor(z)])
     }))
-    // auto warm-up at the start + cool-down at the end
-    const withEnds = [[wc.warmMin*60, 1, 1], ...out, [wc.coolMin*60, 1, 0]]
+    // keep hard efforts short with recovery, then bookend with warm-up / cool-down
+    const withEnds = [[wc.warmMin*60, 1, 1], ...capHardZones(out), [wc.coolMin*60, 1, 0]]
     setUndoStack(s => [...s, strokes])
     setStrokes(withEnds); setCursor(null); setSelBars(new Set()); setAutoWarm(true); setAutoCool(true)
     setLength([30,45,60].reduce((a,b)=>Math.abs(b-playlistSecs/60)<Math.abs(a-playlistSecs/60)?b:a, 45))
@@ -5501,7 +5533,7 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
   // Progressive series — build work density each week (longer efforts, less recovery).
   // Peaks stay the same; raising peaks would just demand more recovery.
   function weekBump(w) { return Math.max(0, PROGRESSIONS[progression].bump(w) + (weekAdjust[w] || 0)) }
-  function weekStrokes(w) {
+  function autoWeekStrokes(w) {
     const b = weekBump(w)
     if (b === 0) return merged.map(s => [...s])
     return merged.map(([secs, z, c], i) => {
@@ -5510,8 +5542,25 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
       return [Math.max(15, Math.round(secs * (1 - 0.10 * b))), z, c]     // shorter recovery
     })
   }
+  // A week shows its manual override if it has one, otherwise the auto progression
+  function weekStrokes(w) { return weekEdits[w] ? weekEdits[w].map(s => [...s]) : autoWeekStrokes(w) }
   function weekWorkSecs(w) { return weekStrokes(w).reduce((s, [secs, z]) => s + (z >= 3 ? secs : 0), 0) }
   function adjustWeek(w, d) { setWeekAdjust(a => ({ ...a, [w]: Math.max(-3, Math.min(4, (a[w] || 0) + d)) })) }
+
+  // Per-week block editing — first edit forks that week off the auto progression into an override
+  function editWeek(w, fn) {
+    setWeekEdits(e => {
+      const base = e[w] ? e[w].map(s => [...s]) : autoWeekStrokes(w)
+      return { ...e, [w]: fn(base) }
+    })
+  }
+  function weekBlockDur(w, i, d)  { editWeek(w, s => s.map((st, j) => j === i ? [Math.max(15, st[0] + d), st[1], st[2]] : st)) }
+  function weekBlockZone(w, i, d) { editWeek(w, s => s.map((st, j) => j === i ? [st[0], Math.max(1, Math.min(7, st[1] + d)), st[2]] : st)) }
+  function weekRemoveBlock(w, i)  { editWeek(w, s => s.length > 1 ? s.filter((_, j) => j !== i) : s) }
+  function resetWeek(w) {
+    setWeekEdits(e => { const n = { ...e }; delete n[w]; return n })
+    setWeekAdjust(a => { const n = { ...a }; delete n[w]; return n })
+  }
 
   function publish() {
     if (!total) return
@@ -5662,15 +5711,32 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
             </div>
           )}
           {tracks.map((t, i) => (
-            <div key={i}
+            <div key={i} className="relative"
+              onDragOver={e => {
+                if (dragI == null) return
+                e.preventDefault(); e.dataTransfer.dropEffect = "move"
+                const r = e.currentTarget.getBoundingClientRect()
+                const idx = e.clientY < r.top + r.height / 2 ? i : i + 1
+                if (dropLine !== idx) setDropLine(idx)
+              }}
+              onDrop={e => { e.preventDefault(); moveToIndex(dragI, dropLine); setDragI(null); setDropLine(null) }}>
+              {/* insertion line above this row */}
+              {dragI != null && dropLine === i && (
+                <div className="absolute -top-1 left-0 right-0 h-0.5 rounded-full bg-[#00aa13] z-10 pointer-events-none">
+                  <span className="absolute -left-0.5 -top-1 w-2.5 h-2.5 rounded-full bg-[#00aa13]" />
+                </div>
+              )}
+              {/* insertion line below the last row */}
+              {dragI != null && i === tracks.length - 1 && dropLine === tracks.length && (
+                <div className="absolute -bottom-1 left-0 right-0 h-0.5 rounded-full bg-[#00aa13] z-10 pointer-events-none">
+                  <span className="absolute -left-0.5 -top-1 w-2.5 h-2.5 rounded-full bg-[#00aa13]" />
+                </div>
+              )}
+              <div
               draggable
               onDragStart={e => { setDragI(i); e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", String(i)) } catch {} }}
-              onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; if (dropI !== i) setDropI(i) }}
-              onDragEnter={e => { e.preventDefault(); if (dropI !== i) setDropI(i) }}
-              onDrop={e => { e.preventDefault(); moveTo(dragI, i); setDragI(null); setDropI(null) }}
-              onDragEnd={() => { setDragI(null); setDropI(null) }}
-              className={`flex items-center gap-2 px-3 py-2 rounded-xl transition-all ${subtle}
-                ${dragI === i ? "opacity-40" : ""} ${dropI === i && dragI !== i ? "ring-2 ring-[#00aa13]" : ""}`}>
+              onDragEnd={() => { setDragI(null); setDropLine(null) }}
+              className={`flex items-center gap-2 px-3 py-2 rounded-xl transition-all ${subtle} ${dragI === i ? "opacity-40" : ""}`}>
               <span className="flex-shrink-0 cursor-grab active:cursor-grabbing select-none leading-none text-base" style={{ color: darkMode ? "#6b7280" : "#9ca3af" }} title="Drag to reorder">⠿</span>
               <span className={`text-xs font-bold w-4 text-center flex-shrink-0 ${muted}`}>{i+1}</span>
               <button onClick={() => previewTrack(i)} title="Hear the tempo"
@@ -5684,6 +5750,7 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
                 <p className={`text-xs ${muted}`}>{t.artist ? `${t.artist} · ` : ""}{t.bpm} BPM · {t.mins}:00</p>
               </div>
               <button onClick={() => removeTrack(i)} className={`w-5 h-5 rounded flex items-center justify-center text-xs flex-shrink-0 ${darkMode ? "hover:bg-gray-700 text-gray-500" : "hover:bg-gray-200 text-gray-400"}`}>✕</button>
+              </div>
             </div>
           ))}
         </div>
@@ -5753,7 +5820,7 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
             if (!wrapRef.current) return
             const rect = wrapRef.current.getBoundingClientRect()
             const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
-            if (dragging) { setCursor(Math.min(Math.round(frac*scale/15)*15, total)); return }
+            if (dragging) { setCursor(Math.min(Math.round(frac*scale/snap)*snap, total)); return }
             const t = frac*scale; let acc = 0, h = null
             for (const [secs, zone, cad] of merged) { if (t>=acc && t<acc+secs) { h = { frac, start: acc, secs, zone, cad }; break } acc += secs }
             setHover(h)
@@ -5772,6 +5839,14 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
           {/* Audio track lane — each song laid across the timeline */}
           <div className={`relative w-full rounded-lg overflow-hidden mb-1.5 ${darkMode ? "bg-gray-800/60" : "bg-gray-50"}`} style={{ height: 44 }}>
             <div className="absolute inset-0 flex">
+              {musicLeadIn > 0 && (
+                <div className="relative flex items-center justify-center border-r flex-shrink-0"
+                  style={{ width: `${musicLeadIn / scale * 100}%`, borderColor: darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)",
+                    backgroundImage: `repeating-linear-gradient(45deg, ${darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)"} 0 5px, transparent 5px 10px)` }}
+                  title={`Warm-up · ${fmtSecs(musicLeadIn)}`}>
+                  <span className={`text-[8px] font-medium ${muted}`}>Warm-up</span>
+                </div>
+              )}
               {trackSegs.map((t, i) => (
                 <div key={i} className="relative flex items-end border-r overflow-hidden"
                   style={{ width: `${t.secs / scale * 100}%`, borderColor: darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)" }}
@@ -5789,6 +5864,14 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
                   )}
                 </div>
               ))}
+              {musicTailOut > 0 && (
+                <div className="relative flex items-center justify-center flex-shrink-0"
+                  style={{ width: `${musicTailOut / scale * 100}%`,
+                    backgroundImage: `repeating-linear-gradient(45deg, ${darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)"} 0 5px, transparent 5px 10px)` }}
+                  title={`Cool-down · ${fmtSecs(musicTailOut)}`}>
+                  <span className={`text-[8px] font-medium ${muted}`}>Cool-down</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -5827,7 +5910,7 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
               <div className="w-0.5 h-full bg-[#00aa13] pointer-events-none" style={{ boxShadow: playing ? "0 0 6px #00aa13" : "none" }} />
               <div
                 onPointerDown={e => { e.stopPropagation(); setPlaying(false); setDragging(true); try { e.currentTarget.setPointerCapture(e.pointerId) } catch {} }}
-                onPointerMove={e => { if (!dragging || !wrapRef.current) return; const rect = wrapRef.current.getBoundingClientRect(); const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)); setCursor(Math.min(Math.round(frac*scale/15)*15, total)) }}
+                onPointerMove={e => { if (!dragging || !wrapRef.current) return; const rect = wrapRef.current.getBoundingClientRect(); const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)); setCursor(Math.min(Math.round(frac*scale/snap)*snap, total)) }}
                 onPointerUp={() => setDragging(false)}
                 className="absolute -top-1.5 -translate-x-1/2 w-4 h-4 rounded-full bg-[#00aa13] border-2 border-white shadow cursor-grab active:cursor-grabbing"
                 style={{ left: 1, touchAction: "none" }} title="Drag to move insert point" />
@@ -5838,12 +5921,12 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
 
         {/* Zoom control */}
         <div className="flex items-center justify-end gap-1.5 mt-2">
-          <span className={`text-[10px] ${muted}`}>Zoom</span>
+          <span className={`text-[10px] ${muted}`}>{zoom > 1 ? `Snap ${snap}s · ` : ""}Zoom</span>
           <button onClick={() => setZoom(z => Math.max(1, +(z - 0.5).toFixed(1)))} disabled={zoom <= 1}
             className={`w-6 h-6 rounded-lg flex items-center justify-center text-sm font-bold ${zoom <= 1 ? "opacity-30" : ""} ${darkMode ? "bg-gray-800 text-gray-300" : "bg-gray-100 text-gray-600"}`}>−</button>
           <span className={`text-[10px] font-semibold w-7 text-center tabular-nums ${muted}`}>{zoom}×</span>
-          <button onClick={() => setZoom(z => Math.min(5, +(z + 0.5).toFixed(1)))} disabled={zoom >= 5}
-            className={`w-6 h-6 rounded-lg flex items-center justify-center text-sm font-bold ${zoom >= 5 ? "opacity-30" : ""} ${darkMode ? "bg-gray-800 text-gray-300" : "bg-gray-100 text-gray-600"}`}>+</button>
+          <button onClick={() => setZoom(z => Math.min(8, +(z + 0.5).toFixed(1)))} disabled={zoom >= 8}
+            className={`w-6 h-6 rounded-lg flex items-center justify-center text-sm font-bold ${zoom >= 8 ? "opacity-30" : ""} ${darkMode ? "bg-gray-800 text-gray-300" : "bg-gray-100 text-gray-600"}`}>+</button>
         </div>
 
         {/* Play + insert controls */}
@@ -5854,7 +5937,7 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
               ? <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
               : <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5l12 7-12 7z"/></svg>}
           </button>
-          <input type="range" min={0} max={Math.max(total,1)} step={15} value={Math.min(insertPos, total)}
+          <input type="range" min={0} max={Math.max(total,1)} step={snap} value={Math.min(insertPos, total)}
             onChange={e => { setPlaying(false); setCursor(+e.target.value) }} disabled={total === 0}
             className="flex-1 accent-[#00aa13]" style={{ height: 4 }} />
           <span className={`text-xs font-semibold tabular-nums ${heading}`} style={{ width: 88, textAlign: "right" }}>{fmtClock(insertPos)} / {fmtClock(length*60)}</span>
@@ -5976,27 +6059,65 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
             </div>
             <p className={`text-xs mb-3 ${muted}`}>{PROGRESSIONS[progression].desc} · tap +/− to fine-tune any week</p>
 
-            {/* Per-week previews — adjustable */}
+            {/* Per-week previews — tap to open & edit block-by-block */}
             <div className="flex flex-col gap-2">
               {Array.from({ length: weeks }).map((_, w) => {
                 const ws = weekStrokes(w)
                 const wScale = ws.reduce((s, st) => s + st[0], 0) || 1
                 const work = weekWorkSecs(w)
                 const adj = weekAdjust[w] || 0
+                const edited = !!weekEdits[w]
+                const open = weekOpen === w
+                const ctrlBtn = `w-5 h-5 rounded flex items-center justify-center text-sm font-bold ${darkMode ? "bg-gray-700 text-gray-300 hover:bg-gray-600" : "bg-gray-200 text-gray-600 hover:bg-gray-300"}`
                 return (
-                  <div key={w} className={`flex items-center gap-2 p-2 rounded-xl ${subtle}`}>
-                    <span className={`text-xs font-bold w-10 flex-shrink-0 ${heading}`}>Wk {w+1}</span>
-                    <div className="flex items-end flex-1 rounded overflow-hidden" style={{ height: 28, gap: 1 }}>
-                      {ws.map(([secs, z], i) => (
-                        <div key={i} style={{ width: `${secs/wScale*100}%`, height: `${ZONE_HEIGHTS[z-1]}%`, background: ZONE_COLORS[z-1] }} />
-                      ))}
+                  <div key={w} className={`rounded-xl ${subtle}`}>
+                    <div className="flex items-center gap-2 p-2">
+                      <button onClick={() => setWeekOpen(open ? null : w)} className="flex items-center gap-1 flex-shrink-0" title="Open week to edit">
+                        <ChevronDown size={13} className={`transition-transform ${open ? "rotate-180" : ""} ${muted}`} />
+                        <span className={`text-xs font-bold w-8 text-left ${heading}`}>Wk {w+1}</span>
+                      </button>
+                      <button onClick={() => setWeekOpen(open ? null : w)} className="flex items-end flex-1 rounded overflow-hidden" style={{ height: 28, gap: 1 }}>
+                        {ws.map(([secs, z], i) => (
+                          <div key={i} style={{ width: `${secs/wScale*100}%`, height: `${ZONE_HEIGHTS[z-1]}%`, background: ZONE_COLORS[z-1] }} />
+                        ))}
+                      </button>
+                      {edited
+                        ? <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-[#00aa13] text-white flex-shrink-0">Edited</span>
+                        : <span className={`text-xs ${muted} flex-shrink-0 w-16 text-right`}>{fmtSecs(work)} work</span>}
+                      <div className="flex items-center gap-0.5 flex-shrink-0">
+                        <button onClick={() => adjustWeek(w, -1)} disabled={edited} className={`${ctrlBtn} ${edited ? "opacity-30 cursor-not-allowed" : ""}`}>−</button>
+                        <span className={`text-[10px] font-bold w-6 text-center tabular-nums ${adj === 0 ? muted : "text-[#00aa13]"}`}>{adj > 0 ? `+${adj}` : adj}</span>
+                        <button onClick={() => adjustWeek(w, 1)} disabled={edited} className={`${ctrlBtn} ${edited ? "opacity-30 cursor-not-allowed" : ""}`}>+</button>
+                      </div>
                     </div>
-                    <span className={`text-xs ${muted} flex-shrink-0 w-16 text-right`}>{fmtSecs(work)} work</span>
-                    <div className="flex items-center gap-0.5 flex-shrink-0">
-                      <button onClick={() => adjustWeek(w, -1)} className={`w-5 h-5 rounded flex items-center justify-center text-sm font-bold ${darkMode ? "bg-gray-700 text-gray-300" : "bg-gray-200 text-gray-600"}`}>−</button>
-                      <span className={`text-[10px] font-bold w-6 text-center tabular-nums ${adj === 0 ? muted : "text-[#00aa13]"}`}>{adj > 0 ? `+${adj}` : adj}</span>
-                      <button onClick={() => adjustWeek(w, 1)} className={`w-5 h-5 rounded flex items-center justify-center text-sm font-bold ${darkMode ? "bg-gray-700 text-gray-300" : "bg-gray-200 text-gray-600"}`}>+</button>
-                    </div>
+
+                    {open && (
+                      <div className={`px-2 pb-2 pt-1.5 border-t ${darkMode ? "border-gray-700" : "border-gray-200"}`}>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className={`text-[10px] ${muted}`}>{ws.length} blocks · ▲▼ zone · ± time</span>
+                          {edited && <button onClick={() => resetWeek(w)} className="text-[10px] font-semibold text-[#00aa13] hover:underline">↺ Reset to auto</button>}
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          {ws.map(([secs, z], i) => (
+                            <div key={i} className={`flex items-center gap-2 px-2 py-1 rounded-lg ${darkMode ? "bg-gray-900" : "bg-white"}`}>
+                              <div className="w-2 h-5 rounded-full flex-shrink-0" style={{ background: ZONE_COLORS[z-1] }} />
+                              <span className={`text-xs font-medium flex-1 min-w-0 truncate ${heading}`}>Z{z} {ZONE_NAMES[z-1]}</span>
+                              <div className="flex items-center gap-0.5 flex-shrink-0">
+                                <button onClick={() => weekBlockZone(w,i,-1)} disabled={z<=1} title="Lower zone" className={`${ctrlBtn} ${z<=1?"opacity-30 cursor-not-allowed":""}`}>▼</button>
+                                <button onClick={() => weekBlockZone(w,i,1)} disabled={z>=7} title="Raise zone" className={`${ctrlBtn} ${z>=7?"opacity-30 cursor-not-allowed":""}`}>▲</button>
+                              </div>
+                              <div className="flex items-center gap-0.5 flex-shrink-0">
+                                <button onClick={() => weekBlockDur(w,i,-15)} className={ctrlBtn}>−</button>
+                                <span className={`text-[10px] font-semibold tabular-nums w-12 text-center ${heading}`}>{fmtSecs(secs)}</span>
+                                <button onClick={() => weekBlockDur(w,i,15)} className={ctrlBtn}>+</button>
+                              </div>
+                              <button onClick={() => weekRemoveBlock(w,i)} title="Remove block"
+                                className={`w-5 h-5 rounded flex items-center justify-center text-xs flex-shrink-0 ${darkMode ? "hover:bg-gray-700 text-gray-500" : "hover:bg-gray-200 text-gray-400"}`}>✕</button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )
               })}

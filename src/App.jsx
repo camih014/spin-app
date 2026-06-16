@@ -4768,36 +4768,36 @@ const QUOTE_PRESETS = [
 // Reusable class template library — strokes as [secs, zone, rpmIndex]
 const CLASS_TEMPLATES = [
   { name: "Sunrise Power", length: 45, strokes: [
-    [420,1,1],[420,2,2],[180,3,2],[120,4,1],[180,3,2],[120,4,1],[60,5,3],[120,1,0],[60,5,3],[120,1,0],[300,2,1],[180,1,0],
+    [420,1,1],[420,2,2],[240,3,2],[180,4,1],[180,3,2],[180,4,1],[60,5,3],[120,1,0],[60,5,3],[120,1,0],[420,2,1],[300,1,0],
   ]},
   { name: "45 min HIIT", length: 45, strokes: [
-    [300,1,1],[180,2,2],
+    [360,1,1],[240,2,2],
     [40,5,3],[80,1,0],[40,5,3],[80,1,0],[40,5,3],[80,1,0],[40,5,3],[80,1,0],
-    [180,2,1],
+    [240,2,1],
     [30,6,3],[90,1,0],[30,6,3],[90,1,0],[30,6,3],[90,1,0],[30,6,3],[90,1,0],
     [180,2,1],
     [20,7,3],[100,1,0],[20,7,3],[100,1,0],[20,7,3],[100,1,0],
-    [300,1,0],
+    [360,1,0],
   ]},
   { name: "60 min Power Zone", length: 60, strokes: [
-    [420,1,1],[300,2,1],[600,4,2],[180,2,1],[600,4,2],[180,2,1],[480,4,2],[180,2,1],[300,3,2],[300,1,0],
+    [420,1,1],[300,2,1],[600,4,2],[180,2,1],[600,4,2],[180,2,1],[480,4,2],[180,2,1],[300,3,2],[360,1,0],
   ]},
   { name: "Beginner Ride", length: 45, strokes: [
-    [360,1,1],[600,2,1],[120,3,2],[300,2,1],[120,3,2],[300,2,1],[180,2,1],[300,1,0],
+    [360,1,1],[600,2,1],[120,3,2],[420,2,1],[120,3,2],[420,2,1],[240,2,1],[420,1,0],
   ]},
   { name: "Climb Day", length: 45, strokes: [
-    [360,1,1],[180,2,1],[360,4,0],[120,1,0],[420,4,0],[120,1,0],[300,5,0],[120,1,0],[240,4,0],[300,1,0],
+    [420,1,1],[180,2,1],[420,4,0],[120,1,0],[420,4,0],[120,1,0],[300,5,0],[120,1,0],[240,4,0],[360,1,0],
   ]},
   { name: "Taylor Swift Ride", length: 45, strokes: [
-    [300,1,1],[180,2,2],[120,3,2],[60,4,3],[120,3,2],[60,4,3],[120,3,2],[180,2,1],
-    [90,3,2],[30,5,3],[90,3,2],[30,5,3],[90,3,2],[180,2,1],[120,3,2],[60,4,3],[120,3,2],[300,1,0],
+    [360,1,1],[180,2,2],[180,3,2],[60,4,3],[180,3,2],[60,4,3],[150,3,2],[240,2,1],
+    [120,3,2],[30,5,3],[120,3,2],[30,5,3],[90,3,2],[180,2,1],[180,3,2],[60,4,3],[180,3,2],[300,1,0],
   ]},
   { name: "EDM Intervals", length: 45, strokes: [
-    [300,1,1],[180,2,2],[60,3,2],[30,6,3],[90,2,1],[60,3,2],[30,6,3],[90,2,1],
-    [60,3,2],[40,7,3],[90,2,1],[60,3,2],[40,7,3],[90,2,1],[120,4,2],[60,5,3],[120,2,1],[300,1,0],
+    [360,1,1],[300,2,2],[60,3,2],[30,6,3],[120,2,1],[60,3,2],[30,6,3],[120,2,1],
+    [60,3,2],[40,7,3],[120,2,1],[60,3,2],[40,7,3],[120,2,1],[120,4,2],[60,5,3],[210,2,1],[120,4,2],[60,5,3],[210,2,1],[400,1,0],
   ]},
   { name: "Endurance Builder", length: 60, strokes: [
-    [420,1,1],[600,2,1],[120,3,2],[600,2,1],[120,3,2],[600,2,1],[300,3,2],[300,1,0],
+    [420,1,1],[720,2,1],[120,3,2],[720,2,1],[120,3,2],[720,2,1],[480,3,2],[300,1,0],
   ]},
 ]
 
@@ -5342,6 +5342,10 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
   const [social, setSocial]   = useState(false)       // random seating
   const [length, setLength]   = useState(45)          // minutes
   const [tracks, setTracks]   = useState([])
+  const [warmTrack, setWarmTrack] = useState(null)   // dedicated warm-up song
+  const [coolTrack, setCoolTrack] = useState(null)   // dedicated cool-down song
+  const [slotOpen, setSlotOpen]   = useState(null)   // "warm" | "cool" — which slot's search is open
+  const [slotQuery, setSlotQuery] = useState("")
   const [query, setQuery]     = useState("")
   const [crossfade, setCrossfade] = useState(true)
   const [published, setPublished] = useState(false)
@@ -5444,8 +5448,8 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
 
   // When a ride is built from music the warm-up/cool-down push the songs in from the ends — offset the audio
   // lane by the same amount so each song sits directly above the intensity it produced.
-  const musicLeadIn  = tracks.length && autoWarm && merged.length && merged[0][1] === 1 ? merged[0][0] : 0
-  const musicTailOut = tracks.length && autoCool && merged.length && merged[merged.length-1][1] === 1 ? merged[merged.length-1][0] : 0
+  const musicLeadIn  = autoWarm && merged.length && merged[0][1] === 1 && (tracks.length || warmTrack) ? merged[0][0] : 0
+  const musicTailOut = autoCool && merged.length && merged[merged.length-1][1] === 1 && (tracks.length || coolTrack) ? merged[merged.length-1][0] : 0
 
   // Lay tracks across the timeline; each track's audio sections hint at a zone
   const playlistSecs = tracks.reduce((s, t) => s + t.mins * 60, 0)
@@ -5475,6 +5479,8 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
   const q = query.trim().toLowerCase()
   const songResults = q ? YT_CATALOG.filter(s => s.title.toLowerCase().includes(q) || s.artist.toLowerCase().includes(q)).slice(0, 6) : []
   const plResults   = q ? YT_PLAYLISTS.filter(p => p.name.toLowerCase().includes(q)).slice(0, 3) : []
+  const sq = slotQuery.trim().toLowerCase()
+  const slotResults = sq ? YT_CATALOG.filter(s => s.title.toLowerCase().includes(sq) || s.artist.toLowerCase().includes(sq)).slice(0, 5) : []
 
   function makeTrack(song) {
     const fullMins = 3 + (titleSeed(song.title) % 3)   // realistic full length 3–5 min
@@ -5762,6 +5768,58 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
           </button>
         )}
 
+        {/* Dedicated warm-up & cool-down songs (separate from the work playlist) */}
+        <div className="grid grid-cols-2 gap-2 mb-2">
+          {[["warm", "Warm-up", warmTrack, setWarmTrack], ["cool", "Cool-down", coolTrack, setCoolTrack]].map(([key, label, trk, setTrk]) => (
+            <div key={key} className={`rounded-xl p-2.5 ${subtle}`}>
+              <p className={`text-[11px] font-semibold mb-1.5 ${muted}`}>{label} song</p>
+              {trk ? (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm flex-shrink-0">🎵</span>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-xs font-medium truncate ${heading}`}>{trk.title}</p>
+                    <p className={`text-[10px] ${muted}`}>{trk.bpm} BPM</p>
+                  </div>
+                  <button onClick={() => { setTrk(null); if (slotOpen === key) setSlotOpen(null) }}
+                    className={`w-4 h-4 rounded flex items-center justify-center text-xs flex-shrink-0 ${darkMode ? "hover:bg-gray-700 text-gray-500" : "hover:bg-gray-200 text-gray-400"}`}>✕</button>
+                </div>
+              ) : (
+                <button onClick={() => { setSlotOpen(slotOpen === key ? null : key); setSlotQuery("") }}
+                  className={`w-full text-xs font-medium py-1.5 rounded-lg border border-dashed transition-colors ${slotOpen === key ? "border-[#00aa13] text-[#00aa13]" : darkMode ? "border-gray-700 text-gray-400 hover:bg-gray-800" : "border-gray-300 text-gray-500 hover:bg-gray-50"}`}>
+                  {slotOpen === key ? "Searching…" : `+ Add ${label.toLowerCase()} song`}
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+        {slotOpen && (
+          <div className="relative mb-3">
+            <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${darkMode ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="#FF0000"><path d="M23 12s0-3.9-.5-5.8a3 3 0 00-2.1-2.1C18.5 3.5 12 3.5 12 3.5s-6.5 0-8.4.6A3 3 0 001.5 6.2C1 8.1 1 12 1 12s0 3.9.5 5.8a3 3 0 002.1 2.1c1.9.6 8.4.6 8.4.6s6.5 0 8.4-.6a3 3 0 002.1-2.1C23 15.9 23 12 23 12z"/><path d="M10 15.5l5-3.5-5-3.5z" fill="#fff"/></svg>
+              <input autoFocus value={slotQuery} onChange={e => setSlotQuery(e.target.value)}
+                placeholder={`Search a ${slotOpen === "warm" ? "warm-up" : "cool-down"} song…`}
+                className={`flex-1 bg-transparent text-sm focus:outline-none ${darkMode ? "text-white" : "text-gray-900"}`} />
+              <button onClick={() => { setSlotOpen(null); setSlotQuery("") }} className={`text-xs ${muted}`}>✕</button>
+            </div>
+            {sq && (
+              <div className={`absolute left-0 right-0 mt-1 rounded-xl border shadow-lg z-20 overflow-hidden ${darkMode ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
+                {slotResults.length === 0 && <p className={`text-xs px-3 py-3 ${muted}`}>No results</p>}
+                {slotResults.map((s, i) => (
+                  <button key={i} onClick={() => { (slotOpen === "warm" ? setWarmTrack : setCoolTrack)(makeTrack(s)); setSlotOpen(null); setSlotQuery("") }}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors ${darkMode ? "hover:bg-gray-700" : "hover:bg-gray-50"}`}>
+                    <span className="text-base">🎵</span>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-medium truncate ${heading}`}>{s.title}</p>
+                      <p className={`text-xs ${muted}`}>{s.artist} · {s.bpm} BPM</p>
+                    </div>
+                    <span className="text-xs font-semibold text-[#00aa13]">+ Set</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* YouTube search + add */}
         <div className="relative">
           <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${darkMode ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
@@ -5840,11 +5898,14 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
           <div className={`relative w-full rounded-lg overflow-hidden mb-1.5 ${darkMode ? "bg-gray-800/60" : "bg-gray-50"}`} style={{ height: 44 }}>
             <div className="absolute inset-0 flex">
               {musicLeadIn > 0 && (
-                <div className="relative flex items-center justify-center border-r flex-shrink-0"
+                <div className="relative flex items-end border-r flex-shrink-0 overflow-hidden"
                   style={{ width: `${musicLeadIn / scale * 100}%`, borderColor: darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)",
-                    backgroundImage: `repeating-linear-gradient(45deg, ${darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)"} 0 5px, transparent 5px 10px)` }}
-                  title={`Warm-up · ${fmtSecs(musicLeadIn)}`}>
-                  <span className={`text-[8px] font-medium ${muted}`}>Warm-up</span>
+                    backgroundImage: warmTrack ? undefined : `repeating-linear-gradient(45deg, ${darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)"} 0 5px, transparent 5px 10px)` }}
+                  title={warmTrack ? `Warm-up · ${warmTrack.title} · ${warmTrack.bpm} BPM` : `Warm-up · ${fmtSecs(musicLeadIn)}`}>
+                  {warmTrack && <div className="absolute bottom-0 left-0 right-0" style={{ height: "38%", background: ZONE_COLORS[1], opacity: 0.5 }} />}
+                  <span className={`absolute top-0.5 left-1 text-[8px] font-medium truncate ${warmTrack ? (darkMode ? "text-gray-300" : "text-gray-600") : muted}`} style={{ maxWidth: "92%" }}>
+                    {warmTrack ? `${warmTrack.title} · ${warmTrack.bpm}` : "Warm-up"}
+                  </span>
                 </div>
               )}
               {trackSegs.map((t, i) => (
@@ -5865,11 +5926,14 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
                 </div>
               ))}
               {musicTailOut > 0 && (
-                <div className="relative flex items-center justify-center flex-shrink-0"
+                <div className="relative flex items-end flex-shrink-0 overflow-hidden"
                   style={{ width: `${musicTailOut / scale * 100}%`,
-                    backgroundImage: `repeating-linear-gradient(45deg, ${darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)"} 0 5px, transparent 5px 10px)` }}
-                  title={`Cool-down · ${fmtSecs(musicTailOut)}`}>
-                  <span className={`text-[8px] font-medium ${muted}`}>Cool-down</span>
+                    backgroundImage: coolTrack ? undefined : `repeating-linear-gradient(45deg, ${darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)"} 0 5px, transparent 5px 10px)` }}
+                  title={coolTrack ? `Cool-down · ${coolTrack.title} · ${coolTrack.bpm} BPM` : `Cool-down · ${fmtSecs(musicTailOut)}`}>
+                  {coolTrack && <div className="absolute bottom-0 left-0 right-0" style={{ height: "38%", background: ZONE_COLORS[1], opacity: 0.5 }} />}
+                  <span className={`absolute top-0.5 left-1 text-[8px] font-medium truncate ${coolTrack ? (darkMode ? "text-gray-300" : "text-gray-600") : muted}`} style={{ maxWidth: "92%" }}>
+                    {coolTrack ? `${coolTrack.title} · ${coolTrack.bpm}` : "Cool-down"}
+                  </span>
                 </div>
               )}
             </div>

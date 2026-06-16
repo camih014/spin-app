@@ -5203,7 +5203,6 @@ function InstructorClassesPage({ darkMode, onToggleDarkMode, initialClass }) {
   const heading = darkMode ? "text-white"    : "text-gray-900"
   const muted   = darkMode ? "text-gray-400" : "text-gray-500"
   const card    = `rounded-2xl border transition-colors ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`
-  const divider = darkMode ? "border-gray-800" : "border-gray-100"
 
   const [view, setView]         = useState("list")
   const [selected, setSelected] = useState(initialClass || instructorClasses.find(c => c.status === "upcoming"))
@@ -5228,51 +5227,86 @@ function InstructorClassesPage({ darkMode, onToggleDarkMode, initialClass }) {
 
   function pick(c) { setSelected(c); setMobileDetail(true) }
 
+  // group a list of classes into day buckets, preserving order
+  function groupByDay(list) {
+    const order = [], map = {}
+    list.forEach(c => {
+      if (!map[c.dateIso]) { map[c.dateIso] = { dateIso: c.dateIso, dateLabel: c.dateLabel, items: [] }; order.push(map[c.dateIso]) }
+      map[c.dateIso].items.push(c)
+    })
+    return order
+  }
+
   function ClassRow({ c }) {
     const on = c === selected
+    const done = c.status === "done", isPending = c.status === "pending"
+    const full = c.booked >= c.capacity
     return (
       <button onClick={() => pick(c)}
-        className={`w-full text-left flex items-center gap-4 px-5 py-4 border-b last:border-b-0 ${divider} transition-colors
-          ${on ? darkMode ? "bg-gray-800 border-l-2 border-l-[#00aa13]" : "bg-[#e6f9e8] border-l-2 border-l-[#00aa13]" : darkMode ? "hover:bg-gray-800" : "hover:bg-gray-50"}`}>
-        <div className="w-14 flex-shrink-0">
-          <p className={`text-xs font-medium ${muted}`}>{c.dateLabel}</p>
-          <p className={`text-sm font-bold tabular-nums ${on ? "text-[#00aa13]" : heading}`}>{c.time}</p>
+        className={`w-full text-left flex items-center gap-3 px-3.5 py-3 rounded-xl border transition-colors
+          ${on ? "border-[#00aa13] " + (darkMode ? "bg-gray-800" : "bg-[#e6f9e8]")
+               : darkMode ? "border-gray-800 hover:bg-gray-800/70" : "border-gray-100 hover:bg-gray-50"}`}>
+        <div className="w-11 flex-shrink-0 text-center">
+          <p className={`text-[15px] font-bold tabular-nums leading-tight ${on ? "text-[#00aa13]" : heading}`}>{c.time}</p>
         </div>
+        <div className={`w-px self-stretch flex-shrink-0 ${darkMode ? "bg-gray-700" : "bg-gray-200"}`} />
         <div className="flex-1 min-w-0">
-          <p className={`text-sm font-semibold ${on ? "text-[#00aa13]" : heading}`}>{c.name}</p>
-          <p className={`text-xs mt-0.5 ${muted}`}>{c.location?.replace("SpinOut · ","")} · {c.studio} · {c.booked}/{c.capacity}{c.waitlist > 0 && ` · ${c.waitlist} waitlist`}</p>
+          <p className={`text-sm font-semibold truncate ${heading}`}>{c.name}</p>
+          <p className={`text-xs mt-0.5 truncate ${muted}`}>{c.location?.replace("SpinOut · ","")} · {c.studio}{c.waitlist > 0 ? ` · ${c.waitlist} waitlist` : ""}</p>
         </div>
-        {c.status === "done"
-          ? <span className="text-xs font-semibold text-amber-500 flex-shrink-0">{c.rating} ★</span>
-          : c.status === "pending"
-          ? <span className="text-[10px] font-semibold text-amber-500 border border-amber-500/40 px-2 py-0.5 rounded-full flex-shrink-0">Pending</span>
-          : <span className={`text-xs font-semibold flex-shrink-0 ${c.booked >= c.capacity ? "text-orange-500" : "text-[#00aa13]"}`}>{c.booked >= c.capacity ? "Full" : `${c.capacity - c.booked} left`}</span>}
+        {done ? (
+          <span className="text-sm font-semibold text-amber-500 flex-shrink-0">{c.rating} ★</span>
+        ) : isPending ? (
+          <span className="text-[10px] font-semibold text-amber-500 border border-amber-500/40 px-2 py-1 rounded-full flex-shrink-0 whitespace-nowrap">Awaiting OK</span>
+        ) : (
+          <div className="flex-shrink-0 w-16 text-right">
+            <p className={`text-xs font-bold tabular-nums ${full ? "text-orange-500" : heading}`}>{c.booked}/{c.capacity}</p>
+            <div className="mt-1"><CapacityBar booked={c.booked} capacity={c.capacity} darkMode={darkMode} /></div>
+            <p className={`text-[10px] mt-0.5 font-medium ${full ? "text-orange-500" : "text-[#00aa13]"}`}>{full ? "Full" : `${c.capacity - c.booked} left`}</p>
+          </div>
+        )}
       </button>
     )
   }
 
+  const SectionLabel = ({ children, accent }) => (
+    <p className={`text-[11px] font-bold uppercase tracking-wider mb-2 px-1 ${accent || muted}`}>{children}</p>
+  )
+
   const ClassList = (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-6">
       {pending.length > 0 && (
         <div>
-          <p className={`text-xs font-semibold uppercase tracking-widest mb-2 px-1 text-amber-500`}>Pending approval · {pending.length}</p>
-          <div className={`${card} overflow-hidden`}>
+          <SectionLabel accent="text-amber-500">⏳ Pending approval · {pending.length}</SectionLabel>
+          <div className="flex flex-col gap-1.5">
             {pending.map((c, i) => <ClassRow key={i} c={c} />)}
           </div>
         </div>
       )}
       <div>
-        <p className={`text-xs font-semibold uppercase tracking-widest mb-2 px-1 ${muted}`}>Upcoming</p>
-        <div className={`${card} overflow-hidden`}>
-          {upcoming.map((c, i) => <ClassRow key={i} c={c} />)}
+        <SectionLabel>Upcoming · {upcoming.length}</SectionLabel>
+        <div className="flex flex-col gap-3">
+          {groupByDay(upcoming).map(g => (
+            <div key={g.dateIso}>
+              <div className="flex items-baseline gap-2 mb-1.5 px-1">
+                <p className={`text-xs font-bold ${g.dateIso === TODAY_ISO ? "text-[#00aa13]" : heading}`}>{g.dateLabel}</p>
+                <span className={`text-[11px] ${muted}`}>{g.items.length} {g.items.length === 1 ? "class" : "classes"}</span>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                {g.items.map((c, i) => <ClassRow key={i} c={c} />)}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
-      <div>
-        <p className={`text-xs font-semibold uppercase tracking-widest mb-2 px-1 ${muted}`}>Past</p>
-        <div className={`${card} overflow-hidden`}>
-          {past.map((c, i) => <ClassRow key={i} c={c} />)}
+      {past.length > 0 && (
+        <div>
+          <SectionLabel>Past · {past.length}</SectionLabel>
+          <div className="flex flex-col gap-1.5">
+            {past.map((c, i) => <ClassRow key={i} c={c} />)}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 

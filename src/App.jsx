@@ -1012,6 +1012,13 @@ const INSTRUCTOR_NAV = [
   { label: "Insights",      icon: BarChart3         },
 ]
 
+// Roles the signed-in person holds. This demo user is both a rider and an instructor, so they get a
+// workspace switcher. A rider-only account would have a single role and no toggle.
+const USER_ROLES = [
+  { key: "rider",      label: "Rider",      icon: Bike,            nav: RIDER_NAV,      home: "Home" },
+  { key: "instructor", label: "Instructor", icon: LayoutDashboard, nav: INSTRUCTOR_NAV, home: "Studio Home" },
+]
+
 export default function App() {
   const [activePage, setActivePage] = useState("Home")
   const [darkMode, setDarkMode]     = useState(false)
@@ -1035,11 +1042,17 @@ export default function App() {
     { label: "Log out",  icon: LogOut   },
   ]
 
-  const isInstructorPage = INSTRUCTOR_NAV.some(n => n.label === activePage)
-  const mobileNav = isInstructorPage ? INSTRUCTOR_NAV : RIDER_NAV
+  // Which workspace each page belongs to, so the mobile nav + role toggle stay in sync with the page
+  const workspaceOf = page => USER_ROLES.find(r => r.nav.some(n => n.label === page))?.key
+  const workspace = workspaceOf(activePage) || "rider"
+  const mobileNav = (USER_ROLES.find(r => r.key === workspace) || USER_ROLES[0]).nav
 
   function openRoster(cls) { setRosterClass(cls); setActivePage("My Classes") }
   function navTo(page) { setRosterClass(null); setActivePage(page) }
+  function switchWorkspace(key) {
+    const r = USER_ROLES.find(x => x.key === key); if (!r) return
+    setRosterClass(null); setActivePage(r.home)
+  }
 
   const toggle = key => setOpenSections(s => ({ ...s, [key]: !s[key] }))
   const dm = () => setDarkMode(!darkMode)
@@ -1080,7 +1093,7 @@ export default function App() {
       </aside>
 
       {/* ── Page content ── */}
-      <main className="flex-1 overflow-y-auto pb-16 md:pb-0">
+      <main className="flex-1 overflow-y-auto pb-24 md:pb-0">
         {/* Rider */}
         {activePage === "Home"         && <HomePage         darkMode={darkMode} onToggleDarkMode={dm} />}
         {activePage === "Bookings"     && <BookingsPage     darkMode={darkMode} onToggleDarkMode={dm} />}
@@ -1100,22 +1113,41 @@ export default function App() {
       </main>
 
       {/* ── Mobile bottom navigation ── */}
-      <nav className={`fixed bottom-0 left-0 right-0 md:hidden border-t z-40 flex items-center justify-around py-2 px-1
-        ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`}>
-        {mobileNav.map(item => (
-          <button
-            key={item.label}
-            onClick={() => navTo(item.label)}
-            className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg transition-colors
-              ${activePage === item.label
-                ? "text-[#00aa13]"
-                : darkMode ? "text-gray-500" : "text-gray-400"}`}
-          >
-            <item.icon size={20} />
-            <span className="text-[10px] font-medium">{item.label}</span>
-          </button>
-        ))}
-      </nav>
+      <div className="fixed bottom-0 left-0 right-0 md:hidden z-40">
+        {/* Workspace switcher — only shown when the person holds more than one role */}
+        {USER_ROLES.length > 1 && (
+          <div className="flex justify-center mb-1.5">
+            <div className={`inline-flex rounded-full p-0.5 border shadow-lg ${darkMode ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
+              {USER_ROLES.map(r => {
+                const on = r.key === workspace
+                return (
+                  <button key={r.key} onClick={() => switchWorkspace(r.key)}
+                    className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-colors
+                      ${on ? "bg-[#00aa13] text-white" : darkMode ? "text-gray-400" : "text-gray-500"}`}>
+                    <r.icon size={13} /> {r.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
+        <nav className={`border-t flex items-center justify-around py-2 px-1
+          ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`}>
+          {mobileNav.map(item => (
+            <button
+              key={item.label}
+              onClick={() => navTo(item.label)}
+              className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg transition-colors
+                ${activePage === item.label
+                  ? "text-[#00aa13]"
+                  : darkMode ? "text-gray-500" : "text-gray-400"}`}
+            >
+              <item.icon size={20} />
+              <span className="text-[10px] font-medium">{item.label}</span>
+            </button>
+          ))}
+        </nav>
+      </div>
 
     </div>
   )
@@ -4636,6 +4668,19 @@ const instructorClasses = [
   { dateLabel: "Wed 25 Feb",dateIso: "2026-02-25", time: "07:00", name: "Threshold Push",  studio: "Studio 1", location: "SpinOut · Hampstead",  capacity: 24, booked: 23, waitlist: 0, status: "done", seed: 4, rating: 4.9, attended: 21 },
   { dateLabel: "Tue 24 Feb",dateIso: "2026-02-24", time: "18:30", name: "Climb Intervals", studio: "Studio 2", location: "SpinOut · Shoreditch", capacity: 20, booked: 18, waitlist: 0, status: "done", seed: 8, rating: 4.8, attended: 17 },
   { dateLabel: "Mon 23 Feb",dateIso: "2026-02-23", time: "06:30", name: "Sunrise Power",   studio: "Studio 1", location: "SpinOut · Hampstead",  capacity: 24, booked: 24, waitlist: 2, status: "done", seed: 6, rating: 5.0, attended: 23 },
+  // upcoming — future weeks (March)
+  { dateLabel: "Mon 2 Mar", dateIso: "2026-03-02", time: "06:30", name: "Sunrise Power",   studio: "Studio 1", location: "SpinOut · Hampstead",  capacity: 24, booked: 12, waitlist: 0, status: "upcoming", seed: 3 },
+  { dateLabel: "Mon 2 Mar", dateIso: "2026-03-02", time: "18:30", name: "Threshold Push",  studio: "Studio 1", location: "SpinOut · Hampstead",  capacity: 24, booked: 9,  waitlist: 0, status: "upcoming", seed: 4 },
+  { dateLabel: "Wed 4 Mar", dateIso: "2026-03-04", time: "07:00", name: "Cadence Control", studio: "Studio 2", location: "SpinOut · Shoreditch", capacity: 20, booked: 7,  waitlist: 0, status: "upcoming", seed: 5 },
+  { dateLabel: "Thu 5 Mar", dateIso: "2026-03-05", time: "12:00", name: "Lunch Sprint",    studio: "Studio 2", location: "SpinOut · Shoreditch", capacity: 20, booked: 5,  waitlist: 0, status: "upcoming", seed: 7 },
+  { dateLabel: "Fri 6 Mar", dateIso: "2026-03-06", time: "19:00", name: "HIIT Blast",      studio: "Studio 1", location: "SpinOut · Hampstead",  capacity: 24, booked: 14, waitlist: 0, status: "upcoming", seed: 9 },
+  { dateLabel: "Sat 7 Mar", dateIso: "2026-03-07", time: "09:00", name: "Rhythm Ride",     studio: "Studio 1", location: "SpinOut · Hampstead",  capacity: 24, booked: 11, waitlist: 0, status: "upcoming", seed: 2 },
+  { dateLabel: "Mon 9 Mar", dateIso: "2026-03-09", time: "06:30", name: "Sunrise Power",   studio: "Studio 1", location: "SpinOut · Hampstead",  capacity: 24, booked: 6,  waitlist: 0, status: "upcoming", seed: 6 },
+  { dateLabel: "Thu 12 Mar",dateIso: "2026-03-12", time: "18:00", name: "Evening Flow",    studio: "Studio 2", location: "SpinOut · Shoreditch", capacity: 20, booked: 4,  waitlist: 0, status: "upcoming", seed: 11 },
+  // pending — awaiting studio owner approval
+  { dateLabel: "Tue 10 Mar",dateIso: "2026-03-10", time: "20:00", name: "Night Ride",      studio: "Studio 2", location: "SpinOut · Shoreditch", capacity: 20, booked: 0,  waitlist: 0, status: "pending", seed: 8 },
+  { dateLabel: "Fri 13 Mar",dateIso: "2026-03-13", time: "12:30", name: "Midday Burn",     studio: "Studio 1", location: "SpinOut · Hampstead",  capacity: 24, booked: 0,  waitlist: 0, status: "pending", seed: 7 },
+  { dateLabel: "Mon 16 Mar",dateIso: "2026-03-16", time: "07:00", name: "Power Tempo",     studio: "Studio 1", location: "SpinOut · Hampstead",  capacity: 24, booked: 0,  waitlist: 0, status: "pending", seed: 5 },
 ]
 
 const INSTRUCTOR_TODAY_ISO = "2026-02-26"
@@ -5167,6 +5212,7 @@ function InstructorClassesPage({ darkMode, onToggleDarkMode, initialClass }) {
   const [weekStart, setWeekStart] = useState(() => mondayOf("2026-02-26")) // Monday of the week being viewed
 
   const upcoming = instructorClasses.filter(c => c.status === "upcoming")
+  const pending  = instructorClasses.filter(c => c.status === "pending")
   const past     = instructorClasses.filter(c => c.status === "done")
   const TODAY_ISO = "2026-02-26"
 
@@ -5198,6 +5244,8 @@ function InstructorClassesPage({ darkMode, onToggleDarkMode, initialClass }) {
         </div>
         {c.status === "done"
           ? <span className="text-xs font-semibold text-amber-500 flex-shrink-0">{c.rating} ★</span>
+          : c.status === "pending"
+          ? <span className="text-[10px] font-semibold text-amber-500 border border-amber-500/40 px-2 py-0.5 rounded-full flex-shrink-0">Pending</span>
           : <span className={`text-xs font-semibold flex-shrink-0 ${c.booked >= c.capacity ? "text-orange-500" : "text-[#00aa13]"}`}>{c.booked >= c.capacity ? "Full" : `${c.capacity - c.booked} left`}</span>}
       </button>
     )
@@ -5205,6 +5253,14 @@ function InstructorClassesPage({ darkMode, onToggleDarkMode, initialClass }) {
 
   const ClassList = (
     <div className="flex flex-col gap-5">
+      {pending.length > 0 && (
+        <div>
+          <p className={`text-xs font-semibold uppercase tracking-widest mb-2 px-1 text-amber-500`}>Pending approval · {pending.length}</p>
+          <div className={`${card} overflow-hidden`}>
+            {pending.map((c, i) => <ClassRow key={i} c={c} />)}
+          </div>
+        </div>
+      )}
       <div>
         <p className={`text-xs font-semibold uppercase tracking-widest mb-2 px-1 ${muted}`}>Upcoming</p>
         <div className={`${card} overflow-hidden`}>
@@ -5276,15 +5332,15 @@ function InstructorClassesPage({ darkMode, onToggleDarkMode, initialClass }) {
                     <p className={`text-[10px] font-semibold mb-0.5 ${isToday ? "text-[#00aa13]" : muted}`}>{day}</p>
                     <div className="flex flex-col gap-0.5">
                       {dayClasses.map((c, j) => {
-                        const done = c.status === "done"
+                        const done = c.status === "done", isPending = c.status === "pending"
                         return (
                           <button key={j} onClick={() => pick(c)}
                             className="text-left rounded px-1 py-0.5 text-[8px] leading-tight font-medium truncate hover:opacity-90"
                             style={{
-                              background: done ? (darkMode ? "#374151" : "#e5e7eb") : c === selected ? "#008a0f" : "#00aa13",
+                              background: done ? (darkMode ? "#374151" : "#e5e7eb") : isPending ? "#f59e0b" : c === selected ? "#008a0f" : "#00aa13",
                               color: done ? (darkMode ? "#9ca3af" : "#6b7280") : "#fff",
                             }}
-                            title={`${c.time} ${c.name}${done ? " · completed" : ""}`}>
+                            title={`${c.time} ${c.name}${done ? " · completed" : isPending ? " · pending approval" : ""}`}>
                             {c.time} {c.name}
                           </button>
                         )
@@ -5328,16 +5384,16 @@ function InstructorClassesPage({ darkMode, onToggleDarkMode, initialClass }) {
                     <p className={`text-[10px] font-semibold mb-1.5 ${isToday ? "text-[#00aa13]" : muted}`}>{WEEKDAY_NAMES[i]} {dt.getDate()}</p>
                     <div className="flex flex-col gap-1">
                       {dayClasses.map((c, j) => {
-                        const done = c.status === "done"
+                        const done = c.status === "done", isPending = c.status === "pending"
                         const on = c === selected
                         return (
                           <button key={j} onClick={() => pick(c)}
-                            className={`text-left rounded-lg px-1.5 py-1 border-l-2 transition-colors ${on ? "ring-1 ring-[#00aa13]" : ""} ${done ? (darkMode ? "bg-gray-800" : "bg-gray-50") : darkMode ? "bg-gray-800" : "bg-[#e6f9e8]"}`}
-                            style={{ borderColor: done ? (darkMode ? "#4b5563" : "#d1d5db") : "#00aa13" }}
-                            title={`${c.time} ${c.name}`}>
-                            <p className={`text-[10px] font-bold tabular-nums ${done ? muted : "text-[#00aa13]"}`}>{c.time}</p>
+                            className={`text-left rounded-lg px-1.5 py-1 border-l-2 transition-colors ${on ? "ring-1 ring-[#00aa13]" : ""} ${isPending ? (darkMode ? "bg-amber-500/10" : "bg-amber-50") : done ? (darkMode ? "bg-gray-800" : "bg-gray-50") : darkMode ? "bg-gray-800" : "bg-[#e6f9e8]"}`}
+                            style={{ borderColor: isPending ? "#f59e0b" : done ? (darkMode ? "#4b5563" : "#d1d5db") : "#00aa13" }}
+                            title={`${c.time} ${c.name}${isPending ? " · pending approval" : ""}`}>
+                            <p className={`text-[10px] font-bold tabular-nums ${isPending ? "text-amber-500" : done ? muted : "text-[#00aa13]"}`}>{c.time}</p>
                             <p className={`text-[10px] font-medium leading-tight truncate ${heading}`}>{c.name}</p>
-                            <p className={`text-[9px] ${muted}`}>{c.booked}/{c.capacity}</p>
+                            <p className={`text-[9px] ${muted}`}>{isPending ? "Pending" : `${c.booked}/${c.capacity}`}</p>
                           </button>
                         )
                       })}

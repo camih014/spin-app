@@ -433,6 +433,17 @@ function getMonthGrid(year, month) {
   return cells
 }
 
+const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"]
+const WEEKDAY_NAMES = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]
+function isoOf(dt) { return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,"0")}-${String(dt.getDate()).padStart(2,"0")}` }
+function mondayOf(iso) {
+  const [y, m, d] = iso.split("-").map(Number)
+  const dt = new Date(y, m - 1, d)
+  dt.setDate(dt.getDate() - ((dt.getDay() + 6) % 7))
+  return dt
+}
+function addDays(dt, n) { const x = new Date(dt); x.setDate(x.getDate() + n); return x }
+
 function weekOffsetForDate(dateStr) {
   const [y, m, d] = dateStr.split("-").map(Number)
   const base   = new Date(2026, 1, 23)
@@ -5152,14 +5163,22 @@ function InstructorClassesPage({ darkMode, onToggleDarkMode, initialClass }) {
   const [view, setView]         = useState("list")
   const [selected, setSelected] = useState(initialClass || instructorClasses.find(c => c.status === "upcoming"))
   const [mobileDetail, setMobileDetail] = useState(!!initialClass)
+  const [calMonth, setCalMonth] = useState({ year: 2026, month: 2 })   // calendar month being viewed
+  const [weekStart, setWeekStart] = useState(() => mondayOf("2026-02-26")) // Monday of the week being viewed
 
   const upcoming = instructorClasses.filter(c => c.status === "upcoming")
   const past     = instructorClasses.filter(c => c.status === "done")
+  const TODAY_ISO = "2026-02-26"
 
-  // Calendar data (Feb 2026 — where all classes sit)
-  const monthCells = getMonthGrid(2026, 2)
+  // Calendar data — classes keyed by ISO date
+  const monthCells = getMonthGrid(calMonth.year, calMonth.month)
   const byDay = {}
   instructorClasses.forEach(c => { (byDay[c.dateIso] ||= []).push(c) })
+  const shiftMonth = d => setCalMonth(({ year, month }) => {
+    const m = month - 1 + d
+    return { year: year + Math.floor(m / 12), month: ((m % 12) + 12) % 12 + 1 }
+  })
+  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
 
   function pick(c) { setSelected(c); setMobileDetail(true) }
 
@@ -5208,7 +5227,7 @@ function InstructorClassesPage({ darkMode, onToggleDarkMode, initialClass }) {
       {/* View toggle */}
       <div className={`flex items-center justify-end gap-3 mb-5 ${mobileDetail ? "hidden md:flex" : "flex"}`}>
         <div className={`inline-flex rounded-xl p-0.5 ${darkMode ? "bg-gray-800" : "bg-gray-100"}`}>
-          {[["list","List"],["calendar","Calendar"]].map(([v, l]) => (
+          {[["list","List"],["week","Week"],["calendar","Calendar"]].map(([v, l]) => (
             <button key={v} onClick={() => setView(v)}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${view === v
                 ? darkMode ? "bg-gray-700 text-white shadow-sm" : "bg-white text-gray-900 shadow-sm"
@@ -5230,18 +5249,28 @@ function InstructorClassesPage({ darkMode, onToggleDarkMode, initialClass }) {
         <div className="flex flex-col gap-6">
           {/* Month calendar */}
           <div className={`${card} p-4 md:p-5 ${mobileDetail ? "hidden md:block" : "block"}`}>
-            <p className={`text-sm font-semibold mb-4 ${heading}`}>February 2026</p>
+            <div className="flex items-center justify-between mb-4">
+              <button onClick={() => shiftMonth(-1)} aria-label="Previous month"
+                className={`w-7 h-7 rounded-lg flex items-center justify-center ${darkMode ? "bg-gray-800 text-gray-300 hover:bg-gray-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+              </button>
+              <p className={`text-sm font-semibold ${heading}`}>{MONTH_NAMES[calMonth.month-1]} {calMonth.year}</p>
+              <button onClick={() => shiftMonth(1)} aria-label="Next month"
+                className={`w-7 h-7 rounded-lg flex items-center justify-center ${darkMode ? "bg-gray-800 text-gray-300 hover:bg-gray-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+              </button>
+            </div>
             <div className="grid grid-cols-7 gap-1 mb-1">
-              {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(d => (
+              {WEEKDAY_NAMES.map(d => (
                 <div key={d} className={`text-[10px] font-medium text-center ${muted}`}>{d}</div>
               ))}
             </div>
             <div className="grid grid-cols-7 gap-1">
               {monthCells.map((day, i) => {
                 if (!day) return <div key={i} />
-                const ds = `2026-02-${String(day).padStart(2,"0")}`
+                const ds = `${calMonth.year}-${String(calMonth.month).padStart(2,"0")}-${String(day).padStart(2,"0")}`
                 const dayClasses = byDay[ds] || []
-                const isToday = ds === "2026-02-26"
+                const isToday = ds === TODAY_ISO
                 return (
                   <div key={i} className={`rounded-lg p-1 min-h-[64px] border ${isToday ? "border-[#00aa13]" : darkMode ? "border-gray-800" : "border-gray-100"}`}>
                     <p className={`text-[10px] font-semibold mb-0.5 ${isToday ? "text-[#00aa13]" : muted}`}>{day}</p>
@@ -5270,6 +5299,59 @@ function InstructorClassesPage({ darkMode, onToggleDarkMode, initialClass }) {
           <div className={`${mobileDetail ? "block" : "hidden md:block"}`}>
             {selected ? <ClassRoster cls={selected} darkMode={darkMode} />
               : <div className={`${card} p-10 text-center`}><p className={`text-sm ${muted}`}>Tap a class in the calendar to view its roster</p></div>}
+          </div>
+        </div>
+      ) : view === "week" ? (
+        <div className="flex flex-col gap-6">
+          {/* Week strip */}
+          <div className={`${card} p-4 md:p-5 ${mobileDetail ? "hidden md:block" : "block"}`}>
+            <div className="flex items-center justify-between mb-4">
+              <button onClick={() => setWeekStart(w => addDays(w, -7))} aria-label="Previous week"
+                className={`w-7 h-7 rounded-lg flex items-center justify-center ${darkMode ? "bg-gray-800 text-gray-300 hover:bg-gray-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+              </button>
+              <p className={`text-sm font-semibold ${heading}`}>
+                {weekStart.getDate()} {MONTH_NAMES[weekStart.getMonth()].slice(0,3)} – {addDays(weekStart,6).getDate()} {MONTH_NAMES[addDays(weekStart,6).getMonth()].slice(0,3)} {addDays(weekStart,6).getFullYear()}
+              </p>
+              <button onClick={() => setWeekStart(w => addDays(w, 7))} aria-label="Next week"
+                className={`w-7 h-7 rounded-lg flex items-center justify-center ${darkMode ? "bg-gray-800 text-gray-300 hover:bg-gray-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+              </button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-7 gap-2">
+              {weekDays.map((dt, i) => {
+                const ds = isoOf(dt)
+                const dayClasses = (byDay[ds] || []).slice().sort((a, b) => a.time.localeCompare(b.time))
+                const isToday = ds === TODAY_ISO
+                return (
+                  <div key={i} className={`rounded-xl p-2 min-h-[96px] border ${isToday ? "border-[#00aa13]" : darkMode ? "border-gray-800" : "border-gray-100"}`}>
+                    <p className={`text-[10px] font-semibold mb-1.5 ${isToday ? "text-[#00aa13]" : muted}`}>{WEEKDAY_NAMES[i]} {dt.getDate()}</p>
+                    <div className="flex flex-col gap-1">
+                      {dayClasses.map((c, j) => {
+                        const done = c.status === "done"
+                        const on = c === selected
+                        return (
+                          <button key={j} onClick={() => pick(c)}
+                            className={`text-left rounded-lg px-1.5 py-1 border-l-2 transition-colors ${on ? "ring-1 ring-[#00aa13]" : ""} ${done ? (darkMode ? "bg-gray-800" : "bg-gray-50") : darkMode ? "bg-gray-800" : "bg-[#e6f9e8]"}`}
+                            style={{ borderColor: done ? (darkMode ? "#4b5563" : "#d1d5db") : "#00aa13" }}
+                            title={`${c.time} ${c.name}`}>
+                            <p className={`text-[10px] font-bold tabular-nums ${done ? muted : "text-[#00aa13]"}`}>{c.time}</p>
+                            <p className={`text-[10px] font-medium leading-tight truncate ${heading}`}>{c.name}</p>
+                            <p className={`text-[9px] ${muted}`}>{c.booked}/{c.capacity}</p>
+                          </button>
+                        )
+                      })}
+                      {dayClasses.length === 0 && <p className={`text-[9px] ${muted}`}>—</p>}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+          {/* Selected detail */}
+          <div className={`${mobileDetail ? "block" : "hidden md:block"}`}>
+            {selected ? <ClassRoster cls={selected} darkMode={darkMode} />
+              : <div className={`${card} p-10 text-center`}><p className={`text-sm ${muted}`}>Tap a class in the week to view its roster</p></div>}
           </div>
         </div>
       ) : (
@@ -5342,8 +5424,8 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
   const [social, setSocial]   = useState(false)       // random seating
   const [length, setLength]   = useState(45)          // minutes
   const [tracks, setTracks]   = useState([])
-  const [warmTrack, setWarmTrack] = useState(null)   // dedicated warm-up song
-  const [coolTrack, setCoolTrack] = useState(null)   // dedicated cool-down song
+  const [warmTracks, setWarmTracks] = useState([])   // dedicated warm-up songs (multiple allowed)
+  const [coolTracks, setCoolTracks] = useState([])   // dedicated cool-down songs (multiple allowed)
   const [slotOpen, setSlotOpen]   = useState(null)   // "warm" | "cool" — which slot's search is open
   const [slotQuery, setSlotQuery] = useState("")
   const [query, setQuery]     = useState("")
@@ -5448,8 +5530,10 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
 
   // When a ride is built from music the warm-up/cool-down push the songs in from the ends — offset the audio
   // lane by the same amount so each song sits directly above the intensity it produced.
-  const musicLeadIn  = autoWarm && merged.length && merged[0][1] === 1 && (tracks.length || warmTrack) ? merged[0][0] : 0
-  const musicTailOut = autoCool && merged.length && merged[merged.length-1][1] === 1 && (tracks.length || coolTrack) ? merged[merged.length-1][0] : 0
+  const musicLeadIn  = autoWarm && merged.length && merged[0][1] === 1 && (tracks.length || warmTracks.length) ? merged[0][0] : 0
+  const musicTailOut = autoCool && merged.length && merged[merged.length-1][1] === 1 && (tracks.length || coolTracks.length) ? merged[merged.length-1][0] : 0
+  const warmLay = laySlotSongs(warmTracks, musicLeadIn)
+  const coolLay = laySlotSongs(coolTracks, musicTailOut)
 
   // Lay tracks across the timeline; each track's audio sections hint at a zone
   const playlistSecs = tracks.reduce((s, t) => s + t.mins * 60, 0)
@@ -5473,6 +5557,20 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
       } else out.push([secs, z, c])
     }
     return out
+  }
+
+  // Lay warm-up / cool-down songs across a fixed band. If they fall short of `dur`, the remainder
+  // crossfades into the main session songs (gapFrac); if they overrun, only the covering part shows.
+  function laySlotSongs(list, dur) {
+    let acc = 0; const segs = []
+    for (const t of list) {
+      if (acc >= dur - 1 || dur <= 0) break
+      const secs = Math.min(t.mins * 60, dur - acc)
+      segs.push({ title: t.title, bpm: t.bpm, secs, frac: secs / dur })
+      acc += secs
+    }
+    const gap = Math.max(0, dur - acc)
+    return { segs, gapFrac: dur > 0 ? gap / dur : 0 }
   }
 
   // Search the YT catalogue + playlists
@@ -5616,10 +5714,13 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
   function undo()  { setUndoStack(s => { if (!s.length) return s; setStrokes(s[s.length-1]); setCursor(null); return s.slice(0,-1) }) }
   function clear() { commit([], null); setAutoWarm(false); setAutoCool(false) }
   function loadTemplate(t) {
-    setAutoWarm(false); setAutoCool(false); setSelBars(new Set())
+    const st = t.strokes.map(s => [s[0], s[1], s[2] ?? 1])
+    // Templates already include a warm-up (leading Z1) and cool-down (trailing Z1) — auto-tick those
+    // so the toggles reflect what's already on the canvas. Untick to remove them.
+    setAutoWarm(st[0]?.[1] === 1); setAutoCool(st[st.length-1]?.[1] === 1); setSelBars(new Set())
     setUndoStack(s => [...s, strokes])
     setName(t.name); setLength(t.length); setCursor(null)
-    setStrokes(t.strokes.map(s => [s[0], s[1], s[2] ?? 1]))
+    setStrokes(st)
   }
 
   function onCanvasMove(e) {
@@ -5768,51 +5869,62 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
           </button>
         )}
 
-        {/* Dedicated warm-up & cool-down songs (separate from the work playlist) */}
+        {/* Dedicated warm-up & cool-down songs — multiple allowed; if short they fade into the session */}
         <div className="grid grid-cols-2 gap-2 mb-2">
-          {[["warm", "Warm-up", warmTrack, setWarmTrack], ["cool", "Cool-down", coolTrack, setCoolTrack]].map(([key, label, trk, setTrk]) => (
-            <div key={key} className={`rounded-xl p-2.5 ${subtle}`}>
-              <p className={`text-[11px] font-semibold mb-1.5 ${muted}`}>{label} song</p>
-              {trk ? (
-                <div className="flex items-center gap-1.5">
-                  <span className="text-sm flex-shrink-0">🎵</span>
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-xs font-medium truncate ${heading}`}>{trk.title}</p>
-                    <p className={`text-[10px] ${muted}`}>{trk.bpm} BPM</p>
+          {[["warm", "Warm-up", warmTracks, setWarmTracks, wc.warmMin*60], ["cool", "Cool-down", coolTracks, setCoolTracks, wc.coolMin*60]].map(([key, label, list, setList, dur]) => {
+            const songSecs = list.reduce((a, t) => a + t.mins*60, 0)
+            return (
+              <div key={key} className={`rounded-xl p-2.5 ${subtle}`}>
+                <p className={`text-[11px] font-semibold mb-1.5 ${muted}`}>{label} song{list.length > 1 ? "s" : ""}</p>
+                {list.length > 0 && (
+                  <div className="flex flex-col gap-1 mb-1.5">
+                    {list.map((t, i) => (
+                      <div key={i} className="flex items-center gap-1.5">
+                        <span className="text-xs flex-shrink-0">🎵</span>
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-xs font-medium truncate ${heading}`}>{t.title}</p>
+                          <p className={`text-[10px] ${muted}`}>{t.bpm} BPM · {t.mins}:00</p>
+                        </div>
+                        <button onClick={() => setList(l => l.filter((_, j) => j !== i))}
+                          className={`w-4 h-4 rounded flex items-center justify-center text-xs flex-shrink-0 ${darkMode ? "hover:bg-gray-700 text-gray-500" : "hover:bg-gray-200 text-gray-400"}`}>✕</button>
+                      </div>
+                    ))}
                   </div>
-                  <button onClick={() => { setTrk(null); if (slotOpen === key) setSlotOpen(null) }}
-                    className={`w-4 h-4 rounded flex items-center justify-center text-xs flex-shrink-0 ${darkMode ? "hover:bg-gray-700 text-gray-500" : "hover:bg-gray-200 text-gray-400"}`}>✕</button>
-                </div>
-              ) : (
+                )}
                 <button onClick={() => { setSlotOpen(slotOpen === key ? null : key); setSlotQuery("") }}
                   className={`w-full text-xs font-medium py-1.5 rounded-lg border border-dashed transition-colors ${slotOpen === key ? "border-[#00aa13] text-[#00aa13]" : darkMode ? "border-gray-700 text-gray-400 hover:bg-gray-800" : "border-gray-300 text-gray-500 hover:bg-gray-50"}`}>
-                  {slotOpen === key ? "Searching…" : `+ Add ${label.toLowerCase()} song`}
+                  {slotOpen === key ? "Searching…" : list.length ? "+ Add another" : `+ Add ${label.toLowerCase()} song`}
                 </button>
-              )}
-            </div>
-          ))}
+                {list.length > 0 && (
+                  <p className={`text-[10px] mt-1 ${songSecs >= dur ? "text-[#00aa13]" : "text-amber-500"}`}>
+                    {songSecs >= dur ? `✓ covers the ${fmtSecs(dur)} ${label.toLowerCase()}` : `${fmtSecs(songSecs)} of ${fmtSecs(dur)} — fades to session`}
+                  </p>
+                )}
+              </div>
+            )
+          })}
         </div>
         {slotOpen && (
           <div className="relative mb-3">
             <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${darkMode ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="#FF0000"><path d="M23 12s0-3.9-.5-5.8a3 3 0 00-2.1-2.1C18.5 3.5 12 3.5 12 3.5s-6.5 0-8.4.6A3 3 0 001.5 6.2C1 8.1 1 12 1 12s0 3.9.5 5.8a3 3 0 002.1 2.1c1.9.6 8.4.6 8.4.6s6.5 0 8.4-.6a3 3 0 002.1-2.1C23 15.9 23 12 23 12z"/><path d="M10 15.5l5-3.5-5-3.5z" fill="#fff"/></svg>
               <input autoFocus value={slotQuery} onChange={e => setSlotQuery(e.target.value)}
-                placeholder={`Search a ${slotOpen === "warm" ? "warm-up" : "cool-down"} song…`}
+                placeholder={`Add a ${slotOpen === "warm" ? "warm-up" : "cool-down"} song…`}
                 className={`flex-1 bg-transparent text-sm focus:outline-none ${darkMode ? "text-white" : "text-gray-900"}`} />
-              <button onClick={() => { setSlotOpen(null); setSlotQuery("") }} className={`text-xs ${muted}`}>✕</button>
+              <button onClick={() => { setSlotOpen(null); setSlotQuery("") }} className={`text-xs ${muted}`}>Done</button>
             </div>
             {sq && (
               <div className={`absolute left-0 right-0 mt-1 rounded-xl border shadow-lg z-20 overflow-hidden ${darkMode ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
                 {slotResults.length === 0 && <p className={`text-xs px-3 py-3 ${muted}`}>No results</p>}
                 {slotResults.map((s, i) => (
-                  <button key={i} onClick={() => { (slotOpen === "warm" ? setWarmTrack : setCoolTrack)(makeTrack(s)); setSlotOpen(null); setSlotQuery("") }}
+                  <button key={i} onClick={() => { (slotOpen === "warm" ? setWarmTracks : setCoolTracks)(l => [...l, makeTrack(s)]); setSlotQuery("") }}
                     className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors ${darkMode ? "hover:bg-gray-700" : "hover:bg-gray-50"}`}>
                     <span className="text-base">🎵</span>
                     <div className="flex-1 min-w-0">
                       <p className={`text-sm font-medium truncate ${heading}`}>{s.title}</p>
                       <p className={`text-xs ${muted}`}>{s.artist} · {s.bpm} BPM</p>
                     </div>
-                    <span className="text-xs font-semibold text-[#00aa13]">+ Set</span>
+                    <span className="text-xs font-semibold text-[#00aa13]">+ Add</span>
                   </button>
                 ))}
               </div>
@@ -5900,12 +6012,20 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
               {musicLeadIn > 0 && (
                 <div className="relative flex items-end border-r flex-shrink-0 overflow-hidden"
                   style={{ width: `${musicLeadIn / scale * 100}%`, borderColor: darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)",
-                    backgroundImage: warmTrack ? undefined : `repeating-linear-gradient(45deg, ${darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)"} 0 5px, transparent 5px 10px)` }}
-                  title={warmTrack ? `Warm-up · ${warmTrack.title} · ${warmTrack.bpm} BPM` : `Warm-up · ${fmtSecs(musicLeadIn)}`}>
-                  {warmTrack && <div className="absolute bottom-0 left-0 right-0" style={{ height: "38%", background: ZONE_COLORS[1], opacity: 0.5 }} />}
-                  <span className={`absolute top-0.5 left-1 text-[8px] font-medium truncate ${warmTrack ? (darkMode ? "text-gray-300" : "text-gray-600") : muted}`} style={{ maxWidth: "92%" }}>
-                    {warmTrack ? `${warmTrack.title} · ${warmTrack.bpm}` : "Warm-up"}
-                  </span>
+                    backgroundImage: warmTracks.length ? undefined : `repeating-linear-gradient(45deg, ${darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)"} 0 5px, transparent 5px 10px)` }}
+                  title={`Warm-up · ${fmtSecs(musicLeadIn)}`}>
+                  {warmTracks.length === 0 && <span className={`absolute top-0.5 left-1 text-[8px] font-medium ${muted}`}>Warm-up</span>}
+                  {warmLay.segs.map((s, i) => (
+                    <div key={i} className="relative h-full flex items-end border-r overflow-hidden" style={{ width: `${s.frac*100}%`, borderColor: darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)" }}
+                      title={`${s.title} · ${s.bpm} BPM`}>
+                      <div className="absolute bottom-0 left-0 right-0" style={{ height: "38%", background: ZONE_COLORS[1], opacity: 0.5 }} />
+                      <span className={`absolute top-0.5 left-1 text-[8px] font-medium truncate ${darkMode ? "text-gray-300" : "text-gray-600"}`} style={{ maxWidth: "92%" }}>{s.title} · {s.bpm}</span>
+                    </div>
+                  ))}
+                  {warmLay.gapFrac > 0.001 && (
+                    <div className="relative h-full" style={{ width: `${warmLay.gapFrac*100}%`, background: `linear-gradient(90deg, transparent, ${darkMode ? "rgba(0,170,19,0.5)" : "rgba(0,170,19,0.35)"})` }}
+                      title="Fades into the main session" />
+                  )}
                 </div>
               )}
               {trackSegs.map((t, i) => (
@@ -5928,12 +6048,20 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
               {musicTailOut > 0 && (
                 <div className="relative flex items-end flex-shrink-0 overflow-hidden"
                   style={{ width: `${musicTailOut / scale * 100}%`,
-                    backgroundImage: coolTrack ? undefined : `repeating-linear-gradient(45deg, ${darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)"} 0 5px, transparent 5px 10px)` }}
-                  title={coolTrack ? `Cool-down · ${coolTrack.title} · ${coolTrack.bpm} BPM` : `Cool-down · ${fmtSecs(musicTailOut)}`}>
-                  {coolTrack && <div className="absolute bottom-0 left-0 right-0" style={{ height: "38%", background: ZONE_COLORS[1], opacity: 0.5 }} />}
-                  <span className={`absolute top-0.5 left-1 text-[8px] font-medium truncate ${coolTrack ? (darkMode ? "text-gray-300" : "text-gray-600") : muted}`} style={{ maxWidth: "92%" }}>
-                    {coolTrack ? `${coolTrack.title} · ${coolTrack.bpm}` : "Cool-down"}
-                  </span>
+                    backgroundImage: coolTracks.length ? undefined : `repeating-linear-gradient(45deg, ${darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)"} 0 5px, transparent 5px 10px)` }}
+                  title={`Cool-down · ${fmtSecs(musicTailOut)}`}>
+                  {coolTracks.length === 0 && <span className={`absolute top-0.5 left-1 text-[8px] font-medium ${muted}`}>Cool-down</span>}
+                  {coolLay.gapFrac > 0.001 && (
+                    <div className="relative h-full" style={{ width: `${coolLay.gapFrac*100}%`, background: `linear-gradient(90deg, ${darkMode ? "rgba(0,170,19,0.5)" : "rgba(0,170,19,0.35)"}, transparent)` }}
+                      title="Main session fades into the cool-down" />
+                  )}
+                  {coolLay.segs.map((s, i) => (
+                    <div key={i} className="relative h-full flex items-end border-r overflow-hidden" style={{ width: `${s.frac*100}%`, borderColor: darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)" }}
+                      title={`${s.title} · ${s.bpm} BPM`}>
+                      <div className="absolute bottom-0 left-0 right-0" style={{ height: "38%", background: ZONE_COLORS[1], opacity: 0.5 }} />
+                      <span className={`absolute top-0.5 left-1 text-[8px] font-medium truncate ${darkMode ? "text-gray-300" : "text-gray-600"}`} style={{ maxWidth: "92%" }}>{s.title} · {s.bpm}</span>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

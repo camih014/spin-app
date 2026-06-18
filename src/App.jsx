@@ -5072,90 +5072,92 @@ function InstructorHomePage({ darkMode, onToggleDarkMode, onOpenRoster, onNaviga
         ))}
       </div>
 
-      {/* Cover requests — needs action */}
-      {cover.length > 0 && (
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <span className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "#f59e0b1a", color: "#f59e0b" }}><CalendarClock size={15} /></span>
-              <h2 className={`font-semibold ${heading}`}>Cover requests</h2>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-500">{COVERAGE.filter(inLoc).length} need cover</span>
-            </div>
-            <button onClick={() => onNavigate?.("Subs")} className="text-xs font-semibold text-[#00aa13]">View all</button>
-          </div>
+      {/* Primary: today's booked classes (left) · Secondary: cover requests (right on desktop, below on mobile) */}
+      <div className="grid lg:grid-cols-[1.6fr_1fr] gap-x-6 gap-y-7 mb-8 lg:items-start">
+        {/* Today's schedule — the priority */}
+        <div>
+          <h2 className={`font-semibold mb-3 ${heading}`}>Today's schedule{locFilter !== "All" && ` · ${locShort(locFilter)}`}</h2>
           <div className="flex flex-col gap-2.5">
-            {cover.map(c => {
-              const open = expanded === c.id, isApplied = applied.has(c.id), full = c.booked >= c.capacity
+            {today.length === 0 && (
+              <div className={`${card} p-6 text-center`}><p className={`text-sm ${muted}`}>No classes today at this location</p></div>
+            )}
+            {today.map((c, i) => {
+              const full = c.booked >= c.capacity
               return (
-                <div key={c.id} className={`${card} overflow-hidden`}>
-                  <button onClick={() => setExpanded(open ? null : c.id)} className="w-full p-4 text-left">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className={`text-base font-semibold ${heading}`}>{c.cls}</p>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-500">Needs cover</span>
-                        </div>
-                        <p className={`text-xs mt-0.5 ${muted}`}>{c.day} · {c.time} · {locShort(c.location)} · {c.studio} · {c.mins} min</p>
-                      </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <span className={`text-sm font-bold ${heading}`}>{c.pay}</span>
-                        <ChevronDown size={16} className={`transition-transform ${open ? "rotate-180" : ""} ${muted}`} />
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between mt-3">
-                      <div className="flex items-center gap-2">
-                        <Avatar name={c.instructor} size={24} />
-                        <span className={`text-xs ${muted}`}>Covering for <span className={`font-medium ${heading}`}>{c.instructor}</span></span>
-                      </div>
-                      <span className={`text-xs ${muted}`}>{c.booked}/{c.capacity} booked{full ? " · full" : ""}</span>
-                    </div>
-                  </button>
-                  {open && (
-                    <div className={`px-4 pb-4 pt-1 border-t ${darkMode ? "border-gray-800" : "border-gray-100"}`}>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3 mb-3">
-                        {[["Vibe", c.vibe], ["Music", c.music], ["Intensity", c.intensity], ["Attendees", `${c.booked} riders`]].map(([k, v], i) => (
-                          <div key={i} className={`rounded-xl p-2.5 ${subtle}`}><p className={`text-[10px] ${muted}`}>{k}</p><p className={`text-xs font-semibold mt-0.5 ${heading}`}>{v}</p></div>
-                        ))}
-                      </div>
-                      <p className={`text-sm ${muted} mb-3`}>{c.brief}</p>
-                      {isApplied
-                        ? <p className="w-full py-2.5 rounded-xl text-sm font-semibold text-center flex items-center justify-center gap-1.5" style={{ background: "#00aa131a", color: "#00aa13" }}>✓ Applied — awaiting studio confirmation</p>
-                        : <button onClick={() => applyCover(c.id)} className="w-full py-2.5 rounded-xl text-sm font-semibold text-white bg-[#00aa13] hover:bg-[#008a0f] transition-colors">Apply to cover</button>}
-                    </div>
-                  )}
+                <div key={i} className={`${card} p-4 flex items-center gap-4`}>
+                  <div className="w-14 flex-shrink-0 text-center">
+                    <p className={`text-sm font-bold tabular-nums ${heading}`}>{c.time}</p>
+                  </div>
+                  <div className={`w-px self-stretch ${darkMode ? "bg-gray-700" : "bg-gray-200"}`} />
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-semibold ${heading}`}>{c.name}</p>
+                    <p className={`text-xs mt-0.5 ${muted}`}>{locShort(c.location)} · {c.studio}</p>
+                    <div className="mt-2 max-w-[220px]"><CapacityBar booked={c.booked} capacity={c.capacity} darkMode={darkMode} /></div>
+                  </div>
+                  <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                    <span className={`text-xs font-semibold ${full ? "text-orange-500" : "text-[#00aa13]"}`}>{full ? "Full" : `${c.capacity - c.booked} left`}</span>
+                    <button onClick={() => onOpenRoster(c)} className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-[#00aa13] text-white hover:bg-[#008a0f] transition-colors">Roster</button>
+                  </div>
                 </div>
               )
             })}
           </div>
         </div>
-      )}
 
-      {/* Today's schedule */}
-      <h2 className={`font-semibold mb-3 ${heading}`}>Today's schedule{locFilter !== "All" && ` · ${locShort(locFilter)}`}</h2>
-      <div className="flex flex-col gap-2.5 mb-8">
-        {today.length === 0 && (
-          <div className={`${card} p-6 text-center`}><p className={`text-sm ${muted}`}>No classes today at this location</p></div>
-        )}
-        {today.map((c, i) => {
-          const full = c.booked >= c.capacity
-          return (
-            <div key={i} className={`${card} p-4 flex items-center gap-4`}>
-              <div className="w-14 flex-shrink-0 text-center">
-                <p className={`text-sm font-bold tabular-nums ${heading}`}>{c.time}</p>
+        {/* Cover requests — secondary */}
+        {cover.length > 0 && (
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: "#f59e0b1a", color: "#f59e0b" }}><CalendarClock size={14} /></span>
+                <h2 className={`font-semibold truncate ${heading}`}>Cover requests</h2>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-500 flex-shrink-0">{COVERAGE.filter(inLoc).length}</span>
               </div>
-              <div className={`w-px self-stretch ${darkMode ? "bg-gray-700" : "bg-gray-200"}`} />
-              <div className="flex-1 min-w-0">
-                <p className={`text-sm font-semibold ${heading}`}>{c.name}</p>
-                <p className={`text-xs mt-0.5 ${muted}`}>{locShort(c.location)} · {c.studio}</p>
-                <div className="mt-2 max-w-[220px]"><CapacityBar booked={c.booked} capacity={c.capacity} darkMode={darkMode} /></div>
-              </div>
-              <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                <span className={`text-xs font-semibold ${full ? "text-orange-500" : "text-[#00aa13]"}`}>{full ? "Full" : `${c.capacity - c.booked} left`}</span>
-                <button onClick={() => onOpenRoster(c)} className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-[#00aa13] text-white hover:bg-[#008a0f] transition-colors">Roster</button>
-              </div>
+              <button onClick={() => onNavigate?.("Subs")} className="text-xs font-semibold text-[#00aa13] flex-shrink-0">View all</button>
             </div>
-          )
-        })}
+            <div className="flex flex-col gap-2.5">
+              {cover.map(c => {
+                const open = expanded === c.id, isApplied = applied.has(c.id), full = c.booked >= c.capacity
+                return (
+                  <div key={c.id} className={`${card} overflow-hidden`}>
+                    <button onClick={() => setExpanded(open ? null : c.id)} className="w-full p-3.5 text-left">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className={`text-sm font-semibold ${heading}`}>{c.cls}</p>
+                          <p className={`text-xs mt-0.5 ${muted}`}>{c.day} · {c.time} · {c.studio}</p>
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          <span className={`text-sm font-bold ${heading}`}>{c.pay}</span>
+                          <ChevronDown size={15} className={`transition-transform ${open ? "rotate-180" : ""} ${muted}`} />
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between mt-2.5">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <Avatar name={c.instructor} size={20} />
+                          <span className={`text-[11px] truncate ${muted}`}>for <span className={`font-medium ${heading}`}>{c.instructor}</span></span>
+                        </div>
+                        <span className={`text-[11px] flex-shrink-0 ${muted}`}>{c.booked}/{c.capacity}{full ? " · full" : ""}</span>
+                      </div>
+                    </button>
+                    {open && (
+                      <div className={`px-3.5 pb-3.5 pt-1 border-t ${darkMode ? "border-gray-800" : "border-gray-100"}`}>
+                        <div className="grid grid-cols-2 gap-2 mt-3 mb-3">
+                          {[["Vibe", c.vibe], ["Music", c.music], ["Intensity", c.intensity], ["Attendees", `${c.booked} riders`]].map(([k, v], i) => (
+                            <div key={i} className={`rounded-xl p-2.5 ${subtle}`}><p className={`text-[10px] ${muted}`}>{k}</p><p className={`text-xs font-semibold mt-0.5 ${heading}`}>{v}</p></div>
+                          ))}
+                        </div>
+                        <p className={`text-xs ${muted} mb-3`}>{c.brief}</p>
+                        {isApplied
+                          ? <p className="w-full py-2.5 rounded-xl text-xs font-semibold text-center" style={{ background: "#00aa131a", color: "#00aa13" }}>✓ Applied — awaiting confirmation</p>
+                          : <button onClick={() => applyCover(c.id)} className="w-full py-2.5 rounded-xl text-sm font-semibold text-white bg-[#00aa13] hover:bg-[#008a0f] transition-colors">Apply to cover</button>}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Quick-launch ride templates */}

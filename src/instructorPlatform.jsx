@@ -1114,12 +1114,12 @@ export function AIBuilderPanel({ darkMode, onApply, onSaveTemplate }) {
   function flash(m) { setNote(m); setTimeout(() => setNote(""), 2200) }
 
   return (
-    <div className="rounded-2xl p-[1.5px] mb-5" style={{ background: open ? "linear-gradient(135deg,#6366f1,#8b5cf6,#ec4899)" : "transparent" }}>
-      <div className={`rounded-2xl border transition-colors ${darkMode ? "bg-gray-900" : "bg-white"} ${open ? "border-transparent" : darkMode ? "border-gray-800" : "border-gray-100"}`}>
+    <div className={`rounded-2xl border mb-5 transition-colors ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`}>
+      <div>
         <button onClick={() => setOpen(o => !o)} className="w-full flex items-center gap-3 p-4 text-left">
-          <span className="w-9 h-9 rounded-xl flex items-center justify-center text-white flex-shrink-0" style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)" }}><Wand2 size={17} /></span>
+          <span className="w-9 h-9 rounded-xl flex items-center justify-center text-white flex-shrink-0" style={{ background: GREEN }}><Wand2 size={17} /></span>
           <div className="flex-1 min-w-0">
-            <p className={`text-sm font-semibold flex items-center gap-2 ${t.heading}`}>AI Ride Builder <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full text-white" style={{ background: "#8b5cf6" }}>AI</span></p>
+            <p className={`text-sm font-semibold flex items-center gap-2 ${t.heading}`}>AI Ride Builder <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full text-white" style={{ background: GREEN }}>AI</span></p>
             <p className={`text-xs ${t.muted}`}>Describe a ride — drop a full plan onto the canvas</p>
           </div>
           <ChevronRight size={18} className={`${t.faint} transition-transform ${open ? "rotate-90" : ""}`} />
@@ -1129,11 +1129,11 @@ export function AIBuilderPanel({ darkMode, onApply, onSaveTemplate }) {
           <div className="px-4 pb-4">
             <textarea value={prompt} onChange={e => setPrompt(e.target.value)} rows={2}
               placeholder="e.g. 45-min HIIT with EDM music, 5 intervals and 1 long climb"
-              className={`w-full px-3.5 py-2.5 rounded-xl border text-sm resize-none focus:outline-none focus:ring-2 focus:ring-violet-400 ${darkMode ? "bg-gray-800 border-gray-700 text-white" : "bg-gray-50 border-gray-200 text-gray-900"}`} />
+              className={`w-full px-3.5 py-2.5 rounded-xl border text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#00aa13] ${darkMode ? "bg-gray-800 border-gray-700 text-white" : "bg-gray-50 border-gray-200 text-gray-900"}`} />
             <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
-              {AI_PROMPTS.map((p, i) => <button key={i} onClick={() => setPrompt(p)} className={`text-[11px] px-2.5 py-1 rounded-full border ${t.border} ${t.muted} hover:border-violet-400`}>{p.length > 28 ? p.slice(0, 28) + "…" : p}</button>)}
+              {AI_PROMPTS.map((p, i) => <button key={i} onClick={() => setPrompt(p)} className={`text-[11px] px-2.5 py-1 rounded-full border ${t.border} ${t.muted} hover:border-[#00aa13]`}>{p.length > 28 ? p.slice(0, 28) + "…" : p}</button>)}
               <div className="flex-1" />
-              <button onClick={generate} disabled={loading} className="flex items-center gap-2 px-4 py-2 rounded-xl text-white font-semibold text-sm disabled:opacity-60" style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)" }}>
+              <button onClick={generate} disabled={loading} className="flex items-center gap-2 px-4 py-2 rounded-xl text-white font-semibold text-sm disabled:opacity-60" style={{ background: GREEN }}>
                 {loading ? <><Sparkles size={15} className="animate-spin" /> Generating…</> : <><Wand2 size={15} /> Generate</>}
               </button>
             </div>
@@ -1142,7 +1142,7 @@ export function AIBuilderPanel({ darkMode, onApply, onSaveTemplate }) {
 
             {plan && !loading && (
               <div className="mt-4 animate-[fadeIn_.3s_ease]">
-                <input value={rideName} onChange={e => setRideName(e.target.value)} className={`w-full text-base font-bold bg-transparent border-b ${t.border} focus:outline-none focus:border-violet-400 pb-1 mb-3 ${t.heading}`} />
+                <input value={rideName} onChange={e => setRideName(e.target.value)} className={`w-full text-base font-bold bg-transparent border-b ${t.border} focus:outline-none focus:border-[#00aa13] pb-1 mb-3 ${t.heading}`} />
                 <div className="flex w-full h-3 rounded-full overflow-hidden mb-2">
                   {plan.tl.map((s, i) => <div key={i} style={{ width: `${s.min / plan.dur * 100}%`, background: TYPE_COLOR[s.type] }} title={`${s.name} · ${s.min}m`} />)}
                 </div>

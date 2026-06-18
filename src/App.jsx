@@ -3,7 +3,7 @@ import { Home, Calendar, BookOpen, Bike, Trophy, User, Settings, LogOut,
   ChevronDown, LayoutDashboard, Users, ListMusic, SlidersHorizontal, BarChart3, CalendarClock, Sparkles, Radio, Building2 } from "lucide-react"
 import {
   LiveModePage, RidersCRMPage, FeedbackPage, SubsMarketplacePage,
-  GrowthDashboardPage, AIBuilderPanel,
+  GrowthDashboardPage, AIBuilderPanel, AreaTrend,
 } from "./instructorPlatform"
 
 // ─── DATA ───────────────────────────────────────────────────────────────────
@@ -6750,11 +6750,27 @@ function InstructorStatsPage({ darkMode, onToggleDarkMode, onNavigate }) {
   const card    = `rounded-2xl border transition-colors ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`
   const subtle  = darkMode ? "bg-gray-800"   : "bg-gray-50"
   const [tab, setTab] = useState("performance")
+  const [period, setPeriod] = useState("Month")
 
-  const earn = [
-    { label: "Earnings this month", value: "£2,140", sub: "+£280 vs last" },
-    { label: "Riders taught",       value: "622",    sub: "all-time" },
-    { label: "Avg rating",          value: "4.9 ★",  sub: "from 1,284 reviews" },
+  const EARN_PERIODS = {
+    "2 wks": { total: "£1,440", up: "+8% vs last fortnight", axis: ["Mon 9", "Fri 20"],
+      labels: ["Mon 9", "Tue 10", "Wed 11", "Thu 12", "Fri 13", "Mon 16", "Tue 17", "Wed 18", "Thu 19", "Fri 20"],
+      pts: [140, 90, 180, 120, 160, 150, 110, 190, 130, 170] },
+    "Month": { total: "£2,160", up: "+15% vs last month", axis: ["Wk 1", "Wk 4"],
+      labels: ["Wk 1", "Wk 2", "Wk 3", "Wk 4"], pts: [480, 560, 520, 600] },
+    "3 mo": { total: "£6,240", up: "+11% vs prev quarter", axis: ["Apr", "Jun"],
+      labels: ["Apr W1", "Apr W2", "Apr W3", "Apr W4", "May W1", "May W2", "May W3", "May W4", "Jun W1", "Jun W2", "Jun W3", "Jun W4"],
+      pts: [460, 500, 520, 540, 560, 520, 580, 600, 560, 620, 600, 660] },
+    "Year": { total: "£24,800", up: "+22% YoY", axis: ["Jul", "Jun"],
+      labels: ["Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun"],
+      pts: [1500, 1650, 1700, 1900, 2050, 2100, 2000, 2200, 2150, 2300, 2250, 2140] },
+    "All": { total: "£68.4k", up: "across 3 years", axis: ["2023", "2026"],
+      labels: ["2023", "2024", "2025", "2026"], pts: [8000, 14500, 21000, 24800] },
+  }
+  const ep = EARN_PERIODS[period]
+  const earnSide = [
+    { label: "Riders taught", value: "622", sub: "all-time" },
+    { label: "Avg rating", value: "4.9 ★", sub: "1,284 reviews" },
   ]
   const tabs = [["performance", "Performance"], ["feedback", "Feedback"]]
 
@@ -6774,15 +6790,38 @@ function InstructorStatsPage({ darkMode, onToggleDarkMode, onNavigate }) {
 
       {tab === "performance" && (
         <>
-          {/* Earnings headline merged above the growth metrics */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-            {earn.map((s, i) => (
-              <div key={i} className={`${card} p-4`}>
-                <p className={`text-xs ${muted} mb-1`}>{s.label}</p>
-                <p className={`text-2xl font-bold tracking-tight ${heading}`}>{s.value}</p>
-                <p className={`text-xs mt-0.5 text-[#00aa13] font-medium`}>{s.sub}</p>
+          {/* Earnings line graph with pay-period filter */}
+          <div className="grid lg:grid-cols-3 gap-4 mb-4">
+            <div className={`${card} p-5 lg:col-span-2`}>
+              <div className="flex items-start justify-between gap-3 mb-2 flex-wrap">
+                <div>
+                  <p className={`text-sm font-semibold ${heading}`}>Earnings</p>
+                  <p className={`text-3xl font-bold tracking-tight mt-1 ${heading}`}>{ep.total}</p>
+                  <p className="text-xs mt-0.5 text-[#00aa13] font-medium">{ep.up}</p>
+                </div>
+                <div className={`inline-flex rounded-xl p-0.5 ${darkMode ? "bg-gray-800" : "bg-gray-100"}`}>
+                  {Object.keys(EARN_PERIODS).map(k => (
+                    <button key={k} onClick={() => setPeriod(k)}
+                      className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${period === k
+                        ? darkMode ? "bg-gray-700 text-white shadow-sm" : "bg-white text-gray-900 shadow-sm"
+                        : muted}`}>{k}</button>
+                  ))}
+                </div>
               </div>
-            ))}
+              <AreaTrend key={period} points={ep.pts} labels={ep.labels} valueFmt={v => `£${v.toLocaleString()}`} darkMode={darkMode} color="#00aa13" height={170} />
+              <div className={`flex justify-between text-[10px] mt-1 ${muted}`}>
+                <span>{ep.axis[0]}</span><span>{ep.axis[1]}</span>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 lg:grid-cols-1 gap-4 content-start">
+              {earnSide.map((s, i) => (
+                <div key={i} className={`${card} p-4`}>
+                  <p className={`text-xs ${muted} mb-1`}>{s.label}</p>
+                  <p className={`text-2xl font-bold tracking-tight ${heading}`}>{s.value}</p>
+                  <p className={`text-xs mt-0.5 ${muted}`}>{s.sub}</p>
+                </div>
+              ))}
+            </div>
           </div>
           <GrowthDashboardPage darkMode={darkMode} embedded onNavigate={onNavigate} />
         </>
@@ -6837,11 +6876,52 @@ function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] 
   const [recurring, setRecurring] = useState(true)
   const [requests, setRequests]   = useState(CLASS_REQUESTS)
   const [toast, setToast]     = useState(false)
+  const [confirmClash, setConfirmClash] = useState(false)
 
   const selectedClass = builtClasses.find(b => b.name === className)
   const isSet = !!selectedClass?.series
   const plan = isSet ? setPlan(slots, selectedClass.weeks) : null
   const sortedRequests = [...requests].sort((a, b) => reqSortKey(a) - reqSortKey(b))
+
+  // ── Clash detection against the instructor's existing weekly commitments ──
+  const newDur = selectedClass?.length || 45
+  const toMin = t => { const [h, m] = t.split(":").map(Number); return h * 60 + (m || 0) }
+  const fmtTime = m => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`
+  const commitments = (() => {
+    const seen = new Set(), out = []
+    instructorClasses.forEach(c => {
+      const [y, mo, d] = c.dateIso.split("-").map(Number)
+      const day = WEEKDAY_NAMES[(new Date(y, mo - 1, d).getDay() + 6) % 7]
+      const key = day + c.time + c.name
+      if (seen.has(key)) return; seen.add(key)
+      out.push({ day, time: c.time, start: toMin(c.time), mins: 45, name: c.name })
+    })
+    return out
+  })()
+  // also flag overlaps between two new slots on the same day
+  function slotWarning(sl, idx) {
+    const ns = toMin(sl.time), ne = ns + newDur
+    const others = [...commitments, ...slots.filter((_, j) => j !== idx).map(s => ({ day: s.day, time: s.time, start: toMin(s.time), mins: newDur, name: "another slot in this request" }))]
+    let tight = null
+    for (const c of others) {
+      if (c.day !== sl.day) continue
+      const es = c.start, ee = es + c.mins
+      if (ns < ee && es < ne) return { type: "clash", msg: `Overlaps ${c.name} (${c.time})` }
+      const gap = ns >= ee ? ns - ee : es - ne
+      if (gap >= 0 && gap < 20 && !tight) tight = { msg: ns >= ee ? `Just ${gap} min after ${c.name} ends (${fmtTime(ee)})` : `Just ${gap} min before ${c.name} (${c.time})` }
+    }
+    return tight ? { type: "tight", ...tight } : null
+  }
+  const warnings = slots.map(slotWarning)
+  const hasClash = warnings.some(w => w?.type === "clash")
+  // group commitments + new slots by weekday for the "your week" preview
+  const weekByDay = DAY_ORDER.map(day => ({
+    day,
+    items: [
+      ...commitments.filter(c => c.day === day).map(c => ({ time: c.time, start: c.start, name: c.name, mine: true })),
+      ...slots.filter(s => s.day === day).map(s => ({ time: s.time, start: toMin(s.time), name: className || "New class", isNew: true })),
+    ].sort((a, b) => a.start - b.start),
+  }))
 
   function addSlot()  { setSlots(s => [...s, { day: "Mon", time: "18:00" }]) }
   function removeSlot(i) { setSlots(s => s.length > 1 ? s.filter((_, j) => j !== i) : s) }
@@ -6849,8 +6929,10 @@ function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] 
 
   function submit() {
     if (!className) return
+    if (hasClash && !confirmClash) { setConfirmClash(true); return }   // make the instructor acknowledge a clash
     setRequests(p => [{ name: className, studio, location, recurring, social: selectedClass?.social,
       series: isSet, weeks: selectedClass?.weeks, slots: slots.map(s => ({ ...s })), status: "pending" }, ...p])
+    setConfirmClash(false)
     setToast(true)
     setTimeout(() => setToast(false), 2500)
   }
@@ -6896,21 +6978,31 @@ function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] 
             <button onClick={addSlot} className="text-xs font-semibold text-[#00aa13] hover:underline">+ Add another time</button>
           </div>
           <div className="flex flex-col gap-2">
-            {slots.map((sl, i) => (
-              <div key={i} className={`flex items-center gap-2 p-2 rounded-xl ${subtle}`}>
-                <div className="flex gap-1 flex-wrap flex-1">
-                  {DAYS.map(d => (
-                    <button key={d} onClick={() => updateSlot(i, { day: d })}
-                      className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors ${sl.day === d ? "bg-[#00aa13] text-white" : darkMode ? "bg-gray-700 text-gray-400 hover:bg-gray-600" : "bg-white text-gray-500 hover:bg-gray-100"}`}>{d}</button>
-                  ))}
+            {slots.map((sl, i) => {
+              const w = warnings[i]
+              return (
+                <div key={i} className={`p-2 rounded-xl ${subtle} ${w?.type === "clash" ? "ring-1 ring-red-400" : w?.type === "tight" ? "ring-1 ring-amber-400" : ""}`}>
+                  <div className="flex items-center gap-2">
+                    <div className="flex gap-1 flex-wrap flex-1">
+                      {DAYS.map(d => (
+                        <button key={d} onClick={() => { updateSlot(i, { day: d }); setConfirmClash(false) }}
+                          className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors ${sl.day === d ? "bg-[#00aa13] text-white" : darkMode ? "bg-gray-700 text-gray-400 hover:bg-gray-600" : "bg-white text-gray-500 hover:bg-gray-100"}`}>{d}</button>
+                      ))}
+                    </div>
+                    <input type="time" value={sl.time} onChange={e => { updateSlot(i, { time: e.target.value }); setConfirmClash(false) }}
+                      className={`px-2.5 py-1.5 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-[#00aa13] ${darkMode ? "bg-gray-800 border-gray-700 text-white" : "bg-white border-gray-200 text-gray-900"}`} />
+                    {slots.length > 1 && (
+                      <button onClick={() => removeSlot(i)} className={`w-6 h-6 rounded flex items-center justify-center text-xs flex-shrink-0 ${darkMode ? "hover:bg-gray-700 text-gray-500" : "hover:bg-gray-200 text-gray-400"}`}>✕</button>
+                    )}
+                  </div>
+                  {w && (
+                    <p className={`text-[11px] font-medium mt-1.5 px-1 flex items-center gap-1 ${w.type === "clash" ? "text-red-500" : "text-amber-500"}`}>
+                      {w.type === "clash" ? "⛔" : "⚠"} {w.msg}
+                    </p>
+                  )}
                 </div>
-                <input type="time" value={sl.time} onChange={e => updateSlot(i, { time: e.target.value })}
-                  className={`px-2.5 py-1.5 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-[#00aa13] ${darkMode ? "bg-gray-800 border-gray-700 text-white" : "bg-white border-gray-200 text-gray-900"}`} />
-                {slots.length > 1 && (
-                  <button onClick={() => removeSlot(i)} className={`w-6 h-6 rounded flex items-center justify-center text-xs flex-shrink-0 ${darkMode ? "hover:bg-gray-700 text-gray-500" : "hover:bg-gray-200 text-gray-400"}`}>✕</button>
-                )}
-              </div>
-            ))}
+              )
+            })}
           </div>
 
           {/* Set rollout preview */}
@@ -6939,9 +7031,49 @@ function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] 
           </div>
         </button>
 
-        <button onClick={submit}
-          className="w-full mt-5 py-3 rounded-xl bg-[#00aa13] hover:bg-[#008a0f] text-white font-semibold text-sm transition-colors">
-          {toast ? "✓ Request submitted" : "Submit request"}
+        {/* Your week — spot free slots & clashes at a glance */}
+        <div className={`mt-4 rounded-xl p-3 ${subtle}`}>
+          <p className={`text-xs font-semibold mb-2 ${heading}`}>Your week · existing commitments + this request</p>
+          <div className="grid grid-cols-7 gap-1.5">
+            {weekByDay.map(({ day, items }) => (
+              <div key={day} className="min-w-0">
+                <p className={`text-[10px] font-bold text-center mb-1 ${muted}`}>{day}</p>
+                <div className="flex flex-col gap-1">
+                  {items.length === 0 && <div className={`h-5 rounded ${darkMode ? "bg-gray-900/40" : "bg-white/60"}`} />}
+                  {items.map((it, j) => (
+                    <div key={j} title={`${it.name} · ${it.time}`}
+                      className={`text-[8px] leading-tight font-semibold px-1 py-1 rounded truncate text-center ${it.isNew
+                        ? "bg-[#00aa13] text-white"
+                        : darkMode ? "bg-gray-700 text-gray-300" : "bg-white text-gray-600 border border-gray-100"}`}>
+                      {it.time}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className={`flex items-center gap-3 mt-2 text-[10px] ${muted}`}>
+            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-[#00aa13]" /> This request</span>
+            <span className="flex items-center gap-1"><span className={`w-2.5 h-2.5 rounded-sm ${darkMode ? "bg-gray-700" : "bg-white border border-gray-200"}`} /> Already teaching</span>
+          </div>
+        </div>
+
+        {/* Clash confirmation */}
+        {hasClash && (
+          <label className={`flex items-start gap-2.5 mt-4 p-3 rounded-xl cursor-pointer ${darkMode ? "bg-red-900/20" : "bg-red-50"}`}>
+            <input type="checkbox" checked={confirmClash} onChange={e => setConfirmClash(e.target.checked)} className="mt-0.5 accent-red-500" />
+            <span className="text-xs">
+              <span className="font-semibold text-red-500">This overlaps a class you already teach.</span>
+              <span className={`block mt-0.5 ${muted}`}>Tick to confirm you want to request it anyway — the studio will see the conflict.</span>
+            </span>
+          </label>
+        )}
+
+        <button onClick={submit} disabled={hasClash && !confirmClash}
+          className={`w-full mt-5 py-3 rounded-xl font-semibold text-sm transition-colors ${hasClash && !confirmClash
+            ? "bg-gray-300 text-gray-500 cursor-not-allowed dark:bg-gray-700 dark:text-gray-500"
+            : hasClash ? "bg-red-500 hover:bg-red-600 text-white" : "bg-[#00aa13] hover:bg-[#008a0f] text-white"}`}>
+          {toast ? "✓ Request submitted" : hasClash ? "Request despite clash" : "Submit request"}
         </button>
       </div>
 

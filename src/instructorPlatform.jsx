@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react"
 import {
   ArrowLeft, Play, Pause, SkipForward, RotateCcw, Search, Star, Music, Heart,
-  Gauge, Zap, Activity, Radio, Bell, Award, Trophy, Flame, TrendingUp,
+  Gauge, Zap, Activity, Radio, Bell, Award, Trophy, Target, Flame, TrendingUp,
   TrendingDown, ThumbsUp, MessageSquare, Sparkles, Wand2, Pencil, Save,
   Check, Plus, ChevronRight, Users, Clock, Calendar, Sun, Moon, SlidersHorizontal as SlidersIcon,
 } from "lucide-react"
@@ -107,7 +107,7 @@ function StatCard({ darkMode, label, value, sub, Icon, trend, accent = GREEN }) 
 }
 
 // ── chart kit (hand-rolled SVG, responsive, no deps) ─────────────────────────
-function AreaTrend({ points, color = GREEN, height = 170, darkMode, yMax }) {
+export function AreaTrend({ points, color = GREEN, height = 170, darkMode, yMax, labels, valueFmt = v => v }) {
   const W = 600, H = height, pad = { l: 6, r: 6, t: 14, b: 8 }
   const max = yMax || Math.max(...points) * 1.15 || 1
   const iw = W - pad.l - pad.r, ih = H - pad.t - pad.b
@@ -117,31 +117,62 @@ function AreaTrend({ points, color = GREEN, height = 170, darkMode, yMax }) {
   const area = `${line} L${xs[xs.length - 1].toFixed(1)},${pad.t + ih} L${xs[0].toFixed(1)},${pad.t + ih} Z`
   const grid = darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)"
   const id = "g" + Math.round(seedNum(String(points[0]) + points.length + color))
+  const [hi, setHi] = useState(null)
+  const xf = i => (pad.l + (i / (points.length - 1)) * iw) / W * 100
+  const yf = i => ys[i] / H * 100
+  function move(e) {
+    const r = e.currentTarget.getBoundingClientRect()
+    const fx = (e.clientX - r.left) / r.width
+    setHi(Math.max(0, Math.min(points.length - 1, Math.round(((fx * W) - pad.l) / iw * (points.length - 1)))))
+  }
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none">
-      <defs><linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stopColor={color} stopOpacity="0.28" /><stop offset="100%" stopColor={color} stopOpacity="0" />
-      </linearGradient></defs>
-      {[0.25, 0.5, 0.75].map(g => <line key={g} x1={pad.l} x2={W - pad.r} y1={pad.t + ih * g} y2={pad.t + ih * g} stroke={grid} strokeWidth="1" vectorEffect="non-scaling-stroke" />)}
-      <path d={area} fill={`url(#${id})`} />
-      <path d={line} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-      {xs.map((x, i) => i === xs.length - 1 && <circle key={i} cx={x} cy={ys[i]} r="3.5" fill={color} vectorEffect="non-scaling-stroke" />)}
-    </svg>
+    <div className="relative w-full select-none" style={{ height: H }} onMouseMove={move} onMouseLeave={() => setHi(null)}>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none">
+        <defs><linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.28" /><stop offset="100%" stopColor={color} stopOpacity="0" />
+        </linearGradient></defs>
+        {[0.25, 0.5, 0.75].map(g => <line key={g} x1={pad.l} x2={W - pad.r} y1={pad.t + ih * g} y2={pad.t + ih * g} stroke={grid} strokeWidth="1" vectorEffect="non-scaling-stroke" />)}
+        <path d={area} fill={`url(#${id})`} style={{ animation: "fadeIn .8s ease" }} />
+        <path key={id + points.length} d={line} pathLength="1" className="chart-line" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+        {hi != null && <line x1={xs[hi]} x2={xs[hi]} y1={pad.t} y2={pad.t + ih} stroke={color} strokeWidth="1" strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />}
+      </svg>
+      {/* HTML overlay so dots/tooltip aren't stretched by the SVG */}
+      <span className="absolute w-2.5 h-2.5 rounded-full pointer-events-none" style={{ left: `${xf(points.length - 1)}%`, top: `${yf(points.length - 1)}%`, transform: "translate(-50%,-50%)", background: color }} />
+      {hi != null && (
+        <>
+          <span className="absolute w-3.5 h-3.5 rounded-full border-2 border-white shadow pointer-events-none transition-all" style={{ left: `${xf(hi)}%`, top: `${yf(hi)}%`, transform: "translate(-50%,-50%)", background: color }} />
+          <div className={`absolute z-10 -translate-x-1/2 -translate-y-full pointer-events-none px-2 py-1 rounded-lg text-[11px] font-semibold whitespace-nowrap shadow-lg ${darkMode ? "bg-gray-700 text-white" : "bg-gray-900 text-white"}`}
+            style={{ left: `${Math.min(90, Math.max(10, xf(hi)))}%`, top: `${yf(hi)}%`, marginTop: -10 }}>
+            {labels?.[hi] ? `${labels[hi]} · ` : ""}{valueFmt(points[hi])}
+          </div>
+        </>
+      )}
+    </div>
   )
 }
 
-function Bars({ data, color = GREEN, height = 150, darkMode, fmt = v => v }) {
+function Bars({ data, color = GREEN, height = 150, darkMode, fmt = v => v, showDelta = false }) {
   const t = tk(darkMode)
   const max = Math.max(...data.map(d => d.v)) || 1
+  const [hi, setHi] = useState(null)
   return (
-    <div className="flex items-end gap-2" style={{ height }}>
-      {data.map((d, i) => (
-        <div key={i} className="flex-1 flex flex-col items-center justify-end gap-2 h-full group">
-          <span className={`text-[10px] font-semibold tabular-nums ${t.muted} opacity-0 group-hover:opacity-100 transition`}>{fmt(d.v)}</span>
-          <div className="w-full rounded-lg transition-all" style={{ height: `${(d.v / max) * 100}%`, minHeight: 4, background: d.color || color }} title={`${d.label}: ${fmt(d.v)}`} />
-          <span className={`text-[10px] font-medium ${t.faint}`}>{d.label}</span>
-        </div>
-      ))}
+    <div className="flex items-end gap-2.5" style={{ height }} onMouseLeave={() => setHi(null)}>
+      {data.map((d, i) => {
+        const delta = i > 0 ? d.v - data[i - 1].v : null
+        const on = hi === i
+        return (
+          <div key={i} className="flex-1 flex flex-col items-center justify-end gap-1.5 h-full cursor-default" onMouseEnter={() => setHi(i)}>
+            <span className="text-xs font-bold tabular-nums transition-colors" style={{ color: on ? (d.color || color) : undefined }}>{fmt(d.v)}</span>
+            <div className="w-full rounded-lg rise-bar" style={{ height: `${(d.v / max) * 100}%`, minHeight: 6, background: d.color || color, animationDelay: `${i * 55}ms`, opacity: hi != null && !on ? 0.45 : 1, transition: "opacity .2s, filter .2s", filter: on ? "brightness(1.08)" : "none" }} />
+            <div className="flex flex-col items-center leading-tight">
+              <span className={`text-[10px] font-medium ${t.faint}`}>{d.label}</span>
+              {showDelta && delta != null && (
+                <span className={`text-[9px] font-bold ${delta >= 0 ? "text-[#00aa13]" : "text-red-500"}`}>{delta >= 0 ? "▲" : "▼"}{Math.abs(delta)}</span>
+              )}
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -959,9 +990,9 @@ export function GrowthDashboardPage({ darkMode, onToggleDarkMode, onNavigate, em
     { label: "Classes taught", value: "412", Icon: Calendar, trend: 12 },
     { label: "Avg attendance", value: "31", Icon: Users, trend: 8 },
     { label: "Rider retention", value: "88%", Icon: Heart, accent: "#ec4899", trend: 4 },
-    { label: "NPS", value: "72", Icon: ThumbsUp, accent: "#0ea5e9", trend: 6 },
     { label: "Repeat riders", value: "64%", Icon: RotateCcw, accent: "#8b5cf6", trend: 5 },
   ]
+  const attLabels = ["12w","11w","10w","9w","8w","7w","6w","5w","4w","3w","2w","Now"]
   const attendance = [22, 24, 23, 26, 28, 27, 30, 29, 31, 33, 32, 35]
   const classesPerMonth = [{ label: "Jan", v: 28 }, { label: "Feb", v: 31 }, { label: "Mar", v: 30 }, { label: "Apr", v: 34 }, { label: "May", v: 36 }, { label: "Jun", v: 38 }]
   const bests = [
@@ -971,12 +1002,12 @@ export function GrowthDashboardPage({ darkMode, onToggleDarkMode, onNavigate, em
     { label: "Fastest growing class", value: "Saturday HIIT", sub: "+46% riders in 8 weeks", Icon: TrendingUp, c: "#0ea5e9" },
   ]
   const badges = [
-    { t: "1,000 riders coached", Icon: Users, on: true, c: GREEN },
-    { t: "100-class streak", Icon: Flame, on: true, c: "#f59e0b" },
-    { t: "NPS 70+ club", Icon: ThumbsUp, on: true, c: "#0ea5e9" },
-    { t: "Sold-out 10×", Icon: Trophy, on: true, c: "#8b5cf6" },
-    { t: "5.0 class", Icon: Star, on: true, c: "#ec4899" },
-    { t: "500 classes", Icon: Award, on: false, c: "#14b8a6" },
+    { t: "1,000 riders coached", sub: "Elite", Icon: Users, on: true, c: GREEN },
+    { t: "100-class streak", sub: "On fire", Icon: Flame, on: true, c: "#f59e0b" },
+    { t: "Top rated · 4.9★", sub: "Gold", Icon: Star, on: true, c: "#0ea5e9" },
+    { t: "Sold-out 10×", sub: "Headliner", Icon: Trophy, on: true, c: "#8b5cf6" },
+    { t: "5.0 class", sub: "Perfect", Icon: Award, on: true, c: "#ec4899" },
+    { t: "500 classes", sub: "62% there", Icon: Target, on: false, c: "#14b8a6", progress: 62 },
   ]
 
   return (
@@ -991,8 +1022,8 @@ export function GrowthDashboardPage({ darkMode, onToggleDarkMode, onNavigate, em
         </button>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
-        {kpis.map((k, i) => <StatCard key={i} darkMode={darkMode} {...k} />)}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+        {kpis.map((k, i) => <div key={i} className="pop-in" style={{ animationDelay: `${i * 60}ms` }}><StatCard darkMode={darkMode} {...k} /></div>)}
       </div>
 
       <div className="grid lg:grid-cols-2 gap-4 mb-4">
@@ -1002,11 +1033,15 @@ export function GrowthDashboardPage({ darkMode, onToggleDarkMode, onNavigate, em
             <span className="text-xs font-semibold text-[#00aa13]">+59% YoY</span>
           </div>
           <p className={`text-3xl font-bold ${t.heading} mb-2`}>35 <span className={`text-sm font-medium ${t.muted}`}>riders / class</span></p>
-          <AreaTrend points={attendance} darkMode={darkMode} color="#14b8a6" height={150} />
+          <AreaTrend points={attendance} labels={attLabels} valueFmt={v => `${v} riders`} darkMode={darkMode} color="#14b8a6" height={150} />
         </div>
         <div className={`${t.card} p-5`}>
-          <p className={`text-sm font-semibold mb-4 ${t.heading}`}>Classes taught / month</p>
-          <Bars data={classesPerMonth} darkMode={darkMode} color={GREEN} height={170} />
+          <div className="flex items-center justify-between mb-1">
+            <p className={`text-sm font-semibold ${t.heading}`}>Classes taught / month</p>
+            <span className="text-xs font-semibold text-[#00aa13]">+10 since Jan</span>
+          </div>
+          <p className={`text-3xl font-bold ${t.heading} mb-3`}>38 <span className={`text-sm font-medium ${t.muted}`}>this month</span></p>
+          <Bars data={classesPerMonth} darkMode={darkMode} color={GREEN} height={150} showDelta />
         </div>
       </div>
 
@@ -1025,16 +1060,31 @@ export function GrowthDashboardPage({ darkMode, onToggleDarkMode, onNavigate, em
       </div>
 
       <div className={`${t.card} p-5`}>
-        <p className={`text-sm font-semibold mb-4 ${t.heading}`}>Achievement badges</p>
-        <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
-          {badges.map((b, i) => (
-            <div key={i} className={`flex flex-col items-center text-center gap-2 rounded-xl p-3 ${t.subtle} ${b.on ? "" : "opacity-40"}`}>
-              <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white" style={{ background: b.on ? `linear-gradient(135deg,${b.c},${b.c}bb)` : (darkMode ? "#374151" : "#d1d5db") }}>
-                <b.Icon size={20} />
+        <div className="flex items-center justify-between mb-4">
+          <p className={`text-sm font-semibold ${t.heading}`}>Achievement badges</p>
+          <span className={`text-xs ${t.muted}`}>{badges.filter(b => b.on).length} of {badges.length} earned</span>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          {badges.map((b, i) => {
+            const ring = b.on ? b.c : (darkMode ? "#374151" : "#e5e7eb")
+            const pct = b.on ? 100 : (b.progress || 0)
+            return (
+              <div key={i} className={`pop-in flex flex-col items-center text-center gap-2 rounded-2xl p-3.5 border transition-all ${b.on ? "hover:-translate-y-0.5 hover:shadow-md" : ""} ${darkMode ? "border-gray-800" : "border-gray-100"}`} style={{ animationDelay: `${i * 50}ms` }}>
+                <div className="relative" style={{ width: 56, height: 56 }}>
+                  <Ring pct={pct} size={56} stroke={4} color={ring} darkMode={darkMode}>
+                    <div className="w-10 h-10 rounded-full flex items-center justify-center text-white" style={{ background: b.on ? `linear-gradient(135deg,${b.c},${b.c}cc)` : (darkMode ? "#374151" : "#e5e7eb"), boxShadow: b.on ? `0 4px 12px ${b.c}55` : "none" }}>
+                      <b.Icon size={18} className={b.on ? "" : (darkMode ? "text-gray-500" : "text-gray-400")} />
+                    </div>
+                  </Ring>
+                  {b.on && <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-[#00aa13] flex items-center justify-center"><Check size={10} className="text-white" /></span>}
+                </div>
+                <div>
+                  <p className={`text-[11px] font-bold leading-tight ${b.on ? t.heading : t.muted}`}>{b.t}</p>
+                  <p className="text-[9px] font-bold uppercase tracking-wider mt-0.5" style={{ color: b.on ? b.c : (darkMode ? "#6b7280" : "#9ca3af") }}>{b.sub}</p>
+                </div>
               </div>
-              <p className={`text-[10px] font-medium leading-tight ${t.heading}`}>{b.t}</p>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
     </MaybeShell>

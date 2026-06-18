@@ -79,6 +79,10 @@ function PageHead({ darkMode, onToggleDarkMode, onBack, title, sub, Icon, gradie
 function Shell({ children, max = "max-w-6xl" }) {
   return <div className={`p-4 md:p-8 ${max} mx-auto pb-28 md:pb-16`}>{children}</div>
 }
+// Renders standalone (own page padding + header) or bare when embedded inside another page (e.g. Insights tabs)
+function MaybeShell({ embedded, children, max }) {
+  return embedded ? <>{children}</> : <Shell max={max}>{children}</Shell>
+}
 
 function StatCard({ darkMode, label, value, sub, Icon, trend, accent = GREEN }) {
   const t = tk(darkMode)
@@ -405,25 +409,40 @@ export function InstructorPlatformPage({ darkMode, onToggleDarkMode, onNavigate,
 //  FEATURE 1 · CUE SHEET  ·  /instructor/cue-sheet
 // ═════════════════════════════════════════════════════════════════════════════
 const CUE_SEGMENTS = [
-  { name: "Warm Up",   secs: 300, rpm: "80–90", zone: "Z1–2", cues: ["Roll the legs out", "Find your breath", "Light resistance", "Settle the shoulders"] },
-  { name: "Hill Climb",secs: 240, rpm: "70–80", zone: "Z3–4", cues: ["Add resistance", "Stay seated", "Maintain 70–80 RPM", "Keep shoulders relaxed", "Drive from the heels"] },
-  { name: "Sprint",    secs: 30,  rpm: "100+",  zone: "Z5",   cues: ["Out of the saddle", "All-out effort", "Light, fast legs", "Leave it on the bike"] },
-  { name: "Recovery",  secs: 120, rpm: "85",    zone: "Z2",   cues: ["Drop resistance", "Slow the breath", "Shake out the arms", "Hydrate"] },
-  { name: "Cool Down", secs: 180, rpm: "70",    zone: "Z1",   cues: ["Ease the pace", "Long exhales", "Roll the neck", "Well done today"] },
+  { name: "Warm Up",   secs: 300, rpm: "80–90", zone: "Z1–2", z: 2, cues: ["Roll the legs out", "Find your breath", "Light resistance", "Settle the shoulders"] },
+  { name: "Hill Climb",secs: 240, rpm: "70–80", zone: "Z3–4", z: 4, cues: ["Add resistance", "Stay seated", "Maintain 70–80 RPM", "Keep shoulders relaxed", "Drive from the heels"] },
+  { name: "Sprint",    secs: 30,  rpm: "100+",  zone: "Z5",   z: 5, cues: ["Out of the saddle", "All-out effort", "Light, fast legs", "Leave it on the bike"] },
+  { name: "Recovery",  secs: 120, rpm: "85",    zone: "Z2",   z: 2, cues: ["Drop resistance", "Slow the breath", "Shake out the arms", "Hydrate"] },
+  { name: "Cool Down", secs: 180, rpm: "70",    zone: "Z1",   z: 1, cues: ["Ease the pace", "Long exhales", "Roll the neck", "Well done today"] },
 ]
+// Riders in the room — live performance % drives the leaderboard / seating heat-map
+const LIVE_RIDERS = ["Sarah M","Tom B","Elena R","David O","Sophie T","Ravi P","Aisha K","Jordan L","Priya A","Marcus W","Chloe B","Liam F","Noah P","Mia F","Leo B","Olivia H","Zoe K","Ben C","Ivy R","Sam D","Nina G","Kofi A","Lena V","Theo M"]
+  .map((name, i) => ({ name, bike: i + 1, out: 40 + ((i * 37) % 55) }))
+function perfColor(v) { return v >= 80 ? "#00aa13" : v >= 62 ? "#82ed3c" : v >= 44 ? "#fde53d" : v >= 26 ? "#fb7512" : "#e91236" }
 const fmtMSS = s => `${Math.floor(s / 60)}:${String(Math.max(0, s % 60)).padStart(2, "0")}`
 
-export function CueSheetPage({ onNavigate }) {
-  const [idx, setIdx] = useState(1)            // start on the Hill Climb (matches the live mock)
-  const [left, setLeft] = useState(133)        // 2:13 remaining
+// ═════════════════════════════════════════════════════════════════════════════
+//  LIVE TEACHING COCKPIT  ·  cue sheet + live metrics + rider leaderboard, merged
+// ═════════════════════════════════════════════════════════════════════════════
+const ZONE_DIST_LIVE = [5, 15, 35, 30, 15].map((pct, i) => ({ label: `Zone ${i + 1}`, pct, color: ZONE_COLORS[i] }))
+
+export function LiveModePage({ onNavigate }) {
+  const [idx, setIdx] = useState(1)
+  const [left, setLeft] = useState(133)
   const [running, setRunning] = useState(false)
   const [cueIdx, setCueIdx] = useState(0)
+  const [riders, setRiders] = useState(LIVE_RIDERS)
+  const [feed, setFeed] = useState(() => [
+    { id: 1, Icon: Trophy, c: "#f59e0b", txt: "Sarah reached a personal best", ago: "just now" },
+    { id: 2, Icon: Award, c: GREEN, txt: "Tom completed ride #100", ago: "1m ago" },
+    { id: 3, Icon: Zap, c: "#8b5cf6", txt: "Elena entered Zone 5", ago: "2m ago" },
+  ])
+  const fid = useRef(4)
   const seg = CUE_SEGMENTS[idx], next = CUE_SEGMENTS[idx + 1]
-  const totalSecs = CUE_SEGMENTS.reduce((a, s) => a + s.secs, 0)
-  const doneSecs = CUE_SEGMENTS.slice(0, idx).reduce((a, s) => a + s.secs, 0) + (seg.secs - left)
-  const progress = Math.round((doneSecs / totalSecs) * 100)
+  const total = CUE_SEGMENTS.reduce((a, s) => a + s.secs, 0)
+  const done = CUE_SEGMENTS.slice(0, idx).reduce((a, s) => a + s.secs, 0) + (seg.secs - left)
+  const progress = Math.round(done / total * 100)
 
-  // self-rescheduling tick — re-arms each second off the latest state, no refs needed
   useEffect(() => {
     if (!running) return
     const id = setTimeout(() => {
@@ -434,82 +453,150 @@ export function CueSheetPage({ onNavigate }) {
     }, 1000)
     return () => clearTimeout(id)
   }, [running, left, idx])
-  useEffect(() => { // auto-scroll coaching prompts
+  useEffect(() => {
     if (!running) return
     const id = setInterval(() => setCueIdx(c => (c + 1) % seg.cues.length), 3200)
     return () => clearInterval(id)
   }, [running, seg])
+  useEffect(() => {
+    if (!running) return
+    const id = setInterval(() => {
+      const target = seg.z
+      setRiders(rs => rs.map(r => {
+        const drift = (Math.random() - 0.45) * 8 + (target * 4 - r.out) * 0.06
+        return { ...r, out: Math.max(12, Math.min(100, Math.round(r.out + drift))) }
+      }))
+      if (Math.random() > 0.4) {
+        const tpl = FEED_TEMPLATES[Math.floor(Math.random() * FEED_TEMPLATES.length)]
+        const nm = FEED_NAMES[Math.floor(Math.random() * FEED_NAMES.length)]
+        setFeed(f => [{ id: fid.current++, Icon: tpl.Icon, c: tpl.c, txt: tpl.t(nm), ago: "just now" }, ...f.slice(0, 6)])
+      }
+    }, 2200)
+    return () => clearInterval(id)
+  }, [running, seg])
 
-  function skip() {
-    setIdx(i => { const n = Math.min(i + 1, CUE_SEGMENTS.length - 1); setLeft(CUE_SEGMENTS[n].secs); return n })
-    setCueIdx(0)
-  }
+  function skip() { const n = Math.min(idx + 1, CUE_SEGMENTS.length - 1); setIdx(n); setLeft(CUE_SEGMENTS[n].secs); setCueIdx(0) }
   function reset() { setIdx(1); setLeft(133); setRunning(false); setCueIdx(0) }
+
+  const ranked = [...riders].sort((a, b) => b.out - a.out)
+  const rankOf = {}; ranked.forEach((r, i) => { rankOf[r.bike] = i + 1 })
+  const avgOut = Math.round(riders.reduce((a, r) => a + r.out, 0) / riders.length)
+  const rows = [riders.slice(0, 8), riders.slice(8, 16), riders.slice(16, 24)]
+  const initials = n => n.split(" ").map(w => w[0]).join("")
 
   return (
     <div className="min-h-screen text-white" style={{ background: "radial-gradient(120% 90% at 50% 0%, #14223a 0%, #0a0f1c 60%, #060912 100%)" }}>
-      <div className="max-w-5xl mx-auto px-4 md:px-8 py-5 pb-32 md:pb-10">
-        <div className="flex items-center justify-between mb-8">
-          <button onClick={() => onNavigate("Platform")} className="flex items-center gap-1.5 text-sm font-medium text-white/60 hover:text-white transition-colors">
-            <ArrowLeft size={15} /> Platform
-          </button>
-          <div className="flex items-center gap-2">
-            <span className="flex items-center gap-1.5 text-xs font-semibold text-white/70">
-              <span className={`w-2 h-2 rounded-full ${running ? "bg-red-500 animate-pulse" : "bg-white/30"}`} />
-              {running ? "ON AIR" : "STANDBY"}
+      <div className="max-w-7xl mx-auto px-4 md:px-8 py-5 pb-32 md:pb-10">
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-3">
+            <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded-full bg-red-500/15 text-red-400">
+              <span className={`w-2 h-2 rounded-full ${running ? "bg-red-500 animate-pulse" : "bg-white/30"}`} /> {running ? "On Air" : "Standby"}
             </span>
+            <span className="text-sm text-white/60 hidden sm:inline">EDM Power Ride · Studio 1 · {riders.length} riders</span>
           </div>
+          <button onClick={() => onNavigate("Studio Home")} className="text-sm font-medium text-white/50 hover:text-white transition-colors">Exit</button>
         </div>
 
-        {/* timeline */}
-        <div className="flex items-center gap-1.5 mb-10 overflow-x-auto pb-1">
-          {CUE_SEGMENTS.map((s, i) => (
-            <React.Fragment key={i}>
-              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors
-                ${i === idx ? "bg-[#00aa13] text-white" : i < idx ? "bg-white/10 text-white/50" : "bg-white/5 text-white/40"}`}>
-                {i < idx && <Check size={12} />} {s.name}
+        {/* class plan with playhead — the overview running alongside */}
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-4 mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-bold uppercase tracking-widest text-white/40">Class plan</p>
+            <span className="text-xs text-white/50 tabular-nums">{fmtMSS(done)} / {fmtMSS(total)} · {progress}%</span>
+          </div>
+          <div className="relative h-7 rounded-lg overflow-hidden flex">
+            {CUE_SEGMENTS.map((s, i) => (
+              <div key={i} className="relative flex items-center justify-center border-r border-black/20 last:border-0" style={{ width: `${s.secs / total * 100}%`, background: ZONE_COLORS[s.z - 1], opacity: i === idx ? 1 : 0.45 }}>
+                <span className="text-[9px] font-bold text-black/70 truncate px-1">{s.name}</span>
               </div>
-              {i < CUE_SEGMENTS.length - 1 && <ChevronRight size={14} className="text-white/25 flex-shrink-0" />}
-            </React.Fragment>
-          ))}
+            ))}
+            <div className="absolute top-0 bottom-0 w-0.5 bg-white z-10" style={{ left: `${done / total * 100}%`, boxShadow: "0 0 8px #fff" }} />
+          </div>
+          {next && <p className="text-[11px] text-white/45 mt-2">Up next · <span className="text-white/85 font-semibold">{next.name}</span> · {fmtMSS(next.secs)} · {next.rpm} RPM</p>}
         </div>
 
-        <div className="grid lg:grid-cols-[1.4fr_1fr] gap-6 items-start">
-          {/* main timer */}
-          <div>
-            <p className="text-[#36ff5e] text-sm font-bold uppercase tracking-[0.2em] mb-2">Now · {seg.zone} · {seg.rpm} RPM</p>
-            <h1 className="text-5xl md:text-7xl font-bold tracking-tight mb-1">{seg.name}</h1>
-            <div className="flex items-end gap-4 mt-6 mb-8">
-              <span className="text-[88px] md:text-[140px] leading-none font-bold tabular-nums" style={{ textShadow: "0 0 40px rgba(0,170,19,0.35)" }}>{fmtMSS(left)}</span>
-              <span className="text-white/50 text-lg md:text-2xl font-medium mb-3 md:mb-6">remaining</span>
-            </div>
-            {/* segment progress */}
-            <div className="h-2.5 rounded-full bg-white/10 overflow-hidden mb-2">
-              <div className="h-full rounded-full transition-all" style={{ width: `${Math.max(0, ((seg.secs - left) / seg.secs) * 100)}%`, background: "linear-gradient(90deg,#00aa13,#36ff5e)" }} />
-            </div>
-            <div className="flex justify-between text-xs text-white/50 font-medium">
-              <span>Class progress · {progress}%</span><span>{fmtMSS(totalSecs - doneSecs)} to go</span>
-            </div>
-
-            {next && (
-              <div className="mt-8 rounded-2xl border border-white/10 bg-white/5 px-5 py-4 flex items-center gap-4">
-                <div className="w-11 h-11 rounded-xl bg-white/10 flex items-center justify-center"><SkipForward size={18} className="text-white/70" /></div>
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-widest text-white/40">Next section</p>
-                  <p className="text-xl font-semibold mt-0.5">{fmtMSS(next.secs)} {next.name} <span className="text-white/40 text-sm font-normal">· {next.rpm} RPM</span></p>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* coaching cues — auto-scrolling */}
+        <div className="grid lg:grid-cols-[1.2fr_1fr] gap-4">
+          {/* cue teleprompter */}
           <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-            <p className="text-xs font-bold uppercase tracking-widest text-white/40 mb-4">Coaching cues</p>
-            <div className="flex flex-col gap-2.5">
+            <p className="text-[#36ff5e] text-xs font-bold uppercase tracking-[0.2em] mb-1">Now · {seg.zone} · {seg.rpm} RPM</p>
+            <h1 className="text-4xl md:text-5xl font-bold tracking-tight">{seg.name}</h1>
+            <div className="flex items-end gap-3 mt-3 mb-4">
+              <span className="text-[64px] md:text-[88px] leading-none font-bold tabular-nums" style={{ textShadow: "0 0 30px rgba(0,170,19,.35)" }}>{fmtMSS(left)}</span>
+              <span className="text-white/45 mb-2 md:mb-4">remaining</span>
+            </div>
+            <div className="h-2 rounded-full bg-white/10 overflow-hidden mb-4">
+              <div className="h-full rounded-full" style={{ width: `${(seg.secs - left) / seg.secs * 100}%`, background: "linear-gradient(90deg,#00aa13,#36ff5e)" }} />
+            </div>
+            <div className="flex flex-col gap-2">
               {seg.cues.map((cue, i) => (
-                <div key={i} className={`px-4 py-3.5 rounded-xl border transition-all duration-500 ${i === cueIdx
-                  ? "border-[#00aa13] bg-[#00aa13]/15 scale-[1.02]" : "border-white/10 bg-white/[0.03]"}`}>
-                  <p className={`text-base md:text-lg font-semibold ${i === cueIdx ? "text-white" : "text-white/55"}`}>{cue}</p>
+                <div key={i} className={`px-4 py-2.5 rounded-xl border transition-all duration-500 ${i === cueIdx ? "border-[#00aa13] bg-[#00aa13]/15" : "border-white/10 bg-white/[0.03]"}`}>
+                  <p className={`text-base font-semibold ${i === cueIdx ? "text-white" : "text-white/55"}`}>{cue}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* leaderboard seating heat-map */}
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-sm font-semibold">Live leaderboard</p>
+              <span className="text-xs text-white/45">avg {avgOut}% effort</span>
+            </div>
+            <p className="text-[11px] text-white/40 mb-3">Seat colour = real-time output</p>
+            <div className="flex flex-col gap-1.5 mb-4">
+              {rows.map((row, ri) => (
+                <div key={ri} className="flex gap-1.5 justify-center">
+                  {row.map(r => (
+                    <div key={r.bike} title={`${r.name} · ${r.out}% · #${rankOf[r.bike]}`}
+                      className="w-9 h-10 rounded-lg flex items-center justify-center text-[9px] font-bold text-black/80 transition-colors"
+                      style={{ background: perfColor(r.out) }}>
+                      {rankOf[r.bike] <= 3 ? ["🥇", "🥈", "🥉"][rankOf[r.bike] - 1] : initials(r.name)}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+            <p className="text-[11px] font-bold uppercase tracking-widest text-white/40 mb-2">Top 5</p>
+            <div className="flex flex-col gap-1">
+              {ranked.slice(0, 5).map((r, i) => (
+                <div key={r.bike} className="flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 bg-white/[0.04]">
+                  <span className="text-xs font-bold w-4 text-white/50">{i + 1}</span>
+                  <span className="w-6 h-6 rounded-md flex items-center justify-center text-[9px] font-bold text-black/80" style={{ background: perfColor(r.out) }}>{initials(r.name)}</span>
+                  <span className="flex-1 text-sm font-medium truncate">{r.name}</span>
+                  <span className="text-sm font-bold tabular-nums">{r.out}%</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="grid md:grid-cols-3 gap-4 mt-4">
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+            <p className="text-xs font-bold uppercase tracking-widest text-white/40 mb-3">Target metrics</p>
+            <div className="flex flex-col gap-3">
+              {[["Cadence", `${seg.rpm} RPM`, Gauge, GREEN], ["Heart rate", "Zone 4 · 162–172", Heart, "#e91236"], ["Power", "Zone 3 · 210–250 W", Zap, "#f59e0b"]].map(([l, v, Ic, c], i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <span className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: c + "22", color: c }}><Ic size={16} /></span>
+                  <div><p className="text-[11px] text-white/45">{l}</p><p className="text-sm font-bold">{v}</p></div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+            <p className="text-xs font-bold uppercase tracking-widest text-white/40 mb-3">Zone distribution</p>
+            <StackedBar dist={ZONE_DIST_LIVE} height={18} />
+            <div className="grid grid-cols-5 gap-1.5 mt-3">
+              {ZONE_DIST_LIVE.map((z, i) => (
+                <div key={i} className="text-center"><div className="w-full h-1.5 rounded-full mb-1" style={{ background: z.color }} /><p className="text-xs font-bold">{z.pct}%</p></div>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+            <div className="flex items-center justify-between mb-3"><p className="text-sm font-semibold">Live feed</p><Radio size={15} className="text-red-400" /></div>
+            <div className="flex flex-col gap-2">
+              {feed.slice(0, 5).map((f, i) => (
+                <div key={f.id} className="flex items-center gap-2.5" style={{ opacity: 1 - i * 0.13 }}>
+                  <span className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: f.c + "22", color: f.c }}><f.Icon size={13} /></span>
+                  <p className="text-sm truncate">{f.txt}</p>
                 </div>
               ))}
             </div>
@@ -519,160 +606,16 @@ export function CueSheetPage({ onNavigate }) {
 
       {/* control bar */}
       <div className="fixed bottom-0 left-0 right-0 border-t border-white/10 bg-[#0a0f1c]/90 backdrop-blur z-40">
-        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-center gap-3">
-          <button onClick={reset} className="w-12 h-12 rounded-full bg-white/10 hover:bg-white/15 flex items-center justify-center transition-colors" title="Reset"><RotateCcw size={18} /></button>
-          <button onClick={() => setRunning(r => !r)}
-            className="h-14 px-8 rounded-full font-semibold text-base flex items-center gap-2.5 shadow-lg transition-transform active:scale-95"
-            style={{ background: running ? "#ffffff" : "linear-gradient(135deg,#00aa13,#008a0f)", color: running ? "#0a0f1c" : "#fff" }}>
+        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-center gap-3">
+          <button onClick={reset} className="w-12 h-12 rounded-full bg-white/10 hover:bg-white/15 flex items-center justify-center" title="Reset"><RotateCcw size={18} /></button>
+          <button onClick={() => setRunning(r => !r)} className="h-14 px-8 rounded-full font-semibold text-base flex items-center gap-2.5 shadow-lg transition-transform active:scale-95"
+            style={{ background: running ? "#fff" : "linear-gradient(135deg,#00aa13,#008a0f)", color: running ? "#0a0f1c" : "#fff" }}>
             {running ? <><Pause size={20} /> Pause</> : <><Play size={20} /> {left === CUE_SEGMENTS[idx].secs ? "Start Class" : "Resume"}</>}
           </button>
-          <button onClick={skip} className="h-12 px-5 rounded-full bg-white/10 hover:bg-white/15 flex items-center gap-2 text-sm font-semibold transition-colors" title="Skip segment">
-            <SkipForward size={18} /> Skip
-          </button>
+          <button onClick={skip} className="h-12 px-5 rounded-full bg-white/10 hover:bg-white/15 flex items-center gap-2 text-sm font-semibold" title="Skip"><SkipForward size={18} /> Skip</button>
         </div>
       </div>
     </div>
-  )
-}
-
-// ═════════════════════════════════════════════════════════════════════════════
-//  FEATURE 2 · LIVE INSTRUCTOR MODE  ·  /instructor/live
-// ═════════════════════════════════════════════════════════════════════════════
-export function LiveModePage({ darkMode, onToggleDarkMode, onNavigate }) {
-  const t = tk(darkMode)
-  const [feed, setFeed] = useState(() => [
-    { id: 1, Icon: Trophy, c: "#f59e0b", txt: "Sarah reached a personal best", ago: "just now" },
-    { id: 2, Icon: Award, c: GREEN, txt: "Tom completed ride #100", ago: "1m ago" },
-    { id: 3, Icon: Zap, c: "#8b5cf6", txt: "Elena entered Zone 5", ago: "2m ago" },
-  ])
-  const [cadence, setCadence] = useState(76)
-  const [power, setPower] = useState(215)
-  const fid = useRef(4)
-
-  useEffect(() => {
-    const id = setInterval(() => {
-      const tpl = FEED_TEMPLATES[Math.floor(Math.random() * FEED_TEMPLATES.length)]
-      const nm = FEED_NAMES[Math.floor(Math.random() * FEED_NAMES.length)]
-      setFeed(f => [{ id: fid.current++, Icon: tpl.Icon, c: tpl.c, txt: tpl.t(nm), ago: "just now" }, ...f.slice(0, 7)])
-      setCadence(c => Math.max(68, Math.min(84, c + (Math.random() > 0.5 ? 1 : -1))))
-      setPower(p => Math.max(200, Math.min(240, p + (Math.random() > 0.5 ? 3 : -3))))
-    }, 4000)
-    return () => clearInterval(id)
-  }, [])
-
-  const zoneDist = [
-    { label: "Zone 1", zone: 1, pct: 5 }, { label: "Zone 2", zone: 2, pct: 15 },
-    { label: "Zone 3", zone: 3, pct: 35 }, { label: "Zone 4", zone: 4, pct: 30 },
-    { label: "Zone 5", zone: 5, pct: 15 },
-  ].map(z => ({ ...z, color: ZONE_COLORS[z.zone - 1] }))
-
-  const targets = [
-    { label: "Cadence", value: "70–80", unit: "RPM", Icon: Gauge, c: GREEN },
-    { label: "Heart Rate", value: "Zone 4", unit: "162–172 bpm", Icon: Heart, c: "#e91236" },
-    { label: "Power", value: "Zone 3", unit: "210–250 W", Icon: Zap, c: "#f59e0b" },
-  ]
-
-  return (
-    <Shell max="max-w-7xl">
-      <PageHead darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} onBack={() => onNavigate("Platform")}
-        title="Live Instructor Mode" sub="DJ desk + coaching dashboard" Icon={Activity}
-        gradient="linear-gradient(135deg,#e91236,#fb7512)" />
-
-      <div className="flex items-center gap-2 mb-5">
-        <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded-full bg-red-500/10 text-red-500">
-          <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" /> Live · 28 riders in the room
-        </span>
-        <span className={`text-xs ${t.muted}`}>EDM Power Ride · Studio 1</span>
-      </div>
-
-      <div className="grid lg:grid-cols-3 gap-4">
-        {/* current segment — spans 2 */}
-        <div className={`${t.card} p-5 lg:col-span-2`}>
-          <div className="flex items-start justify-between gap-4 mb-5">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-widest" style={{ color: GREEN }}>Current segment</p>
-              <h2 className={`text-3xl font-bold tracking-tight mt-1 ${t.heading}`}>Hill Climb</h2>
-              <p className={`text-sm mt-1 ${t.muted}`}>Seated climb · drive from the heels</p>
-            </div>
-            <Ring pct={65} size={92} stroke={9} darkMode={darkMode}>
-              <div className="text-center">
-                <p className={`text-xl font-bold tabular-nums ${t.heading}`}>2:13</p>
-                <p className={`text-[10px] ${t.faint}`}>left</p>
-              </div>
-            </Ring>
-          </div>
-          <div className={`h-2 rounded-full ${t.subtle} overflow-hidden mb-1.5`}>
-            <div className="h-full rounded-full" style={{ width: "65%", background: `linear-gradient(90deg,${GREEN},#36ff5e)` }} />
-          </div>
-          <p className={`text-xs ${t.muted} mb-5`}>Workout progress · 65% · segment 2 of 5</p>
-
-          <p className={`text-xs font-bold uppercase tracking-widest ${t.faint} mb-3`}>Target metrics</p>
-          <div className="grid grid-cols-3 gap-3">
-            {targets.map((m, i) => (
-              <div key={i} className={`rounded-xl p-3.5 ${t.subtle}`}>
-                <span className="w-8 h-8 rounded-lg flex items-center justify-center mb-2.5" style={{ background: m.c + "1a", color: m.c }}><m.Icon size={15} /></span>
-                <p className={`text-[11px] ${t.muted}`}>{m.label}</p>
-                <p className={`text-lg font-bold ${t.heading}`}>{m.value}</p>
-                <p className={`text-[10px] ${t.faint}`}>{m.unit}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* live class feed */}
-        <div className={`${t.card} p-5 flex flex-col`}>
-          <div className="flex items-center justify-between mb-4">
-            <p className={`text-sm font-semibold ${t.heading}`}>Live class feed</p>
-            <Radio size={15} className="text-red-500" />
-          </div>
-          <div className="flex flex-col gap-2.5 overflow-hidden">
-            {feed.map((f, i) => (
-              <div key={f.id} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${t.subtle} transition-all`} style={{ opacity: 1 - i * 0.08 }}>
-                <span className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: f.c + "1a", color: f.c }}><f.Icon size={15} /></span>
-                <div className="min-w-0 flex-1">
-                  <p className={`text-sm font-medium truncate ${t.heading}`}>{f.txt}</p>
-                  <p className={`text-[10px] ${t.faint}`}>{f.ago}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* live rider metrics */}
-      <div className="grid lg:grid-cols-3 gap-4 mt-4">
-        <div className={`${t.card} p-5`}>
-          <p className={`text-sm font-semibold mb-4 ${t.heading}`}>Live rider metrics</p>
-          <div className="grid grid-cols-2 gap-3">
-            <div className={`rounded-xl p-4 ${t.subtle}`}>
-              <p className={`text-[11px] ${t.muted}`}>Avg cadence</p>
-              <p className={`text-2xl font-bold tabular-nums ${t.heading}`}>{cadence} <span className="text-sm font-medium">RPM</span></p>
-            </div>
-            <div className={`rounded-xl p-4 ${t.subtle}`}>
-              <p className={`text-[11px] ${t.muted}`}>Avg power</p>
-              <p className={`text-2xl font-bold tabular-nums ${t.heading}`}>{power} <span className="text-sm font-medium">W</span></p>
-            </div>
-          </div>
-        </div>
-
-        <div className={`${t.card} p-5 lg:col-span-2`}>
-          <div className="flex items-center justify-between mb-4">
-            <p className={`text-sm font-semibold ${t.heading}`}>Zone distribution · the room right now</p>
-            <span className={`text-xs ${t.muted}`}>28 riders</span>
-          </div>
-          <StackedBar dist={zoneDist} height={20} />
-          <div className="grid grid-cols-5 gap-2 mt-4">
-            {zoneDist.map((z, i) => (
-              <div key={i} className="text-center">
-                <div className="w-full h-1.5 rounded-full mb-1.5" style={{ background: z.color }} />
-                <p className={`text-xs font-bold tabular-nums ${t.heading}`}>{z.pct}%</p>
-                <p className={`text-[10px] ${t.faint}`}>Z{z.zone}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </Shell>
   )
 }
 
@@ -813,7 +756,7 @@ export function RidersCRMPage({ darkMode, onToggleDarkMode, onNavigate }) {
 // ═════════════════════════════════════════════════════════════════════════════
 //  FEATURE 4 · CLASS FEEDBACK & RATINGS  ·  /instructor/feedback
 // ═════════════════════════════════════════════════════════════════════════════
-export function FeedbackPage({ darkMode, onToggleDarkMode, onNavigate }) {
+export function FeedbackPage({ darkMode, onToggleDarkMode, onNavigate, embedded }) {
   const t = tk(darkMode)
   const trend = [4.5, 4.6, 4.6, 4.7, 4.8, 4.7, 4.9, 4.8, 4.9, 5.0]
   const sentiment = [ // monthly positive / neutral / negative
@@ -829,10 +772,10 @@ export function FeedbackPage({ darkMode, onToggleDarkMode, onNavigate }) {
   ]
 
   return (
-    <Shell>
-      <PageHead darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} onBack={() => onNavigate("Platform")}
+    <MaybeShell embedded={embedded}>
+      {!embedded && <PageHead darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} onBack={() => onNavigate("Studio Home")}
         title="Feedback & Ratings" sub="Class performance analytics" Icon={MessageSquare}
-        gradient="linear-gradient(135deg,#0ea5e9,#6366f1)" />
+        gradient="linear-gradient(135deg,#0ea5e9,#6366f1)" />}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
         {cards.map((c, i) => <StatCard key={i} darkMode={darkMode} {...c} />)}
@@ -899,7 +842,7 @@ export function FeedbackPage({ darkMode, onToggleDarkMode, onNavigate }) {
           </div>
         </div>
       </div>
-    </Shell>
+    </MaybeShell>
   )
 }
 
@@ -1010,7 +953,7 @@ export function SubsMarketplacePage({ darkMode, onToggleDarkMode, onNavigate }) 
 // ═════════════════════════════════════════════════════════════════════════════
 //  FEATURE 6 · GROWTH DASHBOARD  ·  /instructor/growth
 // ═════════════════════════════════════════════════════════════════════════════
-export function GrowthDashboardPage({ darkMode, onToggleDarkMode, onNavigate }) {
+export function GrowthDashboardPage({ darkMode, onToggleDarkMode, onNavigate, embedded }) {
   const t = tk(darkMode)
   const kpis = [
     { label: "Classes taught", value: "412", Icon: Calendar, trend: 12 },
@@ -1037,10 +980,10 @@ export function GrowthDashboardPage({ darkMode, onToggleDarkMode, onNavigate }) 
   ]
 
   return (
-    <Shell>
-      <PageHead darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} onBack={() => onNavigate("Platform")}
+    <MaybeShell embedded={embedded}>
+      {!embedded && <PageHead darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} onBack={() => onNavigate("Studio Home")}
         title="Growth Dashboard" sub="Measure your instructor performance" Icon={TrendingUp}
-        gradient="linear-gradient(135deg,#14b8a6,#00aa13)" />
+        gradient="linear-gradient(135deg,#14b8a6,#00aa13)" />}
 
       <div className="flex justify-end mb-4">
         <button onClick={() => onNavigate("Riders")} className={`flex items-center gap-1.5 text-sm font-semibold px-3.5 py-2 rounded-xl ${t.chip} hover:shadow-md transition-all`}>
@@ -1094,7 +1037,7 @@ export function GrowthDashboardPage({ darkMode, onToggleDarkMode, onNavigate }) 
           ))}
         </div>
       </div>
-    </Shell>
+    </MaybeShell>
   )
 }
 
@@ -1145,221 +1088,91 @@ function buildAIPlan(prompt) {
   const intensity = b.map((m, i) => ({ zone: i + 1, label: `Zone ${i + 1}`, pct: Math.round(m / tot * 100), color: ZONE_COLORS[i] }))
   return { dur: sum, intervals, climb, genre, level, tl, intensity, playlist: PLAYLISTS_BY_GENRE[genre] }
 }
-const AI_CUES = [
-  "Add one full turn of resistance — make it honest.",
-  "Stay seated through this climb, drive from the heels.",
-  "Push to Zone 4 — controlled but uncomfortable.",
-  "Out of the saddle, light and fast on the recovery roll.",
-  "Eyes up, shoulders down — find your rhythm with the beat.",
-  "Empty the tank on this final interval.",
-]
-const AI_RECOVERY = [
-  { t: "Active recovery between intervals", d: "Drop 2 turns, keep legs spinning at 85+ RPM to clear lactate." },
-  { t: "Hydration cue at the mid-point", d: "Programme a 20s water break after the long climb." },
-  { t: "Cool-down stretch", d: "Finish with 3 min of seated flush + hamstring & quad stretch off the bike." },
-]
 
-export function AIBuilderPage({ darkMode, onToggleDarkMode, onNavigate, onSaveTemplate, onOpenBuilder }) {
+// Embedded inside the Class Builder — generate a structured ride and drop it straight onto the canvas.
+export function AIBuilderPanel({ darkMode, onApply, onSaveTemplate }) {
   const t = tk(darkMode)
+  const [open, setOpen] = useState(false)
   const [prompt, setPrompt] = useState(AI_PROMPTS[0])
   const [loading, setLoading] = useState(false)
   const [plan, setPlan] = useState(null)
   const [rideName, setRideName] = useState("")
-  const [editing, setEditing] = useState(false)
-  const [toast, setToast] = useState("")
+  const [note, setNote] = useState("")
 
   function generate() {
     if (!prompt.trim()) return
-    setLoading(true); setPlan(null); setEditing(false)
+    setLoading(true); setPlan(null)
     setTimeout(() => {
       const pl = buildAIPlan(prompt)
-      setPlan(pl)
-      setRideName(`${pl.genre} ${pl.level} ${pl.climb ? "Climb & Intervals" : "Intervals"}`)
-      setLoading(false)
-    }, 1400)
-  }
-  function flash(m) { setToast(m); setTimeout(() => setToast(""), 2400) }
-  function adjustBlock(i, d) {
-    setPlan(p => { const tl = p.tl.map((s, j) => j === i ? { ...s, min: Math.max(1, s.min + d) } : s); return { ...p, tl, dur: tl.reduce((a, s) => a + s.min, 0) } })
-  }
-  function removeBlock(i) {
-    setPlan(p => { if (p.tl.length <= 2) return p; const tl = p.tl.filter((_, j) => j !== i); return { ...p, tl, dur: tl.reduce((a, s) => a + s.min, 0) } })
+      setPlan(pl); setRideName(`${pl.genre} ${pl.level} ${pl.climb ? "Climb & Intervals" : "Intervals"}`); setLoading(false)
+    }, 1300)
   }
   function ride() {
     return { name: rideName || "AI Ride", mins: plan.dur, difficulty: plan.level, genre: plan.genre,
       segments: plan.tl.map(s => ({ name: s.name, min: s.min, zone: s.zone, type: s.type })) }
   }
-  function saveTpl() { onSaveTemplate?.(ride()); flash("Saved — find it on the Overview ✓") }
+  function flash(m) { setNote(m); setTimeout(() => setNote(""), 2200) }
 
   return (
-    <Shell max="max-w-7xl">
-      <PageHead darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} onBack={() => onNavigate("Platform")}
-        title="AI Ride Builder" sub="Describe a ride — get a full plan, playlist & cues" Icon={Wand2}
-        gradient="linear-gradient(135deg,#6366f1,#8b5cf6,#ec4899)" />
+    <div className="rounded-2xl p-[1.5px] mb-5" style={{ background: open ? "linear-gradient(135deg,#6366f1,#8b5cf6,#ec4899)" : "transparent" }}>
+      <div className={`rounded-2xl border transition-colors ${darkMode ? "bg-gray-900" : "bg-white"} ${open ? "border-transparent" : darkMode ? "border-gray-800" : "border-gray-100"}`}>
+        <button onClick={() => setOpen(o => !o)} className="w-full flex items-center gap-3 p-4 text-left">
+          <span className="w-9 h-9 rounded-xl flex items-center justify-center text-white flex-shrink-0" style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)" }}><Wand2 size={17} /></span>
+          <div className="flex-1 min-w-0">
+            <p className={`text-sm font-semibold flex items-center gap-2 ${t.heading}`}>AI Ride Builder <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full text-white" style={{ background: "#8b5cf6" }}>AI</span></p>
+            <p className={`text-xs ${t.muted}`}>Describe a ride — drop a full plan onto the canvas</p>
+          </div>
+          <ChevronRight size={18} className={`${t.faint} transition-transform ${open ? "rotate-90" : ""}`} />
+        </button>
 
-      <div className="grid lg:grid-cols-[380px_1fr] gap-5 items-start">
-        {/* ── LEFT · prompt + actions ── */}
-        <div className="lg:sticky lg:top-4 space-y-4">
-          <div className="rounded-3xl p-[1.5px] shadow-lg" style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6,#ec4899)" }}>
-            <div className={`rounded-3xl p-5 ${darkMode ? "bg-gray-900" : "bg-white"}`}>
-              <p className={`text-xs font-bold uppercase tracking-wider mb-2.5 text-violet-500`}>Describe your ride</p>
-              <textarea value={prompt} onChange={e => setPrompt(e.target.value)} rows={4}
-                placeholder="e.g. Build me a 45-minute HIIT ride with EDM music, 5 intervals and 1 long climb"
-                className={`w-full bg-transparent text-base resize-none focus:outline-none ${t.heading}`} />
-              <div className="flex flex-wrap gap-1.5 mt-3 mb-4">
-                {AI_PROMPTS.map((p, i) => (
-                  <button key={i} onClick={() => setPrompt(p)} className={`text-[11px] px-2.5 py-1 rounded-full border ${t.border} ${t.muted} hover:border-violet-400 transition-colors`}>
-                    {p.length > 30 ? p.slice(0, 30) + "…" : p}
-                  </button>
-                ))}
-              </div>
-              <button onClick={generate} disabled={loading}
-                className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-white font-semibold text-sm shadow-lg transition-transform active:scale-95 disabled:opacity-60"
-                style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)" }}>
-                {loading ? <><Sparkles size={16} className="animate-spin" /> Generating…</> : <><Wand2 size={16} /> Generate Ride</>}
+        {open && (
+          <div className="px-4 pb-4">
+            <textarea value={prompt} onChange={e => setPrompt(e.target.value)} rows={2}
+              placeholder="e.g. 45-min HIIT with EDM music, 5 intervals and 1 long climb"
+              className={`w-full px-3.5 py-2.5 rounded-xl border text-sm resize-none focus:outline-none focus:ring-2 focus:ring-violet-400 ${darkMode ? "bg-gray-800 border-gray-700 text-white" : "bg-gray-50 border-gray-200 text-gray-900"}`} />
+            <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
+              {AI_PROMPTS.map((p, i) => <button key={i} onClick={() => setPrompt(p)} className={`text-[11px] px-2.5 py-1 rounded-full border ${t.border} ${t.muted} hover:border-violet-400`}>{p.length > 28 ? p.slice(0, 28) + "…" : p}</button>)}
+              <div className="flex-1" />
+              <button onClick={generate} disabled={loading} className="flex items-center gap-2 px-4 py-2 rounded-xl text-white font-semibold text-sm disabled:opacity-60" style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)" }}>
+                {loading ? <><Sparkles size={15} className="animate-spin" /> Generating…</> : <><Wand2 size={15} /> Generate</>}
               </button>
             </div>
-          </div>
 
-          {/* ride summary + actions */}
-          {plan && !loading && (
-            <div className={`${t.card} p-5`}>
-              {editing
-                ? <input value={rideName} onChange={e => setRideName(e.target.value)} className={`w-full text-lg font-bold bg-transparent border-b ${t.border} focus:outline-none focus:border-violet-400 pb-1 mb-3 ${t.heading}`} />
-                : <h2 className={`text-lg font-bold tracking-tight mb-3 ${t.heading}`}>{rideName}</h2>}
-              <div className="grid grid-cols-2 gap-2 mb-4">
-                {[["Duration", `${plan.dur} min`], ["Level", plan.level], ["Intervals", plan.intervals], ["Music", plan.genre]].map(([k, v], i) => (
-                  <div key={i} className={`rounded-xl p-2.5 ${t.subtle}`}><p className={`text-[10px] ${t.muted}`}>{k}</p><p className={`text-sm font-bold ${t.heading}`}>{v}</p></div>
-                ))}
-              </div>
-              <div className="flex flex-col gap-2">
-                <button onClick={() => onOpenBuilder?.(ride())} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-white font-semibold text-sm" style={{ background: GREEN }}>
-                  <SlidersIcon size={15} /> Open in Class Builder
-                </button>
-                <div className="grid grid-cols-2 gap-2">
-                  <button onClick={saveTpl} className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-semibold ${t.chip}`}><Save size={14} /> Save Template</button>
-                  <button onClick={() => setEditing(e => !e)} className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-semibold ${editing ? "text-white" : t.chip}`} style={editing ? { background: "#8b5cf6" } : undefined}><Pencil size={14} /> {editing ? "Done" : "Edit Ride"}</button>
+            {loading && <div className={`mt-4 rounded-xl ${t.subtle} animate-pulse`} style={{ height: 96 }} />}
+
+            {plan && !loading && (
+              <div className="mt-4 animate-[fadeIn_.3s_ease]">
+                <input value={rideName} onChange={e => setRideName(e.target.value)} className={`w-full text-base font-bold bg-transparent border-b ${t.border} focus:outline-none focus:border-violet-400 pb-1 mb-3 ${t.heading}`} />
+                <div className="flex w-full h-3 rounded-full overflow-hidden mb-2">
+                  {plan.tl.map((s, i) => <div key={i} style={{ width: `${s.min / plan.dur * 100}%`, background: TYPE_COLOR[s.type] }} title={`${s.name} · ${s.min}m`} />)}
                 </div>
-                <button onClick={() => onNavigate("Live Mode")} className={`w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-semibold border ${t.border} ${t.muted} hover:text-[#e91236] transition-colors`}>
-                  <Radio size={14} /> Open in Live Mode
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* ── RIGHT · generated output ── */}
-        <div>
-          {loading && (
-            <div className="space-y-3">{[0, 1, 2, 3].map(i => <div key={i} className={`rounded-2xl ${t.subtle} animate-pulse`} style={{ height: i === 0 ? 80 : 130 }} />)}</div>
-          )}
-
-          {!plan && !loading && (
-            <div className={`${t.card} p-12 text-center`}>
-              <div className="w-14 h-14 rounded-2xl mx-auto flex items-center justify-center text-white mb-4" style={{ background: "linear-gradient(135deg,#6366f1,#ec4899)" }}><Wand2 size={26} /></div>
-              <p className={`text-base font-semibold ${t.heading}`}>Describe your ride and hit Generate</p>
-              <p className={`text-sm mt-1 ${t.muted}`}>AI drafts a structured timeline, coaching cues, a BPM-matched playlist & intensity in seconds.</p>
-            </div>
-          )}
-
-          {plan && !loading && (
-            <div className="space-y-4 animate-[fadeIn_.4s_ease]">
-              {/* timeline — editable blocks */}
-              <div className={`${t.card} p-5`}>
-                <div className="flex items-center justify-between mb-3">
-                  <p className={`text-sm font-semibold ${t.heading}`}>Ride timeline</p>
-                  {editing && <span className="text-[11px] font-semibold text-violet-500">Editing · adjust or remove blocks</span>}
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs mb-3">
+                  {[["Duration", `${plan.dur} min`], ["Level", plan.level], ["Intervals", plan.intervals], ["Music", plan.genre], ["Playlist", `${plan.playlist.length} tracks`]].map(([k, v], i) => (
+                    <span key={i} className={t.muted}>{k}: <span className={`font-semibold ${t.heading}`}>{v}</span></span>
+                  ))}
                 </div>
-                <div className="flex w-full h-3 rounded-full overflow-hidden mb-4">
-                  {plan.tl.map((s, i) => <div key={i} style={{ width: `${(s.min / plan.dur) * 100}%`, background: TYPE_COLOR[s.type] }} title={`${s.name} · ${s.min}m`} />)}
-                </div>
-                <div className="flex flex-col gap-1.5">
+                <div className="grid sm:grid-cols-2 gap-1.5 mb-4 max-h-44 overflow-y-auto pr-1">
                   {plan.tl.map((s, i) => (
-                    <div key={i} className={`flex items-center gap-3 rounded-xl px-3.5 py-2.5 ${t.subtle}`}>
-                      <span className="w-1.5 h-8 rounded-full flex-shrink-0" style={{ background: TYPE_COLOR[s.type] }} />
-                      <span className={`flex-1 text-sm font-medium ${t.heading}`}>{s.name}</span>
-                      <span className={`text-xs ${t.muted} hidden sm:block`}>{s.zone}</span>
-                      {editing ? (
-                        <div className="flex items-center gap-1">
-                          <button onClick={() => adjustBlock(i, -1)} className={`w-6 h-6 rounded-md flex items-center justify-center text-sm font-bold ${t.chip}`}>−</button>
-                          <span className={`text-sm font-bold tabular-nums w-12 text-center ${t.heading}`}>{s.min}m</span>
-                          <button onClick={() => adjustBlock(i, 1)} className={`w-6 h-6 rounded-md flex items-center justify-center text-sm font-bold ${t.chip}`}>+</button>
-                          <button onClick={() => removeBlock(i)} className={`w-6 h-6 rounded-md flex items-center justify-center text-xs ${darkMode ? "hover:bg-gray-700 text-gray-500" : "hover:bg-gray-200 text-gray-400"}`}>✕</button>
-                        </div>
-                      ) : <span className={`text-sm font-bold tabular-nums w-12 text-right ${t.heading}`}>{s.min} min</span>}
+                    <div key={i} className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 ${t.subtle}`}>
+                      <span className="w-1.5 h-5 rounded-full flex-shrink-0" style={{ background: TYPE_COLOR[s.type] }} />
+                      <span className={`flex-1 text-xs font-medium truncate ${t.heading}`}>{s.name}</span>
+                      <span className={`text-[11px] ${t.muted}`}>{s.zone}</span>
+                      <span className={`text-xs font-bold tabular-nums ${t.heading}`}>{s.min}m</span>
                     </div>
                   ))}
                 </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button onClick={() => { onApply?.(ride()); setOpen(false) }} className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white font-semibold text-sm" style={{ background: GREEN }}><Check size={15} /> Apply to canvas</button>
+                  <button onClick={() => { onSaveTemplate?.(ride()); flash("Saved as template ✓") }} className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold ${t.chip}`}><Save size={14} /> Save template</button>
+                  {note && <span className="text-xs font-semibold text-[#00aa13]">{note}</span>}
+                </div>
+                <p className={`text-[11px] mt-2 ${t.faint}`}>Generates a BPM-matched playlist & coaching cues too — “Apply” drops the zones onto the canvas to fine-tune below.</p>
               </div>
-
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className={`${t.card} p-5`}>
-                  <p className={`text-sm font-semibold mb-3 ${t.heading}`}>Coaching prompts</p>
-                  <div className="flex flex-col gap-2">
-                    {AI_CUES.slice(0, Math.min(6, plan.intervals + 1)).map((c, i) => (
-                      <div key={i} className={`flex items-start gap-2.5 rounded-xl px-3.5 py-2.5 border ${t.border}`}>
-                        <span className="w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0 mt-0.5" style={{ background: "#8b5cf6" }}>{i + 1}</span>
-                        <p className={`text-sm ${t.heading}`}>{c}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className={`${t.card} p-5`}>
-                  <div className="flex items-center justify-between mb-3">
-                    <p className={`text-sm font-semibold ${t.heading}`}>Playlist · {plan.genre}</p>
-                    <Music size={15} className={t.faint} />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    {plan.playlist.map(([title, artist, bpm], i) => (
-                      <div key={i} className={`flex items-center gap-3 rounded-xl px-3 py-2 ${t.subtle}`}>
-                        <span className={`text-xs font-bold w-4 ${t.faint}`}>{i + 1}</span>
-                        <div className="flex-1 min-w-0"><p className={`text-sm font-medium truncate ${t.heading}`}>{title}</p><p className={`text-[11px] ${t.faint}`}>{artist}</p></div>
-                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={{ background: GREEN + "1a", color: GREEN }}>{bpm} BPM</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className={`${t.card} p-5`}>
-                  <p className={`text-sm font-semibold mb-3 ${t.heading}`}>Recovery & intensity guidance</p>
-                  <div className="flex flex-col gap-2.5">
-                    {AI_RECOVERY.map((r, i) => (
-                      <div key={i} className="flex items-start gap-3">
-                        <span className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: "#0ea5e91a", color: "#0ea5e9" }}><Heart size={14} /></span>
-                        <div><p className={`text-sm font-semibold ${t.heading}`}>{r.t}</p><p className={`text-xs ${t.muted}`}>{r.d}</p></div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className={`${t.card} p-5`}>
-                  <p className={`text-sm font-semibold mb-3 ${t.heading}`}>Intensity summary</p>
-                  <StackedBar dist={plan.intensity.filter(z => z.pct > 0)} height={18} />
-                  <div className="grid grid-cols-2 gap-x-5 gap-y-2 mt-4">
-                    {plan.intensity.map((z, i) => (
-                      <div key={i} className="flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded-sm" style={{ background: z.color }} />
-                        <span className={`text-xs flex-1 ${t.muted}`}>{z.label}</span>
-                        <span className={`text-xs font-bold tabular-nums ${t.heading}`}>{z.pct}%</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
-
-      {toast && (
-        <div className="fixed bottom-24 md:bottom-8 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-xl text-white text-sm font-semibold shadow-xl" style={{ background: "#111827" }}>
-          {toast}
-        </div>
-      )}
-    </Shell>
+    </div>
   )
 }
 

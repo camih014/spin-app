@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from "react"
 import { Home, Calendar, BookOpen, Bike, Trophy, User, Settings, LogOut,
-  ChevronDown, LayoutDashboard, Users, ListMusic, SlidersHorizontal, BarChart3, CalendarClock, Sparkles } from "lucide-react"
+  ChevronDown, LayoutDashboard, Users, ListMusic, SlidersHorizontal, BarChart3, CalendarClock, Sparkles, Radio, Building2 } from "lucide-react"
 import {
-  InstructorPlatformPage, CueSheetPage, LiveModePage, RidersCRMPage,
-  FeedbackPage, SubsMarketplacePage, GrowthDashboardPage, AIBuilderPage,
+  LiveModePage, RidersCRMPage, FeedbackPage, SubsMarketplacePage,
+  GrowthDashboardPage, AIBuilderPanel,
 } from "./instructorPlatform"
 
 // ─── DATA ───────────────────────────────────────────────────────────────────
@@ -1012,19 +1012,26 @@ const INSTRUCTOR_NAV = [
   { label: "Studio Home",   icon: LayoutDashboard   },
   { label: "My Classes",    icon: Users             },
   { label: "Class Builder", icon: SlidersHorizontal },
+  { label: "Live Mode",     icon: Radio             },
   { label: "Schedule",      icon: CalendarClock     },
   { label: "Insights",      icon: BarChart3         },
-  { label: "Platform",      icon: Sparkles          },
 ]
 
-// Instructor Platform pages reachable from the overview (kept in the instructor workspace)
-const PLATFORM_PAGES = ["Platform", "Cue Sheet", "Live Mode", "Riders", "Feedback", "Subs", "Growth", "AI Builder"]
+// Studio Owner workspace — studio-level ops + the rider CRM
+const OWNER_NAV = [
+  { label: "Owner Home", icon: Building2 },
+  { label: "Riders",     icon: Users     },
+]
 
-// Roles the signed-in person holds. This demo user is both a rider and an instructor, so they get a
-// workspace switcher. A rider-only account would have a single role and no toggle.
+// Instructor pages reachable but not in the sidebar (e.g. via a dashboard widget)
+const INSTRUCTOR_EXTRA_PAGES = ["Subs"]
+
+// Roles the signed-in person holds. This demo user is a rider, an instructor AND a studio owner, so
+// they get a workspace switcher. A rider-only account would have a single role and no toggle.
 const USER_ROLES = [
-  { key: "rider",      label: "Rider",      icon: Bike,            nav: RIDER_NAV,      home: "Home" },
-  { key: "instructor", label: "Instructor", icon: LayoutDashboard, nav: INSTRUCTOR_NAV, home: "Studio Home" },
+  { key: "rider",      label: "Rider",        icon: Bike,            nav: RIDER_NAV,      home: "Home" },
+  { key: "instructor", label: "Instructor",   icon: LayoutDashboard, nav: INSTRUCTOR_NAV, home: "Studio Home" },
+  { key: "owner",      label: "Studio Owner", icon: Building2,        nav: OWNER_NAV,      home: "Owner Home" },
 ]
 
 // Saved / AI-built ride templates surfaced on the Instructor Overview. Segments carry the structure so
@@ -1069,7 +1076,7 @@ export default function App() {
   const [activePage, setActivePage] = useState("Home")
   const [darkMode, setDarkMode]     = useState(false)
   const [authed, setAuthed]         = useState(true)
-  const [openSections, setOpenSections] = useState({ rider: true, instructor: false })
+  const [openSections, setOpenSections] = useState({ rider: true, instructor: false, owner: false })
   const [rosterClass, setRosterClass]   = useState(null)
   const [builtClasses, setBuiltClasses] = useState(SEED_BUILT_CLASSES)
   const [templates, setTemplates]       = useState(INSTRUCTOR_TEMPLATE_SEED)  // Instructor Platform ride templates
@@ -1100,7 +1107,7 @@ export default function App() {
   ]
 
   // Which workspace each page belongs to, so the mobile nav + role toggle stay in sync with the page
-  const workspaceOf = page => PLATFORM_PAGES.includes(page) ? "instructor" : USER_ROLES.find(r => r.nav.some(n => n.label === page))?.key
+  const workspaceOf = page => INSTRUCTOR_EXTRA_PAGES.includes(page) ? "instructor" : USER_ROLES.find(r => r.nav.some(n => n.label === page))?.key
   const workspace = workspaceOf(activePage) || "rider"
   const mobileNav = (USER_ROLES.find(r => r.key === workspace) || USER_ROLES[0]).nav
 
@@ -1137,6 +1144,9 @@ export default function App() {
           <NavSection title="Instructor" icon={LayoutDashboard} items={INSTRUCTOR_NAV}
             activePage={activePage} onSelect={navTo} darkMode={darkMode}
             open={openSections.instructor} onToggle={() => toggle("instructor")} />
+          <NavSection title="Studio Owner" icon={Building2} items={OWNER_NAV}
+            activePage={activePage} onSelect={navTo} darkMode={darkMode}
+            open={openSections.owner} onToggle={() => toggle("owner")} />
         </div>
 
         {/* Bottom nav */}
@@ -1158,20 +1168,16 @@ export default function App() {
         {activePage === "Rides"        && <RidesPage        darkMode={darkMode} onToggleDarkMode={dm} />}
         {activePage === "Achievements" && <AchievementsPage darkMode={darkMode} onToggleDarkMode={dm} onNavigate={setActivePage} />}
         {/* Instructor */}
-        {activePage === "Studio Home"   && <InstructorHomePage    darkMode={darkMode} onToggleDarkMode={dm} onOpenRoster={openRoster} />}
+        {activePage === "Studio Home"   && <InstructorHomePage    darkMode={darkMode} onToggleDarkMode={dm} onOpenRoster={openRoster} onNavigate={navTo} templates={templates} onOpenBuilder={openInBuilder} />}
         {activePage === "My Classes"    && <InstructorClassesPage key={rosterClass ? rosterClass.name + rosterClass.time : "all"} darkMode={darkMode} onToggleDarkMode={dm} initialClass={rosterClass} />}
-        {activePage === "Class Builder" && <ClassBuilderPage      key={builderRide ? builderRide.key : "blank"} darkMode={darkMode} onToggleDarkMode={dm} onPublish={publishClass} initialRide={builderRide} />}
+        {activePage === "Class Builder" && <ClassBuilderPage      key={builderRide ? builderRide.key : "blank"} darkMode={darkMode} onToggleDarkMode={dm} onPublish={publishClass} initialRide={builderRide} onSaveTemplate={saveTemplate} />}
+        {activePage === "Live Mode"     && <LiveModePage          darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
         {activePage === "Schedule"      && <InstructorSchedulePage darkMode={darkMode} onToggleDarkMode={dm} builtClasses={builtClasses} />}
-        {activePage === "Insights"      && <InstructorStatsPage   darkMode={darkMode} onToggleDarkMode={dm} />}
-        {/* Instructor Platform */}
-        {activePage === "Platform"   && <InstructorPlatformPage darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} templates={templates} onOpenBuilder={openInBuilder} />}
-        {activePage === "Cue Sheet"  && <CueSheetPage          darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
-        {activePage === "Live Mode"  && <LiveModePage          darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
-        {activePage === "Riders"     && <RidersCRMPage         darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
-        {activePage === "Feedback"   && <FeedbackPage          darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
-        {activePage === "Subs"       && <SubsMarketplacePage   darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
-        {activePage === "Growth"     && <GrowthDashboardPage   darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
-        {activePage === "AI Builder" && <AIBuilderPage         darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} onSaveTemplate={saveTemplate} onOpenBuilder={openInBuilder} />}
+        {activePage === "Insights"      && <InstructorStatsPage   darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
+        {activePage === "Subs"          && <SubsMarketplacePage   darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
+        {/* Studio Owner */}
+        {activePage === "Owner Home"    && <StudioOwnerHomePage   darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
+        {activePage === "Riders"        && <RidersCRMPage         darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
         {/* Shared */}
         {activePage === "Profile"      && <ProfilePage  darkMode={darkMode} onToggleDarkMode={dm} />}
         {activePage === "Settings"     && <SettingsPage darkMode={darkMode} onToggleDarkMode={dm} />}
@@ -4960,7 +4966,13 @@ function CapacityBar({ booked, capacity, darkMode }) {
   )
 }
 
-function InstructorHomePage({ darkMode, onToggleDarkMode, onOpenRoster }) {
+// Open cover requests surfaced on Studio Home — full list lives on the Sub Marketplace page
+const COVERAGE_OPEN = [
+  { day: "Fri 20 Jun", time: "6:30 PM", cls: "Power Zone Ride", mins: 45, studio: "Hampstead" },
+  { day: "Sat 21 Jun", time: "9:00 AM", cls: "Saturday HIIT",   mins: 45, studio: "Shoreditch" },
+]
+
+function InstructorHomePage({ darkMode, onToggleDarkMode, onOpenRoster, onNavigate, templates = [], onOpenBuilder }) {
   const heading = darkMode ? "text-white"    : "text-gray-900"
   const muted   = darkMode ? "text-gray-400" : "text-gray-500"
   const card    = `rounded-2xl border transition-colors ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`
@@ -5026,6 +5038,54 @@ function InstructorHomePage({ darkMode, onToggleDarkMode, onOpenRoster }) {
         ))}
       </div>
 
+      {/* Coverage + ride templates widgets */}
+      <div className="grid md:grid-cols-2 gap-4 mb-8">
+        {/* Needs coverage */}
+        <div className={`${card} p-5`}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <span className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "#f59e0b1a", color: "#f59e0b" }}><CalendarClock size={15} /></span>
+              <p className={`text-sm font-semibold ${heading}`}>Cover requests</p>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-500">{COVERAGE_OPEN.length} open</span>
+            </div>
+            <button onClick={() => onNavigate?.("Subs")} className="text-xs font-semibold text-[#00aa13]">View all</button>
+          </div>
+          <div className="flex flex-col gap-2">
+            {COVERAGE_OPEN.map((c, i) => (
+              <button key={i} onClick={() => onNavigate?.("Subs")} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-left ${subtle} hover:shadow-md transition-all`}>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm font-semibold truncate ${heading}`}>{c.cls}</p>
+                  <p className={`text-xs ${muted}`}>{c.day} · {c.time} · {c.studio}</p>
+                </div>
+                <span className="text-xs font-semibold text-[#00aa13] flex-shrink-0">Cover →</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Quick-launch ride templates */}
+        <div className={`${card} p-5`}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <span className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "#8b5cf61a", color: "#8b5cf6" }}><SlidersHorizontal size={15} /></span>
+              <p className={`text-sm font-semibold ${heading}`}>Your ride templates</p>
+            </div>
+            <button onClick={() => onNavigate?.("Class Builder")} className="text-xs font-semibold text-[#00aa13]">New ride</button>
+          </div>
+          <div className="flex flex-col gap-2">
+            {templates.slice(0, 3).map((tp, i) => (
+              <button key={tp.id || i} onClick={() => onOpenBuilder?.(tp)} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-left ${subtle} hover:shadow-md transition-all`}>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm font-semibold truncate ${heading}`}>{tp.name}</p>
+                  <p className={`text-xs ${muted}`}>{tp.mins} min · {tp.difficulty} · edited {tp.edited}</p>
+                </div>
+                <span className="text-xs font-semibold text-[#00aa13] flex-shrink-0">Open →</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
       {/* Today's classes */}
       <h2 className={`font-semibold mb-3 ${heading}`}>Today's classes{locFilter !== "All" && ` · ${locFilter.replace("SpinOut · ","")}`}</h2>
       <div className="flex flex-col gap-3 mb-8">
@@ -5079,6 +5139,115 @@ function InstructorHomePage({ darkMode, onToggleDarkMode, onOpenRoster }) {
   )
 }
 
+// ─── STUDIO OWNER ────────────────────────────────────────────────────────────
+function StudioOwnerHomePage({ darkMode, onToggleDarkMode, onNavigate }) {
+  const heading = darkMode ? "text-white"    : "text-gray-900"
+  const muted   = darkMode ? "text-gray-400" : "text-gray-500"
+  const card    = `rounded-2xl border transition-colors ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`
+  const subtle  = darkMode ? "bg-gray-800"   : "bg-gray-50"
+
+  const kpis = [
+    { label: "Active members", value: "1,284", sub: "+38 this month", c: "#00aa13" },
+    { label: "Monthly revenue", value: "£48.6k", sub: "+12% MoM", c: "#0ea5e9" },
+    { label: "Avg occupancy", value: "86%", sub: "across 2 studios", c: "#f59e0b" },
+    { label: "Instructors", value: "14", sub: "3 hiring", c: "#8b5cf6" },
+  ]
+  const instructors = [
+    { name: "JIM", classes: 28, rating: 4.9, fill: 92 },
+    { name: "Anna Banana", classes: 24, rating: 4.8, fill: 88 },
+    { name: "Max Lime", classes: 21, rating: 4.7, fill: 81 },
+    { name: "Zen Kiwi", classes: 18, rating: 4.9, fill: 76 },
+  ]
+  const studios = [
+    { name: "Hampstead", occ: 89, classes: 42 },
+    { name: "Shoreditch", occ: 83, classes: 36 },
+  ]
+  const approvals = [
+    { name: "Rhythm Ride", who: "JIM", when: "Sat 10:00", studio: "Shoreditch" },
+    { name: "Night Ride", who: "Max Lime", when: "Tue 20:00", studio: "Shoreditch" },
+  ]
+
+  return (
+    <div className="p-4 md:p-8 max-w-5xl mx-auto pb-16">
+      <InstructorTopBar title="Studio Owner" sub="SpinOut · Hampstead & Shoreditch" darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+        {kpis.map((k, i) => (
+          <div key={i} className={`${card} p-4`}>
+            <p className={`text-xs ${muted} mb-1`}>{k.label}</p>
+            <p className={`text-2xl font-bold tracking-tight ${heading}`}>{k.value}</p>
+            <p className="text-xs mt-0.5 font-medium" style={{ color: k.c }}>{k.sub}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Rider CRM entry */}
+      <button onClick={() => onNavigate?.("Riders")} className={`${card} w-full p-5 mb-5 flex items-center gap-4 text-left hover:shadow-lg transition-all`}>
+        <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white flex-shrink-0" style={{ background: "linear-gradient(135deg,#8b5cf6,#6366f1)" }}><Users size={22} /></div>
+        <div className="flex-1 min-w-0">
+          <p className={`text-base font-semibold ${heading}`}>Rider CRM</p>
+          <p className={`text-sm ${muted}`}>1,284 riders · attendance, milestones, engagement & notes</p>
+        </div>
+        <span className="text-sm font-semibold text-[#00aa13] flex-shrink-0">Open →</span>
+      </button>
+
+      <div className="grid md:grid-cols-2 gap-4 mb-5">
+        {/* Instructor leaderboard */}
+        <div className={`${card} p-5`}>
+          <p className={`text-sm font-semibold mb-4 ${heading}`}>Instructor performance</p>
+          <div className="flex flex-col gap-3">
+            {instructors.map((ins, i) => (
+              <div key={i} className="flex items-center gap-3">
+                <Avatar name={ins.name} size={34} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <p className={`text-sm font-semibold truncate ${heading}`}>{ins.name}</p>
+                    <span className="text-xs text-amber-500 font-semibold">{ins.rating} ★</span>
+                  </div>
+                  <div className={`h-1.5 rounded-full mt-1.5 ${subtle} overflow-hidden`}>
+                    <div className="h-full rounded-full" style={{ width: `${ins.fill}%`, background: "#00aa13" }} />
+                  </div>
+                </div>
+                <span className={`text-xs ${muted} flex-shrink-0 w-14 text-right`}>{ins.classes} classes</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Studios + approvals */}
+        <div className="flex flex-col gap-4">
+          <div className={`${card} p-5`}>
+            <p className={`text-sm font-semibold mb-4 ${heading}`}>Studios</p>
+            <div className="flex flex-col gap-3">
+              {studios.map((s, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <span className={`text-sm font-semibold flex-1 ${heading}`}>{s.name}</span>
+                  <div className={`h-1.5 rounded-full w-24 ${subtle} overflow-hidden`}><div className="h-full rounded-full" style={{ width: `${s.occ}%`, background: s.occ >= 85 ? "#fb7512" : "#00aa13" }} /></div>
+                  <span className={`text-xs font-bold tabular-nums w-9 text-right ${heading}`}>{s.occ}%</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className={`${card} p-5`}>
+            <div className="flex items-center justify-between mb-3">
+              <p className={`text-sm font-semibold ${heading}`}>Class approvals</p>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-500">{approvals.length} pending</span>
+            </div>
+            <div className="flex flex-col gap-2">
+              {approvals.map((a, i) => (
+                <div key={i} className={`flex items-center gap-3 rounded-xl px-3 py-2 ${subtle}`}>
+                  <div className="flex-1 min-w-0"><p className={`text-sm font-semibold truncate ${heading}`}>{a.name}</p><p className={`text-xs ${muted}`}>{a.who} · {a.when} · {a.studio}</p></div>
+                  <button className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-[#00aa13] text-white">Approve</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function ClassRoster({ cls, darkMode }) {
   const heading = darkMode ? "text-white"    : "text-gray-900"
   const muted   = darkMode ? "text-gray-400" : "text-gray-500"
@@ -5092,7 +5261,7 @@ function ClassRoster({ cls, darkMode }) {
   const layout  = STUDIO_LAYOUTS[cls.studio] || STUDIO_LAYOUTS["Studio 1"]
   const bikeMap = {}
   roster.forEach(r => { bikeMap[r.bike] = r })
-  const [showLayout, setShowLayout] = useState(false)
+  const [showLayout, setShowLayout] = useState(true)   // studio layout expanded by default
 
   // Post-class stats (deterministic from seed)
   const attended  = cls.attended || Math.round(cls.booked * 0.9)
@@ -5511,12 +5680,12 @@ function InstructorClassesPage({ darkMode, onToggleDarkMode, initialClass }) {
           </div>
         </div>
       ) : (
-        /* List + detail */
-        <div className="flex flex-col md:flex-row gap-6">
-          <div className={`md:w-[340px] md:flex-shrink-0 ${mobileDetail ? "hidden md:block" : "block"}`}>
+        /* List + detail — left list scrolls independently, right roster stays put */
+        <div className="flex flex-col md:flex-row gap-6 md:items-start">
+          <div className={`md:w-[340px] md:flex-shrink-0 md:max-h-[calc(100vh-150px)] md:overflow-y-auto md:pr-1 ${mobileDetail ? "hidden md:block" : "block"}`}>
             {ClassList}
           </div>
-          <div className={`flex-1 min-w-0 ${mobileDetail ? "block" : "hidden md:block"}`}>
+          <div className={`flex-1 min-w-0 md:sticky md:top-6 ${mobileDetail ? "block" : "hidden md:block"}`}>
             {selected ? <ClassRoster cls={selected} darkMode={darkMode} />
               : <div className={`${card} p-10 text-center`}><p className={`text-sm ${muted}`}>Select a class to view its roster</p></div>}
           </div>
@@ -5568,7 +5737,7 @@ function ZoneMixDonut({ segments, darkMode }) {
   )
 }
 
-function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish, initialRide }) {
+function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish, initialRide, onSaveTemplate }) {
   const heading = darkMode ? "text-white"    : "text-gray-900"
   const muted   = darkMode ? "text-gray-400" : "text-gray-500"
   const card    = `rounded-2xl border transition-colors ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`
@@ -5879,6 +6048,14 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish, initialRide }
     setName(t.name); setLength(t.length); setCursor(null)
     setStrokes(st)
   }
+  // Drop an AI-generated ride straight onto the canvas
+  function applyAIRide(ride) {
+    const st = rideToStrokes(ride)
+    setUndoStack(s => [...s, strokes])
+    setName(ride.name); setLength(nearestLen(ride.mins || 45)); setCursor(null); setSelBars(new Set())
+    setStrokes(st)
+    setAutoWarm(st[0]?.[1] === 1); setAutoCool(st.length ? st[st.length-1][1] === 1 : false)
+  }
 
   function onCanvasMove(e) {
     if (!total) { setHover(null); return }
@@ -5902,9 +6079,12 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish, initialRide }
 
       {ir && (
         <div className="flex items-center gap-2.5 mb-5 px-4 py-2.5 rounded-xl text-sm font-medium text-white" style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)" }}>
-          <Sparkles size={15} /> Loaded “{ir.name}” from the AI Ride Builder — tweak the zones, then publish.
+          <Sparkles size={15} /> Loaded “{ir.name}” from a saved ride — tweak the zones, then publish.
         </div>
       )}
+
+      {/* AI Ride Builder — generate a plan and drop it on the canvas */}
+      <AIBuilderPanel darkMode={darkMode} onApply={applyAIRide} onSaveTemplate={onSaveTemplate} />
 
       {/* Templates to reuse */}
       <div className={`${card} p-5 mb-5`}>
@@ -6506,11 +6686,12 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish, initialRide }
   )
 }
 
-function InstructorStatsPage({ darkMode, onToggleDarkMode }) {
+function InstructorStatsPage({ darkMode, onToggleDarkMode, onNavigate }) {
   const heading = darkMode ? "text-white"    : "text-gray-900"
   const muted   = darkMode ? "text-gray-400" : "text-gray-500"
   const card    = `rounded-2xl border transition-colors ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`
   const subtle  = darkMode ? "bg-gray-800"   : "bg-gray-50"
+  const [tab, setTab] = useState("earnings")
 
   const weeks = [
     { label: "5 wks ago", classes: 5, riders: 96 },
@@ -6529,51 +6710,49 @@ function InstructorStatsPage({ darkMode, onToggleDarkMode }) {
     { label: "Avg rating",          value: "4.9 ★" },
   ]
 
+  const tabs = [["earnings", "Earnings"], ["growth", "Growth"], ["feedback", "Feedback"]]
+
   return (
-    <div className="p-4 md:p-8 max-w-4xl mx-auto pb-16">
-      <InstructorTopBar title="Insights & Earnings" sub="Your teaching performance over time" darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
+    <div className="p-4 md:p-8 max-w-6xl mx-auto pb-16">
+      <InstructorTopBar title="Insights" sub="Earnings, growth & rider feedback" darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-        {stats.map((s, i) => (
-          <div key={i} className={`${card} p-4`}>
-            <p className={`text-xs ${muted} mb-1`}>{s.label}</p>
-            <p className={`text-xl font-bold ${heading}`}>{s.value}</p>
-          </div>
+      {/* tab switcher */}
+      <div className={`inline-flex rounded-xl p-0.5 mb-6 ${darkMode ? "bg-gray-800" : "bg-gray-100"}`}>
+        {tabs.map(([v, l]) => (
+          <button key={v} onClick={() => setTab(v)}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${tab === v
+              ? darkMode ? "bg-gray-700 text-white shadow-sm" : "bg-white text-gray-900 shadow-sm"
+              : muted}`}>{l}</button>
         ))}
       </div>
 
-      {/* Riders per week chart */}
-      <div className={`${card} p-5 mb-6`}>
-        <p className={`text-sm font-semibold mb-5 ${heading}`}>Riders taught per week</p>
-        <div className="flex items-end justify-between gap-2" style={{ height: 160 }}>
-          {weeks.map((w, i) => (
-            <div key={i} className="flex-1 flex flex-col items-center gap-2 h-full justify-end">
-              <span className={`text-xs font-bold ${heading}`}>{w.riders}</span>
-              <div className="w-full rounded-t-lg transition-all" style={{ height: `${(w.riders/maxRiders)*100}%`, background: i === weeks.length-1 ? "#00aa13" : darkMode ? "#374151" : "#d1fae5" }} />
-              <span className={`text-[10px] text-center ${muted}`}>{w.label}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Reviews */}
-      <h2 className={`font-semibold mb-3 ${heading}`}>Latest reviews</h2>
-      <div className="flex flex-col gap-3">
-        {INSTRUCTOR_REVIEWS.map((r, i) => (
-          <div key={i} className={`${card} p-4 flex items-start gap-3`}>
-            <Avatar name={r.name} size={36} />
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between">
-                <p className={`text-sm font-semibold ${heading}`}>{r.name}</p>
-                <span className="text-xs text-amber-500">{"★".repeat(r.rating)}<span className={muted}>{"★".repeat(5-r.rating)}</span></span>
+      {tab === "earnings" && (
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+            {stats.map((s, i) => (
+              <div key={i} className={`${card} p-4`}>
+                <p className={`text-xs ${muted} mb-1`}>{s.label}</p>
+                <p className={`text-xl font-bold ${heading}`}>{s.value}</p>
               </div>
-              <p className={`text-xs mt-1 ${muted}`}>"{r.text}"</p>
-              <p className="text-xs mt-1.5 text-[#00aa13] font-medium">{r.cls}</p>
+            ))}
+          </div>
+          <div className={`${card} p-5`}>
+            <p className={`text-sm font-semibold mb-5 ${heading}`}>Riders taught per week</p>
+            <div className="flex items-end justify-between gap-2" style={{ height: 160 }}>
+              {weeks.map((w, i) => (
+                <div key={i} className="flex-1 flex flex-col items-center gap-2 h-full justify-end">
+                  <span className={`text-xs font-bold ${heading}`}>{w.riders}</span>
+                  <div className="w-full rounded-t-lg transition-all" style={{ height: `${(w.riders/maxRiders)*100}%`, background: i === weeks.length-1 ? "#00aa13" : darkMode ? "#374151" : "#d1fae5" }} />
+                  <span className={`text-[10px] text-center ${muted}`}>{w.label}</span>
+                </div>
+              ))}
             </div>
           </div>
-        ))}
-      </div>
+        </>
+      )}
+
+      {tab === "growth"   && <GrowthDashboardPage darkMode={darkMode} embedded onNavigate={onNavigate} />}
+      {tab === "feedback" && <FeedbackPage        darkMode={darkMode} embedded onNavigate={onNavigate} />}
     </div>
   )
 }

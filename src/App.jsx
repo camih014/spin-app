@@ -1027,6 +1027,44 @@ const USER_ROLES = [
   { key: "instructor", label: "Instructor", icon: LayoutDashboard, nav: INSTRUCTOR_NAV, home: "Studio Home" },
 ]
 
+// Saved / AI-built ride templates surfaced on the Instructor Overview. Segments carry the structure so
+// "Open in Class Builder" can pre-fill the existing builder.
+const INSTRUCTOR_TEMPLATE_SEED = [
+  { id: "t1", name: "EDM Power Ride", mins: 44, difficulty: "Advanced", genre: "EDM", edited: "2h ago", segments: [
+    { name: "Warm Up", min: 5, zone: "Z1–2", type: "warmup" }, { name: "Build", min: 6, zone: "Z3", type: "climb" },
+    { name: "Interval 1", min: 3, zone: "Z4–5", type: "interval" }, { name: "Recovery", min: 2, zone: "Z2", type: "recovery" },
+    { name: "Interval 2", min: 3, zone: "Z4–5", type: "interval" }, { name: "Recovery", min: 2, zone: "Z2", type: "recovery" },
+    { name: "Long Climb", min: 8, zone: "Z3–4", type: "climb" }, { name: "Interval 3", min: 3, zone: "Z4–5", type: "interval" },
+    { name: "Recovery", min: 2, zone: "Z2", type: "recovery" }, { name: "Sprint", min: 3, zone: "Z5", type: "interval" },
+    { name: "Recovery", min: 2, zone: "Z2", type: "recovery" }, { name: "Cool Down", min: 5, zone: "Z1", type: "cooldown" } ] },
+  { id: "t2", name: "Saturday HIIT", mins: 41, difficulty: "Intermediate", genre: "Hip-Hop", edited: "Yesterday", segments: [
+    { name: "Warm Up", min: 6, zone: "Z1–2", type: "warmup" },
+    { name: "Interval 1", min: 3, zone: "Z4–5", type: "interval" }, { name: "Recovery", min: 2, zone: "Z2", type: "recovery" },
+    { name: "Interval 2", min: 3, zone: "Z4–5", type: "interval" }, { name: "Recovery", min: 2, zone: "Z2", type: "recovery" },
+    { name: "Interval 3", min: 3, zone: "Z4–5", type: "interval" }, { name: "Recovery", min: 2, zone: "Z2", type: "recovery" },
+    { name: "Interval 4", min: 3, zone: "Z4–5", type: "interval" }, { name: "Recovery", min: 2, zone: "Z2", type: "recovery" },
+    { name: "Interval 5", min: 3, zone: "Z4–5", type: "interval" }, { name: "Recovery", min: 2, zone: "Z2", type: "recovery" },
+    { name: "Cool Down", min: 5, zone: "Z1", type: "cooldown" } ] },
+  { id: "t3", name: "Endurance Builder", mins: 60, difficulty: "Moderate", genre: "House", edited: "3 days ago", segments: [
+    { name: "Warm Up", min: 7, zone: "Z1–2", type: "warmup" }, { name: "Endurance Block", min: 10, zone: "Z2–3", type: "endurance" },
+    { name: "Spin Out", min: 2, zone: "Z2", type: "recovery" }, { name: "Endurance Block", min: 12, zone: "Z2–3", type: "endurance" },
+    { name: "Spin Out", min: 2, zone: "Z2", type: "recovery" }, { name: "Endurance Block", min: 12, zone: "Z2–3", type: "endurance" },
+    { name: "Spin Out", min: 2, zone: "Z2", type: "recovery" }, { name: "Tempo Finish", min: 8, zone: "Z3", type: "endurance" },
+    { name: "Cool Down", min: 5, zone: "Z1", type: "cooldown" } ] },
+  { id: "t4", name: "Power Zone Challenge", mins: 45, difficulty: "Advanced", genre: "EDM", edited: "1 week ago", segments: [
+    { name: "Warm Up", min: 6, zone: "Z1–2", type: "warmup" }, { name: "Power Block 1", min: 8, zone: "Z4", type: "climb" },
+    { name: "Recovery", min: 3, zone: "Z2", type: "recovery" }, { name: "Power Block 2", min: 8, zone: "Z4", type: "climb" },
+    { name: "Recovery", min: 3, zone: "Z2", type: "recovery" }, { name: "Power Block 3", min: 8, zone: "Z4", type: "climb" },
+    { name: "Recovery", min: 2, zone: "Z2", type: "recovery" }, { name: "Sprint Finish", min: 2, zone: "Z5", type: "interval" },
+    { name: "Cool Down", min: 5, zone: "Z1", type: "cooldown" } ] },
+]
+// Map a ride segment's role → Class Builder stroke [seconds, zone, cadenceIdx]
+const RIDE_TYPE_STROKE = { warmup: [1, 1], climb: [4, 0], interval: [5, 3], recovery: [2, 1], cooldown: [1, 0], endurance: [3, 2] }
+function rideToStrokes(ride) {
+  return (ride.segments || []).map(s => { const [z, c] = RIDE_TYPE_STROKE[s.type] || [3, 2]; return [Math.max(15, Math.round((s.min || 1) * 60)), z, c] })
+}
+const nearestLen = m => [30, 45, 60].reduce((a, b) => Math.abs(b - m) < Math.abs(a - m) ? b : a, 45)
+
 export default function App() {
   const [activePage, setActivePage] = useState("Home")
   const [darkMode, setDarkMode]     = useState(false)
@@ -1034,12 +1072,23 @@ export default function App() {
   const [openSections, setOpenSections] = useState({ rider: true, instructor: false })
   const [rosterClass, setRosterClass]   = useState(null)
   const [builtClasses, setBuiltClasses] = useState(SEED_BUILT_CLASSES)
+  const [templates, setTemplates]       = useState(INSTRUCTOR_TEMPLATE_SEED)  // Instructor Platform ride templates
+  const [builderRide, setBuilderRide]   = useState(null)                      // ride pre-loaded into Class Builder
 
   function publishClass(cls) {
     setBuiltClasses(prev => {
       const without = prev.filter(c => c.name !== cls.name)
       return [{ name: cls.name, length: cls.length, social: cls.social, series: cls.series, weeks: cls.weeks || 1 }, ...without]
     })
+  }
+  // AI Ride Builder → save into the templates list shown on the Instructor Overview
+  function saveTemplate(tpl) {
+    setTemplates(prev => [{ ...tpl, id: tpl.id || ("t" + Date.now()), edited: "just now" }, ...prev.filter(p => p.id !== tpl.id)])
+  }
+  // Open a generated ride / template in the existing Class Builder, pre-filled
+  function openInBuilder(ride) {
+    setBuilderRide({ key: Date.now(), name: ride.name, length: nearestLen(ride.mins || 45), strokes: rideToStrokes(ride) })
+    setRosterClass(null); setActivePage("Class Builder")
   }
 
   if (!authed) return <AuthPage onAuth={() => { setAuthed(true); setActivePage("Home") }} />
@@ -1056,7 +1105,7 @@ export default function App() {
   const mobileNav = (USER_ROLES.find(r => r.key === workspace) || USER_ROLES[0]).nav
 
   function openRoster(cls) { setRosterClass(cls); setActivePage("My Classes") }
-  function navTo(page) { setRosterClass(null); setActivePage(page) }
+  function navTo(page) { setRosterClass(null); setBuilderRide(null); setActivePage(page) }
   function switchWorkspace(key) {
     const r = USER_ROLES.find(x => x.key === key); if (!r) return
     setRosterClass(null); setActivePage(r.home)
@@ -1111,18 +1160,18 @@ export default function App() {
         {/* Instructor */}
         {activePage === "Studio Home"   && <InstructorHomePage    darkMode={darkMode} onToggleDarkMode={dm} onOpenRoster={openRoster} />}
         {activePage === "My Classes"    && <InstructorClassesPage key={rosterClass ? rosterClass.name + rosterClass.time : "all"} darkMode={darkMode} onToggleDarkMode={dm} initialClass={rosterClass} />}
-        {activePage === "Class Builder" && <ClassBuilderPage      darkMode={darkMode} onToggleDarkMode={dm} onPublish={publishClass} />}
+        {activePage === "Class Builder" && <ClassBuilderPage      key={builderRide ? builderRide.key : "blank"} darkMode={darkMode} onToggleDarkMode={dm} onPublish={publishClass} initialRide={builderRide} />}
         {activePage === "Schedule"      && <InstructorSchedulePage darkMode={darkMode} onToggleDarkMode={dm} builtClasses={builtClasses} />}
         {activePage === "Insights"      && <InstructorStatsPage   darkMode={darkMode} onToggleDarkMode={dm} />}
         {/* Instructor Platform */}
-        {activePage === "Platform"   && <InstructorPlatformPage darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
+        {activePage === "Platform"   && <InstructorPlatformPage darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} templates={templates} onOpenBuilder={openInBuilder} />}
         {activePage === "Cue Sheet"  && <CueSheetPage          darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
         {activePage === "Live Mode"  && <LiveModePage          darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
         {activePage === "Riders"     && <RidersCRMPage         darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
         {activePage === "Feedback"   && <FeedbackPage          darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
         {activePage === "Subs"       && <SubsMarketplacePage   darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
         {activePage === "Growth"     && <GrowthDashboardPage   darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
-        {activePage === "AI Builder" && <AIBuilderPage         darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
+        {activePage === "AI Builder" && <AIBuilderPage         darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} onSaveTemplate={saveTemplate} onOpenBuilder={openInBuilder} />}
         {/* Shared */}
         {activePage === "Profile"      && <ProfilePage  darkMode={darkMode} onToggleDarkMode={dm} />}
         {activePage === "Settings"     && <SettingsPage darkMode={darkMode} onToggleDarkMode={dm} />}
@@ -5519,7 +5568,7 @@ function ZoneMixDonut({ segments, darkMode }) {
   )
 }
 
-function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
+function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish, initialRide }) {
   const heading = darkMode ? "text-white"    : "text-gray-900"
   const muted   = darkMode ? "text-gray-400" : "text-gray-500"
   const card    = `rounded-2xl border transition-colors ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`
@@ -5527,9 +5576,10 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
   const inputCls = `w-full px-3.5 py-2.5 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-[#00aa13] focus:border-transparent transition ${darkMode ? "bg-gray-800 border-gray-700 text-white" : "bg-white border-gray-200 text-gray-900"}`
   const selectCls = `px-3 py-2.5 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-[#00aa13] transition ${darkMode ? "bg-gray-800 border-gray-700 text-white" : "bg-white border-gray-200 text-gray-900"}`
 
-  const [name, setName]       = useState("New Power Ride")
+  const ir = initialRide   // ride pre-loaded from the AI Builder / a saved template
+  const [name, setName]       = useState(ir?.name || "New Power Ride")
   const [social, setSocial]   = useState(false)       // random seating
-  const [length, setLength]   = useState(45)          // minutes
+  const [length, setLength]   = useState(ir?.length || 45)          // minutes
   const [tracks, setTracks]   = useState([])
   const [warmTracks, setWarmTracks] = useState([])   // dedicated warm-up songs (multiple allowed)
   const [coolTracks, setCoolTracks] = useState([])   // dedicated cool-down songs (multiple allowed)
@@ -5540,7 +5590,7 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
   const [published, setPublished] = useState(false)
   const [brush, setBrush]     = useState(30)          // seconds added per tap
   const [cadence, setCadence] = useState(1)           // index into CADENCE_BANDS
-  const [strokes, setStrokes] = useState([])          // [secs, zone, cadenceIdx]
+  const [strokes, setStrokes] = useState(ir?.strokes || [])          // [secs, zone, cadenceIdx]
   const [undoStack, setUndoStack] = useState([])
   const [quote, setQuote]     = useState("")
   const [hover, setHover]     = useState(null)        // { frac, start, secs, zone, cad }
@@ -5548,8 +5598,8 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
   const [playing, setPlaying] = useState(false)
   const [dragging, setDragging] = useState(false)
   const [summaryOpen, setSummaryOpen] = useState(false)
-  const [autoWarm, setAutoWarm] = useState(false)
-  const [autoCool, setAutoCool] = useState(false)
+  const [autoWarm, setAutoWarm] = useState(ir?.strokes?.[0]?.[1] === 1)
+  const [autoCool, setAutoCool] = useState(ir?.strokes?.length ? ir.strokes[ir.strokes.length - 1][1] === 1 : false)
   const [programme, setProgramme] = useState(false)
   const [weeks, setWeeks]     = useState(4)
   const [progression, setProgression] = useState("Bootcamp")
@@ -5849,6 +5899,12 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish }) {
   return (
     <div className="p-4 md:p-8 max-w-3xl mx-auto pb-16">
       <InstructorTopBar title="Class Builder" sub="Tap zones to paint your session in real time" darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
+
+      {ir && (
+        <div className="flex items-center gap-2.5 mb-5 px-4 py-2.5 rounded-xl text-sm font-medium text-white" style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)" }}>
+          <Sparkles size={15} /> Loaded “{ir.name}” from the AI Ride Builder — tweak the zones, then publish.
+        </div>
+      )}
 
       {/* Templates to reuse */}
       <div className={`${card} p-5 mb-5`}>

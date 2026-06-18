@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef } from "react"
 import {
   ArrowLeft, Play, Pause, SkipForward, RotateCcw, Search, Star, Music, Heart,
   Gauge, Zap, Activity, Radio, Bell, Award, Trophy, Flame, TrendingUp,
-  TrendingDown, ThumbsUp, MessageSquare, Sparkles, Wand2, Copy, Pencil, Save,
-  Check, Plus, ChevronRight, Users, Clock, Calendar, Sun, Moon,
+  TrendingDown, ThumbsUp, MessageSquare, Sparkles, Wand2, Pencil, Save,
+  Check, Plus, ChevronRight, Users, Clock, Calendar, Sun, Moon, SlidersHorizontal as SlidersIcon,
 } from "lucide-react"
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -265,33 +265,123 @@ const FEED_NAMES = ["Sarah", "Tom", "Elena", "David", "Sophie", "Ravi", "Aisha",
 // ═════════════════════════════════════════════════════════════════════════════
 //  OVERVIEW  ·  /instructor
 // ═════════════════════════════════════════════════════════════════════════════
-export function InstructorPlatformPage({ darkMode, onToggleDarkMode, onNavigate }) {
+const FLOW_STEPS = [
+  { label: "Generate Ride", Icon: Wand2, c: "#6366f1", go: "AI Builder" },
+  { label: "Edit Class", Icon: SlidersIcon, c: "#0ea5e9", go: "Class Builder" },
+  { label: "Teach Live", Icon: Radio, c: "#e91236", go: "Live Mode" },
+  { label: "Review Feedback", Icon: MessageSquare, c: "#f59e0b", go: "Feedback" },
+  { label: "Improve Performance", Icon: TrendingUp, c: "#14b8a6", go: "Growth" },
+]
+const DIFF_COLOR = { Beginner: "#14b8a6", Moderate: "#0ea5e9", Intermediate: "#f59e0b", Advanced: "#ef4444" }
+
+export function InstructorPlatformPage({ darkMode, onToggleDarkMode, onNavigate, templates = [], onOpenBuilder }) {
   const t = tk(darkMode)
-  const kpis = [
-    { label: "Classes this month", value: "38", Icon: Calendar },
-    { label: "Avg attendance", value: "31", Icon: Users },
-    { label: "Avg rating", value: "4.9", Icon: Star, accent: "#f59e0b" },
-    { label: "Rider retention", value: "88%", Icon: Heart, accent: "#ec4899" },
+  const stats = [
+    { label: "Classes this week", value: "9", Icon: Calendar, trend: 12 },
+    { label: "Average attendance", value: "31", Icon: Users, trend: 8 },
+    { label: "Rider retention", value: "88%", Icon: Heart, accent: "#ec4899", trend: 4 },
+    { label: "Average rating", value: "4.9", Icon: Star, accent: "#f59e0b", trend: 3 },
   ]
+  const heroFeatures = ["Generate workout structure", "Coaching cues per segment", "BPM-matched playlist", "Smart recovery intervals", "Editable, savable templates"]
+
   return (
     <Shell>
-      <div className="flex items-start justify-between gap-3 mb-7">
+      <div className="flex items-start justify-between gap-3 mb-6">
         <div className="flex items-center gap-3.5">
           <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg" style={{ background: `linear-gradient(135deg, ${GREEN}, #14b8a6)` }}>
             <Sparkles size={22} />
           </div>
           <div>
             <h1 className={`text-2xl font-semibold tracking-tight ${t.heading}`}>Instructor Platform</h1>
-            <p className={`text-sm mt-0.5 ${t.muted}`}>Your operating system for teaching, growing & connecting.</p>
+            <p className={`text-sm mt-0.5 ${t.muted}`}>Generate, teach and grow — your studio operating system.</p>
           </div>
         </div>
         <DarkToggle darkMode={darkMode} onToggle={onToggleDarkMode} />
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-7">
-        {kpis.map((k, i) => <StatCard key={i} darkMode={darkMode} {...k} />)}
+      {/* A · HERO — AI Ride Builder */}
+      <div className="rounded-3xl p-[1.5px] mb-5 shadow-xl" style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6 55%,#ec4899)" }}>
+        <div className="rounded-3xl p-6 md:p-8 relative overflow-hidden text-white" style={{ background: "linear-gradient(135deg,#5b5bd6,#7c4ddb 55%,#c0398f)" }}>
+          <div className="absolute -right-10 -top-10 w-52 h-52 rounded-full bg-white/10" />
+          <div className="absolute right-16 bottom-0 w-32 h-32 rounded-full bg-white/5" />
+          <div className="relative grid md:grid-cols-[1.4fr_1fr] gap-6 items-center">
+            <div>
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider bg-white/20 px-2.5 py-1 rounded-full mb-3"><Sparkles size={12} /> Flagship</span>
+              <h2 className="text-3xl md:text-4xl font-bold tracking-tight">AI Ride Builder</h2>
+              <p className="text-white/85 mt-2 text-base md:text-lg">Build complete spin classes in seconds.</p>
+              <div className="flex flex-wrap gap-x-5 gap-y-1.5 mt-4">
+                {heroFeatures.map((f, i) => (
+                  <span key={i} className="flex items-center gap-1.5 text-sm text-white/90"><Check size={14} className="text-white" /> {f}</span>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-3 mt-6">
+                <button onClick={() => onNavigate("AI Builder")} className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white text-[#5b5bd6] font-semibold text-sm shadow-lg hover:bg-white/90 transition-colors">
+                  <Wand2 size={16} /> Create Ride
+                </button>
+                <button onClick={() => onNavigate("AI Builder")} className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white/15 text-white font-semibold text-sm hover:bg-white/25 transition-colors">
+                  View Example
+                </button>
+              </div>
+            </div>
+            <div className="hidden md:block rounded-2xl bg-white/10 border border-white/15 p-4 backdrop-blur-sm">
+              <div className="flex w-full h-2.5 rounded-full overflow-hidden mb-3">
+                {[["#82ed3c", 18], ["#fde53d", 14], ["#e91236", 12], ["#82ed3c", 10], ["#e91236", 12], ["#82ed3c", 10], ["#741a10", 8], ["#36aee2", 16]].map(([c, w], i) => <div key={i} style={{ width: `${w}%`, background: c }} />)}
+              </div>
+              {["Warm Up · 5 min", "Interval 1 · Z4–5 · 3 min", "Recovery · Z2 · 2 min", "Long Climb · Z3–4 · 8 min"].map((s, i) => (
+                <div key={i} className="flex items-center justify-between text-xs text-white/85 py-1.5 border-b border-white/10 last:border-0">
+                  <span>{s}</span><span className="text-white/50">✎</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
 
+      {/* B · FLOW VISUAL */}
+      <div className={`${t.card} p-5 mb-5`}>
+        <p className={`text-xs font-bold uppercase tracking-wider mb-4 ${t.faint}`}>The instructor loop</p>
+        <div className="flex items-center gap-1.5 md:gap-2 overflow-x-auto pb-1">
+          {FLOW_STEPS.map((s, i) => (
+            <React.Fragment key={s.label}>
+              <button onClick={() => onNavigate(s.go)} className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl flex-shrink-0 ${t.subtle} hover:shadow-md transition-all`}>
+                <span className="w-8 h-8 rounded-lg flex items-center justify-center text-white flex-shrink-0" style={{ background: s.c }}><s.Icon size={15} /></span>
+                <span className={`text-sm font-semibold whitespace-nowrap ${t.heading}`}>{s.label}</span>
+              </button>
+              {i < FLOW_STEPS.length - 1 && <ChevronRight size={16} className={`${t.faint} flex-shrink-0`} />}
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid lg:grid-cols-[1.3fr_1fr] gap-5 mb-5">
+        {/* C · RECENT TEMPLATES */}
+        <div className={`${t.card} p-5`}>
+          <div className="flex items-center justify-between mb-4">
+            <p className={`text-sm font-semibold ${t.heading}`}>Recent templates</p>
+            <button onClick={() => onNavigate("AI Builder")} className="text-xs font-semibold text-[#00aa13] flex items-center gap-1">Go to AI Builder <ChevronRight size={13} /></button>
+          </div>
+          <div className="flex flex-col gap-2">
+            {templates.slice(0, 6).map((tp, i) => (
+              <button key={tp.id || i} onClick={() => onOpenBuilder?.(tp)} className={`flex items-center gap-3.5 rounded-xl px-3.5 py-3 text-left ${t.subtle} hover:shadow-md transition-all group`}>
+                <span className="w-10 h-10 rounded-xl flex items-center justify-center text-white flex-shrink-0" style={{ background: `linear-gradient(135deg,${DIFF_COLOR[tp.difficulty] || GREEN},${(DIFF_COLOR[tp.difficulty] || GREEN)}bb)` }}><Music size={17} /></span>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm font-semibold truncate ${t.heading}`}>{tp.name}</p>
+                  <p className={`text-xs ${t.muted}`}>{tp.mins} min · <span style={{ color: DIFF_COLOR[tp.difficulty] || GREEN }}>{tp.difficulty}</span> · edited {tp.edited}</p>
+                </div>
+                <span className={`text-xs font-semibold flex items-center gap-1 ${t.faint} group-hover:text-[#00aa13]`}>Open <ChevronRight size={13} /></span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* D · QUICK STATS */}
+        <div className="grid grid-cols-2 gap-3 content-start">
+          {stats.map((s, i) => <StatCard key={i} darkMode={darkMode} {...s} />)}
+        </div>
+      </div>
+
+      {/* Explore the rest of the platform */}
+      <p className={`text-xs font-bold uppercase tracking-wider mb-3 px-1 ${t.faint}`}>Explore the platform</p>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {PLATFORM_FEATURES.map(f => (
           <button key={f.key} onClick={() => onNavigate(f.key)}
@@ -306,17 +396,6 @@ export function InstructorPlatformPage({ darkMode, onToggleDarkMode, onNavigate 
             <p className={`text-xs mt-1 ${t.muted}`}>{f.desc}</p>
           </button>
         ))}
-        <button onClick={() => onNavigate("AI Builder")}
-          className="p-5 text-left rounded-2xl text-white shadow-lg group hover:-translate-y-0.5 transition-all relative overflow-hidden"
-          style={{ background: "linear-gradient(135deg, #6366f1, #8b5cf6 55%, #ec4899)" }}>
-          <div className="absolute -right-6 -top-6 w-28 h-28 rounded-full bg-white/10" />
-          <div className="flex items-center justify-between mb-4 relative">
-            <div className="w-11 h-11 rounded-2xl bg-white/20 flex items-center justify-center"><Wand2 size={20} /></div>
-            <span className="text-[10px] font-bold uppercase tracking-wider bg-white/20 px-2 py-1 rounded-full">Flagship</span>
-          </div>
-          <p className="text-base font-semibold relative">Build a ride with AI →</p>
-          <p className="text-xs mt-1 text-white/80 relative">Describe it once. Get a full plan, playlist & cues.</p>
-        </button>
       </div>
     </Shell>
   )
@@ -963,6 +1042,12 @@ export function GrowthDashboardPage({ darkMode, onToggleDarkMode, onNavigate }) 
         title="Growth Dashboard" sub="Measure your instructor performance" Icon={TrendingUp}
         gradient="linear-gradient(135deg,#14b8a6,#00aa13)" />
 
+      <div className="flex justify-end mb-4">
+        <button onClick={() => onNavigate("Riders")} className={`flex items-center gap-1.5 text-sm font-semibold px-3.5 py-2 rounded-xl ${t.chip} hover:shadow-md transition-all`}>
+          <Users size={15} /> View Rider Insights <ChevronRight size={14} />
+        </button>
+      </div>
+
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
         {kpis.map((k, i) => <StatCard key={i} darkMode={darkMode} {...k} />)}
       </div>
@@ -1074,169 +1159,200 @@ const AI_RECOVERY = [
   { t: "Cool-down stretch", d: "Finish with 3 min of seated flush + hamstring & quad stretch off the bike." },
 ]
 
-export function AIBuilderPage({ darkMode, onToggleDarkMode, onNavigate }) {
+export function AIBuilderPage({ darkMode, onToggleDarkMode, onNavigate, onSaveTemplate, onOpenBuilder }) {
   const t = tk(darkMode)
   const [prompt, setPrompt] = useState(AI_PROMPTS[0])
   const [loading, setLoading] = useState(false)
   const [plan, setPlan] = useState(null)
+  const [rideName, setRideName] = useState("")
+  const [editing, setEditing] = useState(false)
   const [toast, setToast] = useState("")
 
   function generate() {
     if (!prompt.trim()) return
-    setLoading(true); setPlan(null)
-    setTimeout(() => { setPlan(buildAIPlan(prompt)); setLoading(false) }, 1400)
+    setLoading(true); setPlan(null); setEditing(false)
+    setTimeout(() => {
+      const pl = buildAIPlan(prompt)
+      setPlan(pl)
+      setRideName(`${pl.genre} ${pl.level} ${pl.climb ? "Climb & Intervals" : "Intervals"}`)
+      setLoading(false)
+    }, 1400)
   }
-  function flash(m) { setToast(m); setTimeout(() => setToast(""), 2200) }
+  function flash(m) { setToast(m); setTimeout(() => setToast(""), 2400) }
+  function adjustBlock(i, d) {
+    setPlan(p => { const tl = p.tl.map((s, j) => j === i ? { ...s, min: Math.max(1, s.min + d) } : s); return { ...p, tl, dur: tl.reduce((a, s) => a + s.min, 0) } })
+  }
+  function removeBlock(i) {
+    setPlan(p => { if (p.tl.length <= 2) return p; const tl = p.tl.filter((_, j) => j !== i); return { ...p, tl, dur: tl.reduce((a, s) => a + s.min, 0) } })
+  }
+  function ride() {
+    return { name: rideName || "AI Ride", mins: plan.dur, difficulty: plan.level, genre: plan.genre,
+      segments: plan.tl.map(s => ({ name: s.name, min: s.min, zone: s.zone, type: s.type })) }
+  }
+  function saveTpl() { onSaveTemplate?.(ride()); flash("Saved — find it on the Overview ✓") }
 
   return (
-    <Shell max="max-w-5xl">
+    <Shell max="max-w-7xl">
       <PageHead darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} onBack={() => onNavigate("Platform")}
         title="AI Ride Builder" sub="Describe a ride — get a full plan, playlist & cues" Icon={Wand2}
         gradient="linear-gradient(135deg,#6366f1,#8b5cf6,#ec4899)" />
 
-      {/* prompt */}
-      <div className="rounded-3xl p-[1.5px] mb-5" style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6,#ec4899)" }}>
-        <div className={`rounded-3xl p-5 ${darkMode ? "bg-gray-900" : "bg-white"}`}>
-          <textarea value={prompt} onChange={e => setPrompt(e.target.value)} rows={3}
-            placeholder="e.g. Build me a 45-minute intermediate HIIT ride using EDM music with 5 intervals and one long climb."
-            className={`w-full bg-transparent text-base md:text-lg resize-none focus:outline-none ${t.heading} placeholder:${t.faint}`} />
-          <div className="flex items-center justify-between gap-3 mt-3 flex-wrap">
-            <div className="flex flex-wrap gap-1.5">
-              {AI_PROMPTS.map((p, i) => (
-                <button key={i} onClick={() => setPrompt(p)} className={`text-[11px] px-2.5 py-1 rounded-full border ${t.border} ${t.muted} hover:border-violet-400 transition-colors`}>
-                  {p.length > 38 ? p.slice(0, 38) + "…" : p}
-                </button>
-              ))}
+      <div className="grid lg:grid-cols-[380px_1fr] gap-5 items-start">
+        {/* ── LEFT · prompt + actions ── */}
+        <div className="lg:sticky lg:top-4 space-y-4">
+          <div className="rounded-3xl p-[1.5px] shadow-lg" style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6,#ec4899)" }}>
+            <div className={`rounded-3xl p-5 ${darkMode ? "bg-gray-900" : "bg-white"}`}>
+              <p className={`text-xs font-bold uppercase tracking-wider mb-2.5 text-violet-500`}>Describe your ride</p>
+              <textarea value={prompt} onChange={e => setPrompt(e.target.value)} rows={4}
+                placeholder="e.g. Build me a 45-minute HIIT ride with EDM music, 5 intervals and 1 long climb"
+                className={`w-full bg-transparent text-base resize-none focus:outline-none ${t.heading}`} />
+              <div className="flex flex-wrap gap-1.5 mt-3 mb-4">
+                {AI_PROMPTS.map((p, i) => (
+                  <button key={i} onClick={() => setPrompt(p)} className={`text-[11px] px-2.5 py-1 rounded-full border ${t.border} ${t.muted} hover:border-violet-400 transition-colors`}>
+                    {p.length > 30 ? p.slice(0, 30) + "…" : p}
+                  </button>
+                ))}
+              </div>
+              <button onClick={generate} disabled={loading}
+                className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-white font-semibold text-sm shadow-lg transition-transform active:scale-95 disabled:opacity-60"
+                style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)" }}>
+                {loading ? <><Sparkles size={16} className="animate-spin" /> Generating…</> : <><Wand2 size={16} /> Generate Ride</>}
+              </button>
             </div>
-            <button onClick={generate} disabled={loading}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-white font-semibold text-sm shadow-lg transition-transform active:scale-95 disabled:opacity-60"
-              style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)" }}>
-              {loading ? <><Sparkles size={16} className="animate-spin" /> Generating…</> : <><Wand2 size={16} /> Generate ride</>}
-            </button>
           </div>
+
+          {/* ride summary + actions */}
+          {plan && !loading && (
+            <div className={`${t.card} p-5`}>
+              {editing
+                ? <input value={rideName} onChange={e => setRideName(e.target.value)} className={`w-full text-lg font-bold bg-transparent border-b ${t.border} focus:outline-none focus:border-violet-400 pb-1 mb-3 ${t.heading}`} />
+                : <h2 className={`text-lg font-bold tracking-tight mb-3 ${t.heading}`}>{rideName}</h2>}
+              <div className="grid grid-cols-2 gap-2 mb-4">
+                {[["Duration", `${plan.dur} min`], ["Level", plan.level], ["Intervals", plan.intervals], ["Music", plan.genre]].map(([k, v], i) => (
+                  <div key={i} className={`rounded-xl p-2.5 ${t.subtle}`}><p className={`text-[10px] ${t.muted}`}>{k}</p><p className={`text-sm font-bold ${t.heading}`}>{v}</p></div>
+                ))}
+              </div>
+              <div className="flex flex-col gap-2">
+                <button onClick={() => onOpenBuilder?.(ride())} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-white font-semibold text-sm" style={{ background: GREEN }}>
+                  <SlidersIcon size={15} /> Open in Class Builder
+                </button>
+                <div className="grid grid-cols-2 gap-2">
+                  <button onClick={saveTpl} className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-semibold ${t.chip}`}><Save size={14} /> Save Template</button>
+                  <button onClick={() => setEditing(e => !e)} className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-semibold ${editing ? "text-white" : t.chip}`} style={editing ? { background: "#8b5cf6" } : undefined}><Pencil size={14} /> {editing ? "Done" : "Edit Ride"}</button>
+                </div>
+                <button onClick={() => onNavigate("Live Mode")} className={`w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-semibold border ${t.border} ${t.muted} hover:text-[#e91236] transition-colors`}>
+                  <Radio size={14} /> Open in Live Mode
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── RIGHT · generated output ── */}
+        <div>
+          {loading && (
+            <div className="space-y-3">{[0, 1, 2, 3].map(i => <div key={i} className={`rounded-2xl ${t.subtle} animate-pulse`} style={{ height: i === 0 ? 80 : 130 }} />)}</div>
+          )}
+
+          {!plan && !loading && (
+            <div className={`${t.card} p-12 text-center`}>
+              <div className="w-14 h-14 rounded-2xl mx-auto flex items-center justify-center text-white mb-4" style={{ background: "linear-gradient(135deg,#6366f1,#ec4899)" }}><Wand2 size={26} /></div>
+              <p className={`text-base font-semibold ${t.heading}`}>Describe your ride and hit Generate</p>
+              <p className={`text-sm mt-1 ${t.muted}`}>AI drafts a structured timeline, coaching cues, a BPM-matched playlist & intensity in seconds.</p>
+            </div>
+          )}
+
+          {plan && !loading && (
+            <div className="space-y-4 animate-[fadeIn_.4s_ease]">
+              {/* timeline — editable blocks */}
+              <div className={`${t.card} p-5`}>
+                <div className="flex items-center justify-between mb-3">
+                  <p className={`text-sm font-semibold ${t.heading}`}>Ride timeline</p>
+                  {editing && <span className="text-[11px] font-semibold text-violet-500">Editing · adjust or remove blocks</span>}
+                </div>
+                <div className="flex w-full h-3 rounded-full overflow-hidden mb-4">
+                  {plan.tl.map((s, i) => <div key={i} style={{ width: `${(s.min / plan.dur) * 100}%`, background: TYPE_COLOR[s.type] }} title={`${s.name} · ${s.min}m`} />)}
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  {plan.tl.map((s, i) => (
+                    <div key={i} className={`flex items-center gap-3 rounded-xl px-3.5 py-2.5 ${t.subtle}`}>
+                      <span className="w-1.5 h-8 rounded-full flex-shrink-0" style={{ background: TYPE_COLOR[s.type] }} />
+                      <span className={`flex-1 text-sm font-medium ${t.heading}`}>{s.name}</span>
+                      <span className={`text-xs ${t.muted} hidden sm:block`}>{s.zone}</span>
+                      {editing ? (
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => adjustBlock(i, -1)} className={`w-6 h-6 rounded-md flex items-center justify-center text-sm font-bold ${t.chip}`}>−</button>
+                          <span className={`text-sm font-bold tabular-nums w-12 text-center ${t.heading}`}>{s.min}m</span>
+                          <button onClick={() => adjustBlock(i, 1)} className={`w-6 h-6 rounded-md flex items-center justify-center text-sm font-bold ${t.chip}`}>+</button>
+                          <button onClick={() => removeBlock(i)} className={`w-6 h-6 rounded-md flex items-center justify-center text-xs ${darkMode ? "hover:bg-gray-700 text-gray-500" : "hover:bg-gray-200 text-gray-400"}`}>✕</button>
+                        </div>
+                      ) : <span className={`text-sm font-bold tabular-nums w-12 text-right ${t.heading}`}>{s.min} min</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className={`${t.card} p-5`}>
+                  <p className={`text-sm font-semibold mb-3 ${t.heading}`}>Coaching prompts</p>
+                  <div className="flex flex-col gap-2">
+                    {AI_CUES.slice(0, Math.min(6, plan.intervals + 1)).map((c, i) => (
+                      <div key={i} className={`flex items-start gap-2.5 rounded-xl px-3.5 py-2.5 border ${t.border}`}>
+                        <span className="w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0 mt-0.5" style={{ background: "#8b5cf6" }}>{i + 1}</span>
+                        <p className={`text-sm ${t.heading}`}>{c}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className={`${t.card} p-5`}>
+                  <div className="flex items-center justify-between mb-3">
+                    <p className={`text-sm font-semibold ${t.heading}`}>Playlist · {plan.genre}</p>
+                    <Music size={15} className={t.faint} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    {plan.playlist.map(([title, artist, bpm], i) => (
+                      <div key={i} className={`flex items-center gap-3 rounded-xl px-3 py-2 ${t.subtle}`}>
+                        <span className={`text-xs font-bold w-4 ${t.faint}`}>{i + 1}</span>
+                        <div className="flex-1 min-w-0"><p className={`text-sm font-medium truncate ${t.heading}`}>{title}</p><p className={`text-[11px] ${t.faint}`}>{artist}</p></div>
+                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={{ background: GREEN + "1a", color: GREEN }}>{bpm} BPM</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className={`${t.card} p-5`}>
+                  <p className={`text-sm font-semibold mb-3 ${t.heading}`}>Recovery & intensity guidance</p>
+                  <div className="flex flex-col gap-2.5">
+                    {AI_RECOVERY.map((r, i) => (
+                      <div key={i} className="flex items-start gap-3">
+                        <span className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: "#0ea5e91a", color: "#0ea5e9" }}><Heart size={14} /></span>
+                        <div><p className={`text-sm font-semibold ${t.heading}`}>{r.t}</p><p className={`text-xs ${t.muted}`}>{r.d}</p></div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className={`${t.card} p-5`}>
+                  <p className={`text-sm font-semibold mb-3 ${t.heading}`}>Intensity summary</p>
+                  <StackedBar dist={plan.intensity.filter(z => z.pct > 0)} height={18} />
+                  <div className="grid grid-cols-2 gap-x-5 gap-y-2 mt-4">
+                    {plan.intensity.map((z, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-sm" style={{ background: z.color }} />
+                        <span className={`text-xs flex-1 ${t.muted}`}>{z.label}</span>
+                        <span className={`text-xs font-bold tabular-nums ${t.heading}`}>{z.pct}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
-
-      {/* loading shimmer */}
-      {loading && (
-        <div className="space-y-3">
-          {[0, 1, 2].map(i => <div key={i} className={`rounded-2xl ${t.subtle} animate-pulse`} style={{ height: i === 0 ? 90 : 140 }} />)}
-        </div>
-      )}
-
-      {/* generated plan */}
-      {plan && !loading && (
-        <div className="space-y-4 animate-[fadeIn_.4s_ease]">
-          {/* overview */}
-          <div className={`${t.card} p-5`}>
-            <div className="flex items-start justify-between gap-3 flex-wrap">
-              <div>
-                <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-violet-500 mb-2"><Sparkles size={13} /> AI-generated ride plan</span>
-                <h2 className={`text-2xl font-bold tracking-tight ${t.heading}`}>{plan.genre} {plan.level} {plan.climb ? "Climb & Intervals" : "Intervals"}</h2>
-              </div>
-              <div className="flex gap-2">
-                <button onClick={() => flash("Opening editor…")} className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl ${t.chip}`}><Pencil size={13} /> Edit</button>
-                <button onClick={() => flash("Ride duplicated")} className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl ${t.chip}`}><Copy size={13} /> Duplicate</button>
-                <button onClick={() => flash("Saved as template ✓")} className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl text-white" style={{ background: GREEN }}><Save size={13} /> Save template</button>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
-              {[["Duration", `${plan.dur} min`], ["Level", plan.level], ["Intervals", plan.intervals], ["Music", plan.genre]].map(([k, v], i) => (
-                <div key={i} className={`rounded-xl p-3 ${t.subtle}`}><p className={`text-[11px] ${t.muted}`}>{k}</p><p className={`text-base font-bold ${t.heading}`}>{v}</p></div>
-              ))}
-            </div>
-          </div>
-
-          {/* timeline */}
-          <div className={`${t.card} p-5`}>
-            <p className={`text-sm font-semibold mb-3 ${t.heading}`}>Ride timeline</p>
-            <div className="flex w-full h-3 rounded-full overflow-hidden mb-4">
-              {plan.tl.map((s, i) => <div key={i} style={{ width: `${(s.min / plan.dur) * 100}%`, background: TYPE_COLOR[s.type] }} title={`${s.name} · ${s.min}m`} />)}
-            </div>
-            <div className="flex flex-col gap-1.5">
-              {plan.tl.map((s, i) => (
-                <div key={i} className={`flex items-center gap-3 rounded-xl px-3.5 py-2.5 ${t.subtle}`}>
-                  <span className="w-1.5 h-8 rounded-full flex-shrink-0" style={{ background: TYPE_COLOR[s.type] }} />
-                  <span className={`flex-1 text-sm font-medium ${t.heading}`}>{s.name}</span>
-                  <span className={`text-xs ${t.muted}`}>{s.zone}</span>
-                  <span className={`text-sm font-bold tabular-nums w-12 text-right ${t.heading}`}>{s.min} min</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid md:grid-cols-2 gap-4">
-            {/* coaching prompts */}
-            <div className={`${t.card} p-5`}>
-              <p className={`text-sm font-semibold mb-3 ${t.heading}`}>Coaching prompts</p>
-              <div className="flex flex-col gap-2">
-                {AI_CUES.slice(0, Math.min(6, plan.intervals + 1)).map((c, i) => (
-                  <div key={i} className={`flex items-start gap-2.5 rounded-xl px-3.5 py-2.5 border ${t.border}`}>
-                    <span className="w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0 mt-0.5" style={{ background: "#8b5cf6" }}>{i + 1}</span>
-                    <p className={`text-sm ${t.heading}`}>{c}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* playlist */}
-            <div className={`${t.card} p-5`}>
-              <div className="flex items-center justify-between mb-3">
-                <p className={`text-sm font-semibold ${t.heading}`}>Playlist · {plan.genre}</p>
-                <Music size={15} className={t.faint} />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                {plan.playlist.map(([title, artist, bpm], i) => (
-                  <div key={i} className={`flex items-center gap-3 rounded-xl px-3 py-2 ${t.subtle}`}>
-                    <span className={`text-xs font-bold w-4 ${t.faint}`}>{i + 1}</span>
-                    <div className="flex-1 min-w-0"><p className={`text-sm font-medium truncate ${t.heading}`}>{title}</p><p className={`text-[11px] ${t.faint}`}>{artist}</p></div>
-                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={{ background: GREEN + "1a", color: GREEN }}>{bpm} BPM</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="grid md:grid-cols-2 gap-4">
-            {/* recovery */}
-            <div className={`${t.card} p-5`}>
-              <p className={`text-sm font-semibold mb-3 ${t.heading}`}>Recovery recommendations</p>
-              <div className="flex flex-col gap-2.5">
-                {AI_RECOVERY.map((r, i) => (
-                  <div key={i} className="flex items-start gap-3">
-                    <span className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: "#0ea5e91a", color: "#0ea5e9" }}><Heart size={14} /></span>
-                    <div><p className={`text-sm font-semibold ${t.heading}`}>{r.t}</p><p className={`text-xs ${t.muted}`}>{r.d}</p></div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* intensity summary */}
-            <div className={`${t.card} p-5`}>
-              <p className={`text-sm font-semibold mb-3 ${t.heading}`}>Intensity summary</p>
-              <StackedBar dist={plan.intensity.filter(z => z.pct > 0)} height={18} />
-              <div className="grid grid-cols-2 gap-x-5 gap-y-2 mt-4">
-                {plan.intensity.map((z, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-sm" style={{ background: z.color }} />
-                    <span className={`text-xs flex-1 ${t.muted}`}>{z.label}</span>
-                    <span className={`text-xs font-bold tabular-nums ${t.heading}`}>{z.pct}%</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* empty state */}
-      {!plan && !loading && (
-        <div className={`${t.card} p-10 text-center`}>
-          <div className="w-14 h-14 rounded-2xl mx-auto flex items-center justify-center text-white mb-4" style={{ background: "linear-gradient(135deg,#6366f1,#ec4899)" }}><Wand2 size={26} /></div>
-          <p className={`text-base font-semibold ${t.heading}`}>Describe your ride and hit Generate</p>
-          <p className={`text-sm mt-1 ${t.muted}`}>AI drafts the timeline, coaching cues, a BPM-matched playlist & intensity in seconds.</p>
-        </div>
-      )}
 
       {toast && (
         <div className="fixed bottom-24 md:bottom-8 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-xl text-white text-sm font-semibold shadow-xl" style={{ background: "#111827" }}>

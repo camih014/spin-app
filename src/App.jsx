@@ -1,6 +1,10 @@
 import React, { useState, useRef, useEffect } from "react"
 import { Home, Calendar, BookOpen, Bike, Trophy, User, Settings, LogOut,
-  ChevronDown, LayoutDashboard, Users, ListMusic, SlidersHorizontal, BarChart3, CalendarClock } from "lucide-react"
+  ChevronDown, LayoutDashboard, Users, ListMusic, SlidersHorizontal, BarChart3, CalendarClock, Sparkles } from "lucide-react"
+import {
+  InstructorPlatformPage, CueSheetPage, LiveModePage, RidersCRMPage,
+  FeedbackPage, SubsMarketplacePage, GrowthDashboardPage, AIBuilderPage,
+} from "./instructorPlatform"
 
 // ─── DATA ───────────────────────────────────────────────────────────────────
 
@@ -1010,7 +1014,11 @@ const INSTRUCTOR_NAV = [
   { label: "Class Builder", icon: SlidersHorizontal },
   { label: "Schedule",      icon: CalendarClock     },
   { label: "Insights",      icon: BarChart3         },
+  { label: "Platform",      icon: Sparkles          },
 ]
+
+// Instructor Platform pages reachable from the overview (kept in the instructor workspace)
+const PLATFORM_PAGES = ["Platform", "Cue Sheet", "Live Mode", "Riders", "Feedback", "Subs", "Growth", "AI Builder"]
 
 // Roles the signed-in person holds. This demo user is both a rider and an instructor, so they get a
 // workspace switcher. A rider-only account would have a single role and no toggle.
@@ -1043,7 +1051,7 @@ export default function App() {
   ]
 
   // Which workspace each page belongs to, so the mobile nav + role toggle stay in sync with the page
-  const workspaceOf = page => USER_ROLES.find(r => r.nav.some(n => n.label === page))?.key
+  const workspaceOf = page => PLATFORM_PAGES.includes(page) ? "instructor" : USER_ROLES.find(r => r.nav.some(n => n.label === page))?.key
   const workspace = workspaceOf(activePage) || "rider"
   const mobileNav = (USER_ROLES.find(r => r.key === workspace) || USER_ROLES[0]).nav
 
@@ -1106,6 +1114,15 @@ export default function App() {
         {activePage === "Class Builder" && <ClassBuilderPage      darkMode={darkMode} onToggleDarkMode={dm} onPublish={publishClass} />}
         {activePage === "Schedule"      && <InstructorSchedulePage darkMode={darkMode} onToggleDarkMode={dm} builtClasses={builtClasses} />}
         {activePage === "Insights"      && <InstructorStatsPage   darkMode={darkMode} onToggleDarkMode={dm} />}
+        {/* Instructor Platform */}
+        {activePage === "Platform"   && <InstructorPlatformPage darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
+        {activePage === "Cue Sheet"  && <CueSheetPage          darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
+        {activePage === "Live Mode"  && <LiveModePage          darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
+        {activePage === "Riders"     && <RidersCRMPage         darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
+        {activePage === "Feedback"   && <FeedbackPage          darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
+        {activePage === "Subs"       && <SubsMarketplacePage   darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
+        {activePage === "Growth"     && <GrowthDashboardPage   darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
+        {activePage === "AI Builder" && <AIBuilderPage         darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
         {/* Shared */}
         {activePage === "Profile"      && <ProfilePage  darkMode={darkMode} onToggleDarkMode={dm} />}
         {activePage === "Settings"     && <SettingsPage darkMode={darkMode} onToggleDarkMode={dm} />}

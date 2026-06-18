@@ -1010,9 +1010,9 @@ const RIDER_NAV = [
 
 const INSTRUCTOR_NAV = [
   { label: "Studio Home",   icon: LayoutDashboard   },
+  { label: "Live Mode",     icon: Radio             },
   { label: "My Classes",    icon: Users             },
   { label: "Class Builder", icon: SlidersHorizontal },
-  { label: "Live Mode",     icon: Radio             },
   { label: "Schedule",      icon: CalendarClock     },
   { label: "Insights",      icon: BarChart3         },
 ]
@@ -4929,13 +4929,6 @@ const CLASS_TEMPLATES = [
   ]},
 ]
 
-const INSTRUCTOR_REVIEWS = [
-  { name: "Olivia Hart",  rating: 5, text: "Best class of my week — the energy is unreal.",            cls: "Sunrise Power"  },
-  { name: "Noah Patel",   rating: 5, text: "Tough but so well structured. Loved the threshold blocks.", cls: "Threshold Push" },
-  { name: "Mia Foster",   rating: 4, text: "Great playlist, pushed me harder than I expected.",         cls: "HIIT Blast"     },
-  { name: "Leo Barnes",   rating: 5, text: "Clear cues, great pacing. Always leave buzzing.",            cls: "Climb Intervals"},
-]
-
 // ─── INSTRUCTOR PAGES ────────────────────────────────────────────────────────
 
 function InstructorTopBar({ title, sub, darkMode, onToggleDarkMode }) {
@@ -4967,9 +4960,14 @@ function CapacityBar({ booked, capacity, darkMode }) {
 }
 
 // Open cover requests surfaced on Studio Home — full list lives on the Sub Marketplace page
-const COVERAGE_OPEN = [
-  { day: "Fri 20 Jun", time: "6:30 PM", cls: "Power Zone Ride", mins: 45, studio: "Hampstead" },
-  { day: "Sat 21 Jun", time: "9:00 AM", cls: "Saturday HIIT",   mins: 45, studio: "Shoreditch" },
+// Owner-programmed classes needing cover — surfaced on Studio Home, filtered by location.
+// Each carries a short brief so a covering instructor knows the "normal" feel of the session.
+const COVERAGE = [
+  { id: "c1", day: "Today",      time: "7:30 PM",  cls: "Power Zone Ride",   mins: 45, location: "SpinOut · Hampstead",  studio: "Studio 1", instructor: "Alex Papaya", booked: 18, capacity: 24, vibe: "Steady, focused power build", music: "Melodic techno · 124–128 BPM", intensity: "Z3–4 sustained", pay: "£75", brief: "Owner-programmed power-zone session — long threshold blocks, minimal chat. Regulars expect a tough but controlled ride; let the music carry the work." },
+  { id: "c2", day: "Fri 20 Jun", time: "6:30 PM",  cls: "Rhythm Ride",       mins: 45, location: "SpinOut · Hampstead",  studio: "Studio 2", instructor: "Zen Kiwi",   booked: 21, capacity: 24, vibe: "High-energy, beat-driven", music: "Pop & dance anthems · 120–130 BPM", intensity: "Z2–4 intervals", pay: "£75", brief: "Social rhythm class — choreography on the beat, big sing-along moments. The room loves a theme; keep the energy up and everyone together." },
+  { id: "c3", day: "Sat 21 Jun", time: "9:00 AM",  cls: "Saturday HIIT",     mins: 45, location: "SpinOut · Hampstead",  studio: "Studio 1", instructor: "Max Lime",   booked: 23, capacity: 24, vibe: "All-out intervals", music: "EDM / drum & bass · 128–174 BPM", intensity: "Z4–5 bursts", pay: "£75", brief: "Owner's flagship HIIT — six hard intervals with short recoveries. Near sold-out, competitive regulars who chase the leaderboard." },
+  { id: "c4", day: "Today",      time: "12:00 PM", cls: "Lunch Sprint",      mins: 30, location: "SpinOut · Shoreditch", studio: "Studio 2", instructor: "Anna Banana", booked: 14, capacity: 20, vibe: "Fast & efficient", music: "Hip-hop / house · 100–124 BPM", intensity: "Z3–5 sprints", pay: "£55", brief: "30-minute express sprint for the lunch crowd. Punchy, no-nonsense — in, sweat, out. Keep cues tight and the clock moving." },
+  { id: "c5", day: "Mon 23 Jun", time: "7:00 AM",  cls: "Sunrise Endurance", mins: 60, location: "SpinOut · Shoreditch", studio: "Studio 1", instructor: "Rio Banana",  booked: 12, capacity: 20, vibe: "Calm aerobic base", music: "Melodic house · 118–124 BPM", intensity: "Z2 endurance", pay: "£90", brief: "Early steady-state endurance ride. Low chat, long Zone-2 blocks. Regulars are training for events — respect the easy pace." },
 ]
 
 function InstructorHomePage({ darkMode, onToggleDarkMode, onOpenRoster, onNavigate, templates = [], onOpenBuilder }) {
@@ -4979,39 +4977,36 @@ function InstructorHomePage({ darkMode, onToggleDarkMode, onOpenRoster, onNaviga
   const subtle  = darkMode ? "bg-gray-800"   : "bg-gray-50"
 
   const [locFilter, setLocFilter] = useState("All")
+  const [expanded, setExpanded]   = useState(null)
+  const [applied, setApplied]     = useState(() => new Set())
+  const [toast, setToast]         = useState("")
   const filterOpts = ["All", ...LOCATIONS]
 
   const inLoc = c => locFilter === "All" || c.location === locFilter
-  const today = instructorClasses.filter(c => c.dateLabel === "Today" && inLoc(c))
+  const today = instructorClasses.filter(c => c.dateLabel === "Today" && inLoc(c)).sort((a, b) => a.time.localeCompare(b.time))
+  const upcoming = instructorClasses.filter(c => c.status === "upcoming" && inLoc(c)).sort((a, b) => (a.dateIso + a.time).localeCompare(b.dateIso + b.time))
+  const nextClass = today[0] || upcoming[0]
   const ridersToday = today.reduce((s, c) => s + c.booked, 0)
-  const weekCount = instructorClasses.filter(c => c.status === "upcoming" && inLoc(c)).length
+  const cover = COVERAGE.filter(inLoc).slice(0, 3)
 
   const stats = [
-    { label: "Classes today",   value: today.length },
-    { label: "Riders booked",   value: ridersToday },
-    { label: "Upcoming",        value: `${weekCount} classes` },
-    { label: "Avg rating",      value: "4.9 ★" },
+    { label: "Classes today", value: today.length, Icon: CalendarClock },
+    { label: "Riders today",  value: ridersToday,  Icon: Users },
+    { label: "This week",     value: upcoming.length, Icon: BarChart3 },
+    { label: "Avg rating",    value: "4.9", suffix: "★", Icon: Trophy },
   ]
 
-  return (
-    <div className="p-4 md:p-8 max-w-4xl mx-auto pb-16">
-      <InstructorTopBar title="Good morning, JIM" sub={`${today.length} classes to teach today`} darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
+  function applyCover(id) {
+    setApplied(s => new Set(s).add(id))
+    const c = COVERAGE.find(x => x.id === id)
+    setToast(`Applied to cover ${c.cls} — the studio will confirm`)
+    setTimeout(() => setToast(""), 2600)
+  }
+  const locShort = l => l.replace("SpinOut · ", "")
 
-      {/* Instructor profile */}
-      <div className={`${card} p-5 mb-5`}>
-        <div className="flex items-center gap-4">
-          <Avatar name="JIM" size={56} />
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <h2 className={`text-lg font-bold ${heading}`}>JIM</h2>
-              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-[#e6f9e8] text-[#00aa13]">Instructor</span>
-            </div>
-            <p className={`text-sm ${muted}`}>Power · Rhythm · HIIT · 4.9★ over 622 riders</p>
-            <p className={`text-xs mt-0.5 ${muted}`}>Based at {LOCATIONS.map(l => l.replace("SpinOut · ","")).join(" & ")}</p>
-          </div>
-          <button className={`text-xs font-semibold px-3 py-1.5 rounded-lg border flex-shrink-0 ${darkMode ? "border-gray-700 text-gray-300 hover:bg-gray-800" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}>Edit</button>
-        </div>
-      </div>
+  return (
+    <div className="p-4 md:p-8 max-w-5xl mx-auto pb-16">
+      <InstructorTopBar title="Good morning, JIM" sub={today.length ? `${today.length} ${today.length === 1 ? "class" : "classes"} to teach today` : "No classes scheduled today"} darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
 
       {/* Location filter */}
       <div className="flex gap-2 mb-5 overflow-x-auto pb-1">
@@ -5022,119 +5017,164 @@ function InstructorHomePage({ darkMode, onToggleDarkMode, onOpenRoster, onNaviga
               className={`flex-shrink-0 text-xs font-semibold px-3.5 py-2 rounded-full border transition-colors ${on
                 ? "bg-[#00aa13] border-[#00aa13] text-white"
                 : darkMode ? "border-gray-700 text-gray-400 hover:bg-gray-800" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}>
-              {l === "All" ? "All locations" : l.replace("SpinOut · ","")}
+              {l === "All" ? "All locations" : locShort(l)}
             </button>
           )
         })}
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+      {/* HERO — next class */}
+      {nextClass ? (
+        <div className={`${card} p-5 md:p-6 mb-4 relative overflow-hidden`}>
+          <div className="absolute left-0 top-0 bottom-0 w-1.5" style={{ background: "#00aa13" }} />
+          <div className="flex flex-col md:flex-row md:items-center gap-5 pl-2">
+            <div className="flex-1 min-w-0">
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[#00aa13] mb-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#00aa13]" /> {today.length ? "Up next today" : "Next class"}
+              </span>
+              <div className="flex items-baseline gap-3 flex-wrap">
+                <h2 className={`text-2xl md:text-3xl font-bold tracking-tight ${heading}`}>{nextClass.name}</h2>
+                <span className={`text-lg font-bold tabular-nums ${heading}`}>{nextClass.time}</span>
+              </div>
+              <p className={`text-sm mt-1 ${muted}`}>{locShort(nextClass.location)} · {nextClass.studio} · 45 mins{nextClass.dateLabel !== "Today" ? ` · ${nextClass.dateLabel}` : ""}</p>
+              <div className="mt-3 max-w-md">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className={`text-xs ${muted}`}>{nextClass.booked} / {nextClass.capacity} booked{nextClass.waitlist > 0 ? ` · ${nextClass.waitlist} waitlist` : ""}</span>
+                  <span className={`text-xs font-semibold ${nextClass.booked >= nextClass.capacity ? "text-orange-500" : "text-[#00aa13]"}`}>{nextClass.booked >= nextClass.capacity ? "Full" : `${nextClass.capacity - nextClass.booked} spaces`}</span>
+                </div>
+                <CapacityBar booked={nextClass.booked} capacity={nextClass.capacity} darkMode={darkMode} />
+              </div>
+            </div>
+            <div className="flex md:flex-col gap-2 md:w-44 flex-shrink-0">
+              <button onClick={() => onNavigate?.("Live Mode")} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[#00aa13] text-white text-sm font-semibold hover:bg-[#008a0f] transition-colors">
+                <Radio size={15} /> Go Live
+              </button>
+              <button onClick={() => onOpenRoster(nextClass)} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold ${darkMode ? "bg-gray-800 text-gray-200 hover:bg-gray-700" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}>
+                <Users size={15} /> Roster
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className={`${card} p-8 text-center mb-4`}><p className={`text-sm ${muted}`}>No upcoming classes at this location</p></div>
+      )}
+
+      {/* Stat strip */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         {stats.map((s, i) => (
           <div key={i} className={`${card} p-4`}>
-            <p className={`text-xs ${muted} mb-1`}>{s.label}</p>
-            <p className={`text-xl font-bold ${heading}`}>{s.value}</p>
+            <div className="flex items-center justify-between mb-2">
+              <span className={`text-xs ${muted}`}>{s.label}</span>
+              <s.Icon size={14} className={muted} />
+            </div>
+            <p className={`text-2xl font-bold tracking-tight ${heading}`}>{s.value}<span className="text-amber-500 text-lg">{s.suffix || ""}</span></p>
           </div>
         ))}
       </div>
 
-      {/* Coverage + ride templates widgets */}
-      <div className="grid md:grid-cols-2 gap-4 mb-8">
-        {/* Needs coverage */}
-        <div className={`${card} p-5`}>
+      {/* Cover requests — needs action */}
+      {cover.length > 0 && (
+        <div className="mb-8">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <span className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "#f59e0b1a", color: "#f59e0b" }}><CalendarClock size={15} /></span>
-              <p className={`text-sm font-semibold ${heading}`}>Cover requests</p>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-500">{COVERAGE_OPEN.length} open</span>
+              <h2 className={`font-semibold ${heading}`}>Cover requests</h2>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-500">{COVERAGE.filter(inLoc).length} need cover</span>
             </div>
             <button onClick={() => onNavigate?.("Subs")} className="text-xs font-semibold text-[#00aa13]">View all</button>
           </div>
-          <div className="flex flex-col gap-2">
-            {COVERAGE_OPEN.map((c, i) => (
-              <button key={i} onClick={() => onNavigate?.("Subs")} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-left ${subtle} hover:shadow-md transition-all`}>
-                <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-semibold truncate ${heading}`}>{c.cls}</p>
-                  <p className={`text-xs ${muted}`}>{c.day} · {c.time} · {c.studio}</p>
+          <div className="flex flex-col gap-2.5">
+            {cover.map(c => {
+              const open = expanded === c.id, isApplied = applied.has(c.id), full = c.booked >= c.capacity
+              return (
+                <div key={c.id} className={`${card} overflow-hidden`}>
+                  <button onClick={() => setExpanded(open ? null : c.id)} className="w-full p-4 text-left">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className={`text-base font-semibold ${heading}`}>{c.cls}</p>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-500">Needs cover</span>
+                        </div>
+                        <p className={`text-xs mt-0.5 ${muted}`}>{c.day} · {c.time} · {locShort(c.location)} · {c.studio} · {c.mins} min</p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className={`text-sm font-bold ${heading}`}>{c.pay}</span>
+                        <ChevronDown size={16} className={`transition-transform ${open ? "rotate-180" : ""} ${muted}`} />
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between mt-3">
+                      <div className="flex items-center gap-2">
+                        <Avatar name={c.instructor} size={24} />
+                        <span className={`text-xs ${muted}`}>Covering for <span className={`font-medium ${heading}`}>{c.instructor}</span></span>
+                      </div>
+                      <span className={`text-xs ${muted}`}>{c.booked}/{c.capacity} booked{full ? " · full" : ""}</span>
+                    </div>
+                  </button>
+                  {open && (
+                    <div className={`px-4 pb-4 pt-1 border-t ${darkMode ? "border-gray-800" : "border-gray-100"}`}>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3 mb-3">
+                        {[["Vibe", c.vibe], ["Music", c.music], ["Intensity", c.intensity], ["Attendees", `${c.booked} riders`]].map(([k, v], i) => (
+                          <div key={i} className={`rounded-xl p-2.5 ${subtle}`}><p className={`text-[10px] ${muted}`}>{k}</p><p className={`text-xs font-semibold mt-0.5 ${heading}`}>{v}</p></div>
+                        ))}
+                      </div>
+                      <p className={`text-sm ${muted} mb-3`}>{c.brief}</p>
+                      {isApplied
+                        ? <p className="w-full py-2.5 rounded-xl text-sm font-semibold text-center flex items-center justify-center gap-1.5" style={{ background: "#00aa131a", color: "#00aa13" }}>✓ Applied — awaiting studio confirmation</p>
+                        : <button onClick={() => applyCover(c.id)} className="w-full py-2.5 rounded-xl text-sm font-semibold text-white bg-[#00aa13] hover:bg-[#008a0f] transition-colors">Apply to cover</button>}
+                    </div>
+                  )}
                 </div>
-                <span className="text-xs font-semibold text-[#00aa13] flex-shrink-0">Cover →</span>
-              </button>
-            ))}
+              )
+            })}
           </div>
         </div>
+      )}
 
-        {/* Quick-launch ride templates */}
-        <div className={`${card} p-5`}>
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <span className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "#8b5cf61a", color: "#8b5cf6" }}><SlidersHorizontal size={15} /></span>
-              <p className={`text-sm font-semibold ${heading}`}>Your ride templates</p>
-            </div>
-            <button onClick={() => onNavigate?.("Class Builder")} className="text-xs font-semibold text-[#00aa13]">New ride</button>
-          </div>
-          <div className="flex flex-col gap-2">
-            {templates.slice(0, 3).map((tp, i) => (
-              <button key={tp.id || i} onClick={() => onOpenBuilder?.(tp)} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-left ${subtle} hover:shadow-md transition-all`}>
-                <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-semibold truncate ${heading}`}>{tp.name}</p>
-                  <p className={`text-xs ${muted}`}>{tp.mins} min · {tp.difficulty} · edited {tp.edited}</p>
-                </div>
-                <span className="text-xs font-semibold text-[#00aa13] flex-shrink-0">Open →</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Today's classes */}
-      <h2 className={`font-semibold mb-3 ${heading}`}>Today's classes{locFilter !== "All" && ` · ${locFilter.replace("SpinOut · ","")}`}</h2>
-      <div className="flex flex-col gap-3 mb-8">
+      {/* Today's schedule */}
+      <h2 className={`font-semibold mb-3 ${heading}`}>Today's schedule{locFilter !== "All" && ` · ${locShort(locFilter)}`}</h2>
+      <div className="flex flex-col gap-2.5 mb-8">
         {today.length === 0 && (
           <div className={`${card} p-6 text-center`}><p className={`text-sm ${muted}`}>No classes today at this location</p></div>
         )}
-        {today.map((c, i) => (
-          <div key={i} className={`${card} p-5`}>
-            <div className="flex items-start justify-between gap-4 mb-3">
-              <div>
-                <div className="flex items-center gap-2.5">
-                  <span className={`text-sm font-bold tabular-nums ${heading}`}>{c.time}</span>
-                  <span className={`text-base font-bold ${heading}`}>{c.name}</span>
-                </div>
-                <p className={`text-xs mt-0.5 ${muted}`}>{c.location?.replace("SpinOut · ","")} · {c.studio} · 45 mins</p>
+        {today.map((c, i) => {
+          const full = c.booked >= c.capacity
+          return (
+            <div key={i} className={`${card} p-4 flex items-center gap-4`}>
+              <div className="w-14 flex-shrink-0 text-center">
+                <p className={`text-sm font-bold tabular-nums ${heading}`}>{c.time}</p>
               </div>
-              <button onClick={() => onOpenRoster(c)}
-                className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-[#00aa13] text-white hover:bg-[#008a0f] transition-colors flex-shrink-0">
-                View roster
-              </button>
+              <div className={`w-px self-stretch ${darkMode ? "bg-gray-700" : "bg-gray-200"}`} />
+              <div className="flex-1 min-w-0">
+                <p className={`text-sm font-semibold ${heading}`}>{c.name}</p>
+                <p className={`text-xs mt-0.5 ${muted}`}>{locShort(c.location)} · {c.studio}</p>
+                <div className="mt-2 max-w-[220px]"><CapacityBar booked={c.booked} capacity={c.capacity} darkMode={darkMode} /></div>
+              </div>
+              <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                <span className={`text-xs font-semibold ${full ? "text-orange-500" : "text-[#00aa13]"}`}>{full ? "Full" : `${c.capacity - c.booked} left`}</span>
+                <button onClick={() => onOpenRoster(c)} className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-[#00aa13] text-white hover:bg-[#008a0f] transition-colors">Roster</button>
+              </div>
             </div>
-            <div className="flex items-center justify-between mb-1.5">
-              <span className={`text-xs ${muted}`}>{c.booked} / {c.capacity} booked{c.waitlist > 0 && ` · ${c.waitlist} waitlist`}</span>
-              <span className={`text-xs font-semibold ${c.booked >= c.capacity ? "text-orange-500" : "text-[#00aa13]"}`}>
-                {c.booked >= c.capacity ? "Full" : `${c.capacity - c.booked} spaces`}
-              </span>
-            </div>
-            <CapacityBar booked={c.booked} capacity={c.capacity} darkMode={darkMode} />
-          </div>
+          )
+        })}
+      </div>
+
+      {/* Quick-launch ride templates */}
+      <h2 className={`font-semibold mb-3 ${heading}`}>Your ride templates</h2>
+      <div className="grid sm:grid-cols-3 gap-3">
+        {templates.slice(0, 3).map((tp, i) => (
+          <button key={tp.id || i} onClick={() => onOpenBuilder?.(tp)} className={`${card} p-4 text-left hover:shadow-md transition-all`}>
+            <p className={`text-sm font-semibold truncate ${heading}`}>{tp.name}</p>
+            <p className={`text-xs mt-1 ${muted}`}>{tp.mins} min · {tp.difficulty}</p>
+            <p className={`text-xs mt-2 font-semibold text-[#00aa13]`}>Open in builder →</p>
+          </button>
         ))}
       </div>
 
-      {/* Recent reviews */}
-      <h2 className={`font-semibold mb-3 ${heading}`}>Recent rider feedback</h2>
-      <div className="flex flex-col gap-3">
-        {INSTRUCTOR_REVIEWS.slice(0, 3).map((r, i) => (
-          <div key={i} className={`${card} p-4 flex items-start gap-3`}>
-            <Avatar name={r.name} size={36} />
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between">
-                <p className={`text-sm font-semibold ${heading}`}>{r.name}</p>
-                <span className="text-xs text-amber-500">{"★".repeat(r.rating)}<span className={muted}>{"★".repeat(5-r.rating)}</span></span>
-              </div>
-              <p className={`text-xs mt-1 ${muted}`}>"{r.text}"</p>
-              <p className={`text-xs mt-1.5 text-[#00aa13] font-medium`}>{r.cls}</p>
-            </div>
-          </div>
-        ))}
-      </div>
+      {toast && (
+        <div className="fixed bottom-24 md:bottom-8 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-xl text-white text-sm font-semibold shadow-xl" style={{ background: "#111827" }}>
+          {toast}
+        </div>
+      )}
     </div>
   )
 }
@@ -5441,7 +5481,8 @@ function InstructorClassesPage({ darkMode, onToggleDarkMode, initialClass }) {
 
   const [view, setView]         = useState("list")
   const [selected, setSelected] = useState(initialClass || instructorClasses.find(c => c.status === "upcoming"))
-  const [mobileDetail, setMobileDetail] = useState(!!initialClass)
+  const [mobileDetail, setMobileDetail] = useState(!!initialClass)   // drives the mobile roster bottom-sheet
+  const rosterDrag = useDragToDismiss(() => setMobileDetail(false))
   const [calMonth, setCalMonth] = useState({ year: 2026, month: 2 })   // calendar month being viewed
   const [weekStart, setWeekStart] = useState(() => mondayOf("2026-02-26")) // Monday of the week being viewed
 
@@ -5550,7 +5591,7 @@ function InstructorClassesPage({ darkMode, onToggleDarkMode, initialClass }) {
       <InstructorTopBar title="My Classes" sub="Classes you're teaching at SpinOut" darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
 
       {/* View toggle */}
-      <div className={`flex items-center justify-end gap-3 mb-5 ${mobileDetail ? "hidden md:flex" : "flex"}`}>
+      <div className="flex items-center justify-end gap-3 mb-5">
         <div className={`inline-flex rounded-xl p-0.5 ${darkMode ? "bg-gray-800" : "bg-gray-100"}`}>
           {[["list","List"],["week","Week"],["calendar","Calendar"]].map(([v, l]) => (
             <button key={v} onClick={() => setView(v)}
@@ -5561,19 +5602,10 @@ function InstructorClassesPage({ darkMode, onToggleDarkMode, initialClass }) {
         </div>
       </div>
 
-      {/* Mobile back button when in detail */}
-      {mobileDetail && (
-        <button onClick={() => setMobileDetail(false)}
-          className={`md:hidden flex items-center gap-1.5 mb-4 text-sm font-medium ${muted}`}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-          All classes
-        </button>
-      )}
-
       {view === "calendar" ? (
         <div className="flex flex-col gap-6">
           {/* Month calendar */}
-          <div className={`${card} p-4 md:p-5 ${mobileDetail ? "hidden md:block" : "block"}`}>
+          <div className={`${card} p-4 md:p-5 block`}>
             <div className="flex items-center justify-between mb-4">
               <button onClick={() => shiftMonth(-1)} aria-label="Previous month"
                 className={`w-7 h-7 rounded-lg flex items-center justify-center ${darkMode ? "bg-gray-800 text-gray-300 hover:bg-gray-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
@@ -5621,7 +5653,7 @@ function InstructorClassesPage({ darkMode, onToggleDarkMode, initialClass }) {
             </div>
           </div>
           {/* Selected detail */}
-          <div className={`${mobileDetail ? "block" : "hidden md:block"}`}>
+          <div className="hidden md:block">
             {selected ? <ClassRoster cls={selected} darkMode={darkMode} />
               : <div className={`${card} p-10 text-center`}><p className={`text-sm ${muted}`}>Tap a class in the calendar to view its roster</p></div>}
           </div>
@@ -5629,7 +5661,7 @@ function InstructorClassesPage({ darkMode, onToggleDarkMode, initialClass }) {
       ) : view === "week" ? (
         <div className="flex flex-col gap-6">
           {/* Week strip */}
-          <div className={`${card} p-4 md:p-5 ${mobileDetail ? "hidden md:block" : "block"}`}>
+          <div className={`${card} p-4 md:p-5 block`}>
             <div className="flex items-center justify-between mb-4">
               <button onClick={() => setWeekStart(w => addDays(w, -7))} aria-label="Previous week"
                 className={`w-7 h-7 rounded-lg flex items-center justify-center ${darkMode ? "bg-gray-800 text-gray-300 hover:bg-gray-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
@@ -5674,7 +5706,7 @@ function InstructorClassesPage({ darkMode, onToggleDarkMode, initialClass }) {
             </div>
           </div>
           {/* Selected detail */}
-          <div className={`${mobileDetail ? "block" : "hidden md:block"}`}>
+          <div className="hidden md:block">
             {selected ? <ClassRoster cls={selected} darkMode={darkMode} />
               : <div className={`${card} p-10 text-center`}><p className={`text-sm ${muted}`}>Tap a class in the week to view its roster</p></div>}
           </div>
@@ -5682,12 +5714,36 @@ function InstructorClassesPage({ darkMode, onToggleDarkMode, initialClass }) {
       ) : (
         /* List + detail — left list scrolls independently, right roster stays put */
         <div className="flex flex-col md:flex-row gap-6 md:items-start">
-          <div className={`md:w-[340px] md:flex-shrink-0 md:max-h-[calc(100vh-150px)] md:overflow-y-auto md:pr-1 ${mobileDetail ? "hidden md:block" : "block"}`}>
+          <div className={`md:w-[340px] md:flex-shrink-0 md:max-h-[calc(100vh-150px)] md:overflow-y-auto md:pr-1 block`}>
             {ClassList}
           </div>
-          <div className={`flex-1 min-w-0 md:sticky md:top-6 ${mobileDetail ? "block" : "hidden md:block"}`}>
+          <div className="flex-1 min-w-0 md:sticky md:top-6 hidden md:block">
             {selected ? <ClassRoster cls={selected} darkMode={darkMode} />
               : <div className={`${card} p-10 text-center`}><p className={`text-sm ${muted}`}>Select a class to view its roster</p></div>}
+          </div>
+        </div>
+      )}
+
+      {/* ── Mobile roster bottom-sheet — slide up / drag down to dismiss ── */}
+      {mobileDetail && selected && (
+        <div className="fixed inset-0 z-50 md:hidden flex flex-col justify-end">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setMobileDetail(false)} />
+          <div className={`relative rounded-t-3xl flex flex-col overflow-hidden ${darkMode ? "bg-gray-900" : "bg-gray-50"}`}
+            style={rosterDrag.sheetStyle}>
+            <div className="flex justify-center pt-3 pb-1 flex-shrink-0 cursor-grab active:cursor-grabbing" {...rosterDrag.handlers}>
+              <div className={`w-10 h-1 rounded-full ${darkMode ? "bg-gray-600" : "bg-gray-300"}`} />
+            </div>
+            <div className="flex items-center justify-between px-5 pb-2 flex-shrink-0" {...rosterDrag.handlers}>
+              <div>
+                <p className={`text-xs ${muted}`}>{selected.dateLabel} · {selected.time}</p>
+                <h2 className={`text-lg font-bold ${heading}`}>{selected.name}</h2>
+              </div>
+              <button onClick={() => setMobileDetail(false)}
+                className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm flex-shrink-0 ${darkMode ? "bg-gray-800 text-gray-400" : "bg-gray-200 text-gray-500"}`}>✕</button>
+            </div>
+            <div className="overflow-y-auto flex-1 px-2 pb-6">
+              <ClassRoster cls={selected} darkMode={darkMode} />
+            </div>
           </div>
         </div>
       )}
@@ -6691,30 +6747,18 @@ function InstructorStatsPage({ darkMode, onToggleDarkMode, onNavigate }) {
   const muted   = darkMode ? "text-gray-400" : "text-gray-500"
   const card    = `rounded-2xl border transition-colors ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`
   const subtle  = darkMode ? "bg-gray-800"   : "bg-gray-50"
-  const [tab, setTab] = useState("earnings")
+  const [tab, setTab] = useState("performance")
 
-  const weeks = [
-    { label: "5 wks ago", classes: 5, riders: 96 },
-    { label: "4 wks ago", classes: 6, riders: 118 },
-    { label: "3 wks ago", classes: 5, riders: 104 },
-    { label: "2 wks ago", classes: 7, riders: 142 },
-    { label: "Last week",  classes: 6, riders: 128 },
-    { label: "This week",  classes: 6, riders: 134 },
+  const earn = [
+    { label: "Earnings this month", value: "£2,140", sub: "+£280 vs last" },
+    { label: "Riders taught",       value: "622",    sub: "all-time" },
+    { label: "Avg rating",          value: "4.9 ★",  sub: "from 1,284 reviews" },
   ]
-  const maxRiders = Math.max(...weeks.map(w => w.riders))
-
-  const stats = [
-    { label: "Earnings this month", value: "£2,140" },
-    { label: "Classes taught",      value: "28" },
-    { label: "Riders taught",       value: "622" },
-    { label: "Avg rating",          value: "4.9 ★" },
-  ]
-
-  const tabs = [["earnings", "Earnings"], ["growth", "Growth"], ["feedback", "Feedback"]]
+  const tabs = [["performance", "Performance"], ["feedback", "Feedback"]]
 
   return (
     <div className="p-4 md:p-8 max-w-6xl mx-auto pb-16">
-      <InstructorTopBar title="Insights" sub="Earnings, growth & rider feedback" darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
+      <InstructorTopBar title="Insights" sub="Performance, earnings & rider feedback" darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
 
       {/* tab switcher */}
       <div className={`inline-flex rounded-xl p-0.5 mb-6 ${darkMode ? "bg-gray-800" : "bg-gray-100"}`}>
@@ -6726,33 +6770,23 @@ function InstructorStatsPage({ darkMode, onToggleDarkMode, onNavigate }) {
         ))}
       </div>
 
-      {tab === "earnings" && (
+      {tab === "performance" && (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-            {stats.map((s, i) => (
+          {/* Earnings headline merged above the growth metrics */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+            {earn.map((s, i) => (
               <div key={i} className={`${card} p-4`}>
                 <p className={`text-xs ${muted} mb-1`}>{s.label}</p>
-                <p className={`text-xl font-bold ${heading}`}>{s.value}</p>
+                <p className={`text-2xl font-bold tracking-tight ${heading}`}>{s.value}</p>
+                <p className={`text-xs mt-0.5 text-[#00aa13] font-medium`}>{s.sub}</p>
               </div>
             ))}
           </div>
-          <div className={`${card} p-5`}>
-            <p className={`text-sm font-semibold mb-5 ${heading}`}>Riders taught per week</p>
-            <div className="flex items-end justify-between gap-2" style={{ height: 160 }}>
-              {weeks.map((w, i) => (
-                <div key={i} className="flex-1 flex flex-col items-center gap-2 h-full justify-end">
-                  <span className={`text-xs font-bold ${heading}`}>{w.riders}</span>
-                  <div className="w-full rounded-t-lg transition-all" style={{ height: `${(w.riders/maxRiders)*100}%`, background: i === weeks.length-1 ? "#00aa13" : darkMode ? "#374151" : "#d1fae5" }} />
-                  <span className={`text-[10px] text-center ${muted}`}>{w.label}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+          <GrowthDashboardPage darkMode={darkMode} embedded onNavigate={onNavigate} />
         </>
       )}
 
-      {tab === "growth"   && <GrowthDashboardPage darkMode={darkMode} embedded onNavigate={onNavigate} />}
-      {tab === "feedback" && <FeedbackPage        darkMode={darkMode} embedded onNavigate={onNavigate} />}
+      {tab === "feedback" && <FeedbackPage darkMode={darkMode} embedded onNavigate={onNavigate} />}
     </div>
   )
 }

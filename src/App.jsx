@@ -6874,6 +6874,8 @@ function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] 
   const [studio, setStudio]   = useState("Either")
   const [slots, setSlots]     = useState([])              // chosen {day,time,dur}, picked on the timetable
   const [slotDur, setSlotDur] = useState(builtClasses[0]?.length || 45)   // length of the next slot you place
+  const [typeDay, setTypeDay]   = useState("Mon")          // "add by typing" day
+  const [typeTime, setTypeTime] = useState("18:00")        // "add by typing" time
   const [recurring, setRecurring] = useState(true)
   const [requests, setRequests]   = useState(CLASS_REQUESTS)
   const [toast, setToast]     = useState(false)
@@ -6936,6 +6938,15 @@ function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] 
     if (!pv) return
     if (pv.ok) setSlots(s => [...s, { day: pv.day, time: fmtTime(pv.min), dur: slotDur }])
     else { setFlash("That time overlaps a class you already teach — pick a free slot."); setTimeout(() => setFlash(""), 2400) }
+  }
+  function say(m) { setFlash(m); setTimeout(() => setFlash(""), 2400) }
+  function addTyped() {
+    if (!typeTime) return
+    const m = toMin(typeTime), ns = m, ne = m + slotDur
+    if (m < DAY_START || ne > DAY_END) return say(`Pick a time between 06:00 and ${fmtTime(DAY_END - slotDur)}.`)
+    const busy = [...commitments.filter(c => c.day === typeDay), ...slots.filter(s => s.day === typeDay).map(s => ({ start: toMin(s.time), mins: s.dur || slotDur }))]
+    if (busy.some(b => ns < b.start + b.mins && b.start < ne)) return say("That time overlaps a class you already teach — pick a free slot.")
+    setSlots(s => [...s, { day: typeDay, time: typeTime, dur: slotDur }])
   }
   const sortSlots = arr => [...arr].sort((a, b) => DAY_ORDER.indexOf(a.day) - DAY_ORDER.indexOf(b.day) || toMin(a.time) - toMin(b.time))
 
@@ -7072,6 +7083,19 @@ function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] 
               </div>
             ))}
           </div>
+        </div>
+
+        {/* …or type a time instead of tapping the grid */}
+        <div className={`flex flex-wrap items-center gap-2 mt-3 p-2.5 rounded-xl ${subtle}`}>
+          <span className={`text-xs font-semibold ${muted}`}>Or type it</span>
+          <select value={typeDay} onChange={e => setTypeDay(e.target.value)}
+            className={`px-2.5 py-1.5 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-[#00aa13] ${darkMode ? "bg-gray-800 border-gray-700 text-white" : "bg-white border-gray-200 text-gray-900"}`}>
+            {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
+          </select>
+          <input type="time" value={typeTime} onChange={e => setTypeTime(e.target.value)}
+            className={`px-2.5 py-1.5 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-[#00aa13] ${darkMode ? "bg-gray-800 border-gray-700 text-white" : "bg-white border-gray-200 text-gray-900"}`} />
+          <span className={`text-xs ${muted}`}>· {slotDur} min</span>
+          <button onClick={addTyped} className="ml-auto px-4 py-1.5 rounded-lg bg-[#00aa13] hover:bg-[#008a0f] text-white text-sm font-semibold transition-colors">+ Add</button>
         </div>
 
         {flash && <p className="text-xs font-medium text-amber-500 mt-2.5">{flash}</p>}

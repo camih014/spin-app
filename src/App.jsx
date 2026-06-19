@@ -6872,11 +6872,11 @@ function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] 
   const [className, setClassName] = useState(builtClasses[0]?.name || "")
   const [location, setLocation] = useState(LOCATIONS[0])
   const [studio, setStudio]   = useState("Either")
-  const [slots, setSlots]     = useState([{ day: "Mon", time: "06:15" }])
+  const [slots, setSlots]     = useState([])              // chosen {day,time}, picked on the timetable
   const [recurring, setRecurring] = useState(true)
   const [requests, setRequests]   = useState(CLASS_REQUESTS)
   const [toast, setToast]     = useState(false)
-  const [confirmClash, setConfirmClash] = useState(false)
+  const [flash, setFlash]     = useState("")              // transient picker hint
 
   const selectedClass = builtClasses.find(b => b.name === className)
   const isSet = !!selectedClass?.series
@@ -6914,26 +6914,31 @@ function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] 
   }
   const warnings = slots.map(slotWarning)
   const hasClash = warnings.some(w => w?.type === "clash")
-  // group commitments + new slots by weekday for the "your week" preview
-  const weekByDay = DAY_ORDER.map(day => ({
-    day,
-    items: [
-      ...commitments.filter(c => c.day === day).map(c => ({ time: c.time, start: c.start, name: c.name, mine: true })),
-      ...slots.filter(s => s.day === day).map(s => ({ time: s.time, start: toMin(s.time), name: className || "New class", isNew: true })),
-    ].sort((a, b) => a.start - b.start),
-  }))
 
-  function addSlot()  { setSlots(s => [...s, { day: "Mon", time: "18:00" }]) }
-  function removeSlot(i) { setSlots(s => s.length > 1 ? s.filter((_, j) => j !== i) : s) }
-  function updateSlot(i, patch) { setSlots(s => s.map((sl, j) => j === i ? { ...sl, ...patch } : sl)) }
+  // ── Timetable picker geometry — a Mon–Sun week from 06:00 to 21:00 ──
+  const DAY_START = 6 * 60, DAY_END = 21 * 60, DAY_RANGE = DAY_END - DAY_START, GRID_H = 540
+  const HOURS = Array.from({ length: (21 - 6) + 1 }, (_, i) => 6 + i)
+  const yOf = m => (m - DAY_START) / DAY_RANGE * GRID_H
+  const blockH = mins => Math.max(20, mins / DAY_RANGE * GRID_H)
+  function removeSlot(i) { setSlots(s => s.filter((_, j) => j !== i)) }
+  function placeAt(day, e) {
+    const rect = e.currentTarget.getBoundingClientRect()
+    let m = DAY_START + ((e.clientY - rect.top) / rect.height) * DAY_RANGE
+    m = Math.max(DAY_START, Math.min(DAY_END - newDur, Math.round(m / 15) * 15))   // snap to 15 min
+    const ns = m, ne = m + newDur
+    const busy = [...commitments.filter(c => c.day === day), ...slots.filter(s => s.day === day).map(s => ({ start: toMin(s.time), mins: newDur }))]
+    if (busy.some(b => ns < b.start + b.mins && b.start < ne)) { setFlash("That overlaps an existing class — pick a free slot."); setTimeout(() => setFlash(""), 2400); return }
+    setSlots(s => [...s, { day, time: fmtTime(m) }])
+  }
+  const sortSlots = arr => [...arr].sort((a, b) => DAY_ORDER.indexOf(a.day) - DAY_ORDER.indexOf(b.day) || toMin(a.time) - toMin(b.time))
 
   function submit() {
-    if (!className) return
-    if (hasClash && !confirmClash) { setConfirmClash(true); return }   // make the instructor acknowledge a clash
+    if (!className) { setFlash("Pick a class first."); setTimeout(() => setFlash(""), 2200); return }
+    if (!slots.length) { setFlash("Tap the timetable to add at least one time."); setTimeout(() => setFlash(""), 2400); return }
+    if (hasClash) return
     setRequests(p => [{ name: className, studio, location, recurring, social: selectedClass?.social,
-      series: isSet, weeks: selectedClass?.weeks, slots: slots.map(s => ({ ...s })), status: "pending" }, ...p])
-    setConfirmClash(false)
-    setToast(true)
+      series: isSet, weeks: selectedClass?.weeks, slots: sortSlots(slots), status: "pending" }, ...p])
+    setSlots([]); setToast(true)
     setTimeout(() => setToast(false), 2500)
   }
 
@@ -6971,109 +6976,109 @@ function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] 
           </div>
         </div>
 
-        {/* Day + time slots */}
-        <div className="mt-4">
-          <div className="flex items-center justify-between mb-2">
-            <label className={`text-xs font-semibold ${muted}`}>{isSet ? "Weekly slots · the set fills these in order" : `Day & time${recurring ? " · repeats weekly" : ""}`}</label>
-            <button onClick={addSlot} className="text-xs font-semibold text-[#00aa13] hover:underline">+ Add another time</button>
-          </div>
-          <div className="flex flex-col gap-2">
-            {slots.map((sl, i) => {
-              const w = warnings[i]
-              return (
-                <div key={i} className={`p-2 rounded-xl ${subtle} ${w?.type === "clash" ? "ring-1 ring-red-400" : w?.type === "tight" ? "ring-1 ring-amber-400" : ""}`}>
-                  <div className="flex items-center gap-2">
-                    <div className="flex gap-1 flex-wrap flex-1">
-                      {DAYS.map(d => (
-                        <button key={d} onClick={() => { updateSlot(i, { day: d }); setConfirmClash(false) }}
-                          className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors ${sl.day === d ? "bg-[#00aa13] text-white" : darkMode ? "bg-gray-700 text-gray-400 hover:bg-gray-600" : "bg-white text-gray-500 hover:bg-gray-100"}`}>{d}</button>
-                      ))}
-                    </div>
-                    <input type="time" value={sl.time} onChange={e => { updateSlot(i, { time: e.target.value }); setConfirmClash(false) }}
-                      className={`px-2.5 py-1.5 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-[#00aa13] ${darkMode ? "bg-gray-800 border-gray-700 text-white" : "bg-white border-gray-200 text-gray-900"}`} />
-                    {slots.length > 1 && (
-                      <button onClick={() => removeSlot(i)} className={`w-6 h-6 rounded flex items-center justify-center text-xs flex-shrink-0 ${darkMode ? "hover:bg-gray-700 text-gray-500" : "hover:bg-gray-200 text-gray-400"}`}>✕</button>
-                    )}
-                  </div>
-                  {w && (
-                    <p className={`text-[11px] font-medium mt-1.5 px-1 flex items-center gap-1 ${w.type === "clash" ? "text-red-500" : "text-amber-500"}`}>
-                      {w.type === "clash" ? "⛔" : "⚠"} {w.msg}
-                    </p>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-
-          {/* Set rollout preview */}
-          {isSet && plan && (
-            <div className={`mt-3 rounded-xl p-3 ${subtle}`}>
-              <p className={`text-xs font-semibold mb-2 ${heading}`}>Set rollout · {selectedClass.weeks} sessions over {plan[plan.length-1].calWeek} week{plan[plan.length-1].calWeek > 1 ? "s" : ""}</p>
-              <div className="flex flex-wrap gap-1.5">
-                {plan.map((p, i) => (
-                  <span key={i} className={`text-[11px] font-medium px-2 py-1 rounded-lg ${darkMode ? "bg-gray-900 text-gray-300" : "bg-white text-gray-600"}`}>
-                    <span className="text-[#00aa13] font-bold">Set {p.set}</span> · {p.day} {p.time}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Recurring */}
+        {/* Repeat weekly */}
         <button onClick={() => setRecurring(!recurring)} className={`flex items-center gap-3 mt-4 p-3 rounded-xl w-full text-left transition-colors ${subtle}`}>
           <div style={{ width: 44, height: 24, borderRadius: 12, flexShrink: 0, background: recurring ? "#00aa13" : darkMode ? "#4B5563" : "#D1D5DB", position: "relative", transition: "background 0.18s" }}>
             <div style={{ position: "absolute", top: 2, left: recurring ? 22 : 2, width: 20, height: 20, borderRadius: "50%", background: "#fff", transition: "left 0.18s" }} />
           </div>
           <div>
             <p className={`text-sm font-medium ${heading}`}>Repeat weekly</p>
-            <p className={`text-xs ${muted}`}>{recurring ? `${slots.length} weekly slot${slots.length > 1 ? "s" : ""}` : "One-off class"}</p>
+            <p className={`text-xs ${muted}`}>{recurring ? "Runs every week at the times you pick" : "One-off class"}</p>
           </div>
         </button>
+      </div>
 
-        {/* Your week — spot free slots & clashes at a glance */}
-        <div className={`mt-4 rounded-xl p-3 ${subtle}`}>
-          <p className={`text-xs font-semibold mb-2 ${heading}`}>Your week · existing commitments + this request</p>
-          <div className="grid grid-cols-7 gap-1.5">
-            {weekByDay.map(({ day, items }) => (
-              <div key={day} className="min-w-0">
-                <p className={`text-[10px] font-bold text-center mb-1 ${muted}`}>{day}</p>
-                <div className="flex flex-col gap-1">
-                  {items.length === 0 && <div className={`h-5 rounded ${darkMode ? "bg-gray-900/40" : "bg-white/60"}`} />}
-                  {items.map((it, j) => (
-                    <div key={j} title={`${it.name} · ${it.time}`}
-                      className={`text-[8px] leading-tight font-semibold px-1 py-1 rounded truncate text-center ${it.isNew
-                        ? "bg-[#00aa13] text-white"
-                        : darkMode ? "bg-gray-700 text-gray-300" : "bg-white text-gray-600 border border-gray-100"}`}>
-                      {it.time}
+      {/* Timetable picker — tap a free slot on your week */}
+      <div className={`${card} p-5 mb-6`}>
+        <div className="flex items-start justify-between gap-3 mb-1 flex-wrap">
+          <div>
+            <p className={`text-sm font-semibold ${heading}`}>{isSet ? "Pick weekly slots" : "Pick your time"}</p>
+            <p className={`text-xs mt-0.5 ${muted}`}>Tap any free space to drop in your {newDur}-min class. Times you already teach are blocked.</p>
+          </div>
+          <div className="flex items-center gap-3 pt-0.5">
+            <span className={`flex items-center gap-1.5 text-[11px] ${muted}`}><span className="w-3 h-3 rounded-sm bg-[#00aa13]" /> Your pick</span>
+            <span className={`flex items-center gap-1.5 text-[11px] ${muted}`}><span className={`w-3 h-3 rounded-sm ${darkMode ? "bg-gray-700" : "bg-white border border-gray-300"}`} /> Busy</span>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto pb-1 mt-3">
+          <div className="flex min-w-[620px] select-none">
+            {/* hour gutter */}
+            <div className="w-9 flex-shrink-0 relative" style={{ height: GRID_H, marginTop: 24 }}>
+              {HOURS.map(h => <span key={h} className={`absolute right-1.5 -translate-y-1/2 text-[9px] tabular-nums ${muted}`} style={{ top: yOf(h * 60) }}>{h}:00</span>)}
+            </div>
+            {/* day columns */}
+            {DAYS.map(day => (
+              <div key={day} className="flex-1 min-w-[76px]">
+                <div className={`text-center text-[11px] font-bold pb-1.5 h-6 ${heading}`}>{day}</div>
+                <div className={`relative cursor-pointer transition-colors border-l ${darkMode ? "border-gray-800 bg-gray-800/30 hover:bg-gray-800/50" : "border-gray-100 bg-gray-50/70 hover:bg-[#00aa13]/[0.05]"}`}
+                  style={{ height: GRID_H }} onClick={e => placeAt(day, e)}>
+                  {HOURS.map(h => <div key={h} className={`absolute left-0 right-0 border-t ${darkMode ? "border-gray-800" : "border-gray-100"}`} style={{ top: yOf(h * 60) }} />)}
+                  {/* existing commitments */}
+                  {commitments.filter(c => c.day === day).map((c, i) => (
+                    <div key={i} title={`Already teaching · ${c.name} · ${c.time}`}
+                      className={`absolute left-0.5 right-0.5 rounded-md px-1 py-0.5 overflow-hidden ${darkMode ? "bg-gray-700" : "bg-white border border-gray-200"}`}
+                      style={{ top: yOf(c.start), height: blockH(c.mins) }}>
+                      <p className={`text-[8px] font-bold leading-tight ${heading}`}>{c.time}</p>
+                      <p className={`text-[8px] leading-tight truncate ${muted}`}>{c.name}</p>
                     </div>
                   ))}
+                  {/* your chosen slots */}
+                  {slots.map((s, idx) => ({ ...s, idx })).filter(s => s.day === day).map(s => {
+                    const clash = warnings[s.idx]?.type === "clash"
+                    return (
+                      <div key={s.idx} onClick={e => e.stopPropagation()} title={`${className || "New class"} · ${s.time}`}
+                        className="absolute left-0.5 right-0.5 rounded-md px-1 py-0.5 z-10 text-white shadow pop-in"
+                        style={{ top: yOf(toMin(s.time)), height: blockH(newDur), background: clash ? "#ef4444" : "#00aa13" }}>
+                        <button onClick={() => removeSlot(s.idx)} className="absolute top-0.5 right-0.5 text-[10px] leading-none opacity-90 hover:opacity-100">✕</button>
+                        <p className="text-[8px] font-bold leading-tight">{s.time}</p>
+                        <p className="text-[8px] leading-tight truncate opacity-90">{className || "New"}</p>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             ))}
           </div>
-          <div className={`flex items-center gap-3 mt-2 text-[10px] ${muted}`}>
-            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-[#00aa13]" /> This request</span>
-            <span className="flex items-center gap-1"><span className={`w-2.5 h-2.5 rounded-sm ${darkMode ? "bg-gray-700" : "bg-white border border-gray-200"}`} /> Already teaching</span>
-          </div>
         </div>
 
-        {/* Clash confirmation */}
-        {hasClash && (
-          <label className={`flex items-start gap-2.5 mt-4 p-3 rounded-xl cursor-pointer ${darkMode ? "bg-red-900/20" : "bg-red-50"}`}>
-            <input type="checkbox" checked={confirmClash} onChange={e => setConfirmClash(e.target.checked)} className="mt-0.5 accent-red-500" />
-            <span className="text-xs">
-              <span className="font-semibold text-red-500">This overlaps a class you already teach.</span>
-              <span className={`block mt-0.5 ${muted}`}>Tick to confirm you want to request it anyway — the studio will see the conflict.</span>
-            </span>
-          </label>
+        {flash && <p className="text-xs font-medium text-amber-500 mt-2.5">{flash}</p>}
+
+        {/* chosen times */}
+        {slots.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-1.5 mt-3">
+            <span className={`text-xs font-semibold ${muted}`}>Chosen:</span>
+            {sortSlots(slots).map(s => {
+              const i = slots.indexOf(s), clash = warnings[i]?.type === "clash"
+              return (
+                <span key={`${s.day}${s.time}`} className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg ${clash ? "bg-red-100 text-red-600" : "bg-[#e6f9e8] text-[#00aa13]"}`}>
+                  {s.day} {s.time}
+                  <button onClick={() => removeSlot(i)} className="hover:opacity-60">✕</button>
+                </span>
+              )
+            })}
+          </div>
+        ) : <p className={`text-xs mt-3 ${muted}`}>No times chosen yet — tap an open slot above.</p>}
+
+        {/* Set rollout preview */}
+        {isSet && plan && plan.length > 0 && (
+          <div className={`mt-3 rounded-xl p-3 ${subtle}`}>
+            <p className={`text-xs font-semibold mb-2 ${heading}`}>Set rollout · {selectedClass.weeks} sessions over {plan[plan.length-1].calWeek} week{plan[plan.length-1].calWeek > 1 ? "s" : ""}</p>
+            <div className="flex flex-wrap gap-1.5">
+              {plan.map((p, i) => (
+                <span key={i} className={`text-[11px] font-medium px-2 py-1 rounded-lg ${darkMode ? "bg-gray-900 text-gray-300" : "bg-white text-gray-600"}`}>
+                  <span className="text-[#00aa13] font-bold">Set {p.set}</span> · {p.day} {p.time}
+                </span>
+              ))}
+            </div>
+          </div>
         )}
 
-        <button onClick={submit} disabled={hasClash && !confirmClash}
-          className={`w-full mt-5 py-3 rounded-xl font-semibold text-sm transition-colors ${hasClash && !confirmClash
+        <button onClick={submit} disabled={!slots.length || hasClash}
+          className={`w-full mt-5 py-3 rounded-xl font-semibold text-sm transition-colors ${(!slots.length || hasClash)
             ? "bg-gray-300 text-gray-500 cursor-not-allowed dark:bg-gray-700 dark:text-gray-500"
-            : hasClash ? "bg-red-500 hover:bg-red-600 text-white" : "bg-[#00aa13] hover:bg-[#008a0f] text-white"}`}>
-          {toast ? "✓ Request submitted" : hasClash ? "Request despite clash" : "Submit request"}
+            : "bg-[#00aa13] hover:bg-[#008a0f] text-white"}`}>
+          {toast ? "✓ Request submitted" : hasClash ? "Resolve the clash to submit" : slots.length ? `Submit request · ${slots.length} time${slots.length > 1 ? "s" : ""}` : "Pick a time to submit"}
         </button>
       </div>
 

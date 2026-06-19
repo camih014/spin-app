@@ -6877,6 +6877,7 @@ function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] 
   const [requests, setRequests]   = useState(CLASS_REQUESTS)
   const [toast, setToast]     = useState(false)
   const [flash, setFlash]     = useState("")              // transient picker hint
+  const [preview, setPreview] = useState(null)            // live { day, min, ok } under the cursor / finger
 
   const selectedClass = builtClasses.find(b => b.name === className)
   const isSet = !!selectedClass?.series
@@ -6921,14 +6922,19 @@ function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] 
   const yOf = m => (m - DAY_START) / DAY_RANGE * GRID_H
   const blockH = mins => Math.max(20, mins / DAY_RANGE * GRID_H)
   function removeSlot(i) { setSlots(s => s.filter((_, j) => j !== i)) }
-  function placeAt(day, e) {
+  // Where would a class land for this pointer position? (snapped to 15 min, with a free/clash flag)
+  function previewAt(day, e) {
     const rect = e.currentTarget.getBoundingClientRect()
     let m = DAY_START + ((e.clientY - rect.top) / rect.height) * DAY_RANGE
-    m = Math.max(DAY_START, Math.min(DAY_END - newDur, Math.round(m / 15) * 15))   // snap to 15 min
+    m = Math.max(DAY_START, Math.min(DAY_END - newDur, Math.round(m / 15) * 15))
     const ns = m, ne = m + newDur
     const busy = [...commitments.filter(c => c.day === day), ...slots.filter(s => s.day === day).map(s => ({ start: toMin(s.time), mins: newDur }))]
-    if (busy.some(b => ns < b.start + b.mins && b.start < ne)) { setFlash("That overlaps an existing class — pick a free slot."); setTimeout(() => setFlash(""), 2400); return }
-    setSlots(s => [...s, { day, time: fmtTime(m) }])
+    return { day, min: m, ok: !busy.some(b => ns < b.start + b.mins && b.start < ne) }
+  }
+  function commitPreview(pv) {
+    if (!pv) return
+    if (pv.ok) setSlots(s => [...s, { day: pv.day, time: fmtTime(pv.min) }])
+    else { setFlash("That time overlaps a class you already teach — pick a free slot."); setTimeout(() => setFlash(""), 2400) }
   }
   const sortSlots = arr => [...arr].sort((a, b) => DAY_ORDER.indexOf(a.day) - DAY_ORDER.indexOf(b.day) || toMin(a.time) - toMin(b.time))
 
@@ -6993,7 +6999,7 @@ function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] 
         <div className="flex items-start justify-between gap-3 mb-1 flex-wrap">
           <div>
             <p className={`text-sm font-semibold ${heading}`}>{isSet ? "Pick weekly slots" : "Pick your time"}</p>
-            <p className={`text-xs mt-0.5 ${muted}`}>Tap any free space to drop in your {newDur}-min class. Times you already teach are blocked.</p>
+            <p className={`text-xs mt-0.5 ${muted}`}>Hover (or press &amp; drag on mobile) to preview the time, then release to drop your {newDur}-min class in. Busy times are blocked.</p>
           </div>
           <div className="flex items-center gap-3 pt-0.5">
             <span className={`flex items-center gap-1.5 text-[11px] ${muted}`}><span className="w-3 h-3 rounded-sm bg-[#00aa13]" /> Your pick</span>
@@ -7011,9 +7017,20 @@ function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] 
             {DAYS.map(day => (
               <div key={day} className="flex-1 min-w-[76px]">
                 <div className={`text-center text-[11px] font-bold pb-1.5 h-6 ${heading}`}>{day}</div>
-                <div className={`relative cursor-pointer transition-colors border-l ${darkMode ? "border-gray-800 bg-gray-800/30 hover:bg-gray-800/50" : "border-gray-100 bg-gray-50/70 hover:bg-[#00aa13]/[0.05]"}`}
-                  style={{ height: GRID_H }} onClick={e => placeAt(day, e)}>
+                <div className={`relative cursor-pointer transition-colors border-l ${darkMode ? "border-gray-800 bg-gray-800/30" : "border-gray-100 bg-gray-50/70"}`}
+                  style={{ height: GRID_H, touchAction: "none" }}
+                  onPointerMove={e => setPreview(previewAt(day, e))}
+                  onPointerDown={e => setPreview(previewAt(day, e))}
+                  onPointerLeave={e => { if (e.pointerType !== "touch") setPreview(null) }}
+                  onPointerUp={e => { const pv = previewAt(day, e); commitPreview(pv); if (e.pointerType === "touch") setPreview(null) }}>
                   {HOURS.map(h => <div key={h} className={`absolute left-0 right-0 border-t ${darkMode ? "border-gray-800" : "border-gray-100"}`} style={{ top: yOf(h * 60) }} />)}
+                  {/* live preview ghost — shows the snapped time before you commit */}
+                  {preview && preview.day === day && (
+                    <div className="absolute left-0.5 right-0.5 rounded-md border-2 border-dashed flex items-start justify-center pointer-events-none z-20"
+                      style={{ top: yOf(preview.min), height: blockH(newDur), borderColor: preview.ok ? "#00aa13" : "#ef4444", background: preview.ok ? "rgba(0,170,19,0.14)" : "rgba(239,68,68,0.14)" }}>
+                      <span className="text-[9px] font-bold mt-0.5 px-1 rounded" style={{ color: "#fff", background: preview.ok ? "#00aa13" : "#ef4444" }}>{fmtTime(preview.min)}{preview.ok ? "" : " · busy"}</span>
+                    </div>
+                  )}
                   {/* existing commitments */}
                   {commitments.filter(c => c.day === day).map((c, i) => (
                     <div key={i} title={`Already teaching · ${c.name} · ${c.time}`}
@@ -7027,10 +7044,10 @@ function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] 
                   {slots.map((s, idx) => ({ ...s, idx })).filter(s => s.day === day).map(s => {
                     const clash = warnings[s.idx]?.type === "clash"
                     return (
-                      <div key={s.idx} onClick={e => e.stopPropagation()} title={`${className || "New class"} · ${s.time}`}
+                      <div key={s.idx} onPointerDown={e => e.stopPropagation()} onPointerUp={e => e.stopPropagation()} title={`${className || "New class"} · ${s.time}`}
                         className="absolute left-0.5 right-0.5 rounded-md px-1 py-0.5 z-10 text-white shadow pop-in"
                         style={{ top: yOf(toMin(s.time)), height: blockH(newDur), background: clash ? "#ef4444" : "#00aa13" }}>
-                        <button onClick={() => removeSlot(s.idx)} className="absolute top-0.5 right-0.5 text-[10px] leading-none opacity-90 hover:opacity-100">✕</button>
+                        <button onPointerUp={e => e.stopPropagation()} onClick={() => removeSlot(s.idx)} className="absolute top-0.5 right-0.5 text-[10px] leading-none opacity-90 hover:opacity-100">✕</button>
                         <p className="text-[8px] font-bold leading-tight">{s.time}</p>
                         <p className="text-[8px] leading-tight truncate opacity-90">{className || "New"}</p>
                       </div>

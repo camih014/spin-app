@@ -6872,7 +6872,8 @@ function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] 
   const [className, setClassName] = useState(builtClasses[0]?.name || "")
   const [location, setLocation] = useState(LOCATIONS[0])
   const [studio, setStudio]   = useState("Either")
-  const [slots, setSlots]     = useState([])              // chosen {day,time}, picked on the timetable
+  const [slots, setSlots]     = useState([])              // chosen {day,time,dur}, picked on the timetable
+  const [slotDur, setSlotDur] = useState(builtClasses[0]?.length || 45)   // length of the next slot you place
   const [recurring, setRecurring] = useState(true)
   const [requests, setRequests]   = useState(CLASS_REQUESTS)
   const [toast, setToast]     = useState(false)
@@ -6885,7 +6886,7 @@ function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] 
   const sortedRequests = [...requests].sort((a, b) => reqSortKey(a) - reqSortKey(b))
 
   // ── Clash detection against the instructor's existing weekly commitments ──
-  const newDur = selectedClass?.length || 45
+  const newDur = slotDur                                  // current placement length (15/30/45/60)
   const toMin = t => { const [h, m] = t.split(":").map(Number); return h * 60 + (m || 0) }
   const fmtTime = m => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`
   const commitments = (() => {
@@ -6901,8 +6902,8 @@ function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] 
   })()
   // also flag overlaps between two new slots on the same day
   function slotWarning(sl, idx) {
-    const ns = toMin(sl.time), ne = ns + newDur
-    const others = [...commitments, ...slots.filter((_, j) => j !== idx).map(s => ({ day: s.day, time: s.time, start: toMin(s.time), mins: newDur, name: "another slot in this request" }))]
+    const ns = toMin(sl.time), ne = ns + (sl.dur || newDur)
+    const others = [...commitments, ...slots.filter((_, j) => j !== idx).map(s => ({ day: s.day, time: s.time, start: toMin(s.time), mins: s.dur || newDur, name: "another slot in this request" }))]
     let tight = null
     for (const c of others) {
       if (c.day !== sl.day) continue
@@ -6928,12 +6929,12 @@ function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] 
     let m = DAY_START + ((e.clientY - rect.top) / rect.height) * DAY_RANGE
     m = Math.max(DAY_START, Math.min(DAY_END - newDur, Math.round(m / 15) * 15))
     const ns = m, ne = m + newDur
-    const busy = [...commitments.filter(c => c.day === day), ...slots.filter(s => s.day === day).map(s => ({ start: toMin(s.time), mins: newDur }))]
+    const busy = [...commitments.filter(c => c.day === day), ...slots.filter(s => s.day === day).map(s => ({ start: toMin(s.time), mins: s.dur || newDur }))]
     return { day, min: m, ok: !busy.some(b => ns < b.start + b.mins && b.start < ne) }
   }
   function commitPreview(pv) {
     if (!pv) return
-    if (pv.ok) setSlots(s => [...s, { day: pv.day, time: fmtTime(pv.min) }])
+    if (pv.ok) setSlots(s => [...s, { day: pv.day, time: fmtTime(pv.min), dur: slotDur }])
     else { setFlash("That time overlaps a class you already teach — pick a free slot."); setTimeout(() => setFlash(""), 2400) }
   }
   const sortSlots = arr => [...arr].sort((a, b) => DAY_ORDER.indexOf(a.day) - DAY_ORDER.indexOf(b.day) || toMin(a.time) - toMin(b.time))
@@ -6958,7 +6959,7 @@ function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="sm:col-span-2">
             <label className={`block text-xs font-semibold mb-1.5 ${muted}`}>Class</label>
-            <select value={className} onChange={e => setClassName(e.target.value)} className={selectCls}>
+            <select value={className} onChange={e => { setClassName(e.target.value); const c = builtClasses.find(b => b.name === e.target.value); if (c) setSlotDur(c.length) }} className={selectCls}>
               {builtClasses.length === 0 && <option value="">No classes built yet</option>}
               {builtClasses.map(c => <option key={c.name} value={c.name}>{c.name} · {c.length} min{c.series ? ` · ${c.weeks}-week set` : ""}{c.social ? " · Social" : ""}</option>)}
             </select>
@@ -6999,12 +7000,26 @@ function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] 
         <div className="flex items-start justify-between gap-3 mb-1 flex-wrap">
           <div>
             <p className={`text-sm font-semibold ${heading}`}>{isSet ? "Pick weekly slots" : "Pick your time"}</p>
-            <p className={`text-xs mt-0.5 ${muted}`}>Hover (or press &amp; drag on mobile) to preview the time, then release to drop your {newDur}-min class in. Busy times are blocked.</p>
+            <p className={`text-xs mt-0.5 ${muted}`}>Set a length, then hover (or press &amp; drag on mobile) to preview the time and release to drop it in. Busy times are blocked.</p>
           </div>
-          <div className="flex items-center gap-3 pt-0.5">
-            <span className={`flex items-center gap-1.5 text-[11px] ${muted}`}><span className="w-3 h-3 rounded-sm bg-[#00aa13]" /> Your pick</span>
+          <div className="flex items-center gap-1.5 pt-0.5">
+            <span className={`flex items-center gap-1.5 text-[11px] ${muted}`}><span className="w-3 h-3 rounded-sm bg-[#00aa13]" /> Pick</span>
             <span className={`flex items-center gap-1.5 text-[11px] ${muted}`}><span className={`w-3 h-3 rounded-sm ${darkMode ? "bg-gray-700" : "bg-white border border-gray-300"}`} /> Busy</span>
           </div>
+        </div>
+
+        {/* Length selector — sets how long the next slot you place will be */}
+        <div className="flex items-center gap-2 mt-3 mb-1">
+          <span className={`text-xs font-semibold ${muted}`}>Length</span>
+          <div className={`inline-flex rounded-lg overflow-hidden border ${darkMode ? "border-gray-700" : "border-gray-200"}`}>
+            {[15, 30, 45, 60].map(d => (
+              <button key={d} onClick={() => setSlotDur(d)}
+                className={`px-3 py-1.5 text-xs font-semibold transition-colors ${slotDur === d ? "bg-[#00aa13] text-white" : darkMode ? "bg-gray-800 text-gray-400 hover:bg-gray-700" : "bg-white text-gray-500 hover:bg-gray-50"}`}>{d}m</button>
+            ))}
+          </div>
+          {selectedClass && slotDur !== selectedClass.length && (
+            <button onClick={() => setSlotDur(selectedClass.length)} className={`text-[11px] font-medium ${muted} hover:text-[#00aa13]`}>↺ {selectedClass.length}m (class length)</button>
+          )}
         </div>
 
         <div className="overflow-x-auto pb-1 mt-3">
@@ -7044,12 +7059,12 @@ function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] 
                   {slots.map((s, idx) => ({ ...s, idx })).filter(s => s.day === day).map(s => {
                     const clash = warnings[s.idx]?.type === "clash"
                     return (
-                      <div key={s.idx} onPointerDown={e => e.stopPropagation()} onPointerUp={e => e.stopPropagation()} title={`${className || "New class"} · ${s.time}`}
+                      <div key={s.idx} onPointerDown={e => e.stopPropagation()} onPointerUp={e => e.stopPropagation()} title={`${className || "New class"} · ${s.time} · ${s.dur || newDur} min`}
                         className="absolute left-0.5 right-0.5 rounded-md px-1 py-0.5 z-10 text-white shadow pop-in"
-                        style={{ top: yOf(toMin(s.time)), height: blockH(newDur), background: clash ? "#ef4444" : "#00aa13" }}>
+                        style={{ top: yOf(toMin(s.time)), height: blockH(s.dur || newDur), background: clash ? "#ef4444" : "#00aa13" }}>
                         <button onPointerUp={e => e.stopPropagation()} onClick={() => removeSlot(s.idx)} className="absolute top-0.5 right-0.5 text-[10px] leading-none opacity-90 hover:opacity-100">✕</button>
                         <p className="text-[8px] font-bold leading-tight">{s.time}</p>
-                        <p className="text-[8px] leading-tight truncate opacity-90">{className || "New"}</p>
+                        <p className="text-[8px] leading-tight truncate opacity-90">{s.dur || newDur} min</p>
                       </div>
                     )
                   })}

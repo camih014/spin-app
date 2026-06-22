@@ -128,16 +128,21 @@ export function AreaTrend({ points, color = GREEN, height = 170, darkMode, yMax,
   return (
     <div className="relative w-full select-none" style={{ height: H }} onMouseMove={move} onMouseLeave={() => setHi(null)}>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none">
-        <defs><linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.28" /><stop offset="100%" stopColor={color} stopOpacity="0" />
-        </linearGradient></defs>
+        <defs>
+          <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity="0.28" /><stop offset="100%" stopColor={color} stopOpacity="0" />
+          </linearGradient>
+          <clipPath id={id + "c"}><rect key={id + points.length} x="0" y="0" width={W} height={H} className="trend-reveal" /></clipPath>
+        </defs>
         {[0.25, 0.5, 0.75].map(g => <line key={g} x1={pad.l} x2={W - pad.r} y1={pad.t + ih * g} y2={pad.t + ih * g} stroke={grid} strokeWidth="1" vectorEffect="non-scaling-stroke" />)}
-        <path d={area} fill={`url(#${id})`} style={{ animation: "fadeIn .8s ease" }} />
-        <path key={id + points.length} d={line} pathLength="1" className="chart-line" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+        <g clipPath={`url(#${id}c)`}>
+          <path d={area} fill={`url(#${id})`} />
+          <path d={line} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+        </g>
         {hi != null && <line x1={xs[hi]} x2={xs[hi]} y1={pad.t} y2={pad.t + ih} stroke={color} strokeWidth="1" strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />}
       </svg>
       {/* HTML overlay so dots/tooltip aren't stretched by the SVG */}
-      <span className="absolute w-2.5 h-2.5 rounded-full pointer-events-none" style={{ left: `${xf(points.length - 1)}%`, top: `${yf(points.length - 1)}%`, transform: "translate(-50%,-50%)", background: color }} />
+      <span key={id + points.length} className="dot-in absolute w-2.5 h-2.5 rounded-full pointer-events-none" style={{ left: `${xf(points.length - 1)}%`, top: `${yf(points.length - 1)}%`, transform: "translate(-50%,-50%)", background: color }} />
       {hi != null && (
         <>
           <span className="absolute w-3.5 h-3.5 rounded-full border-2 border-white shadow pointer-events-none transition-all" style={{ left: `${xf(hi)}%`, top: `${yf(hi)}%`, transform: "translate(-50%,-50%)", background: color }} />
@@ -1015,12 +1020,6 @@ export function GrowthDashboardPage({ darkMode, onToggleDarkMode, onNavigate, em
       {!embedded && <PageHead darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} onBack={() => onNavigate("Studio Home")}
         title="Growth Dashboard" sub="Measure your instructor performance" Icon={TrendingUp}
         gradient="linear-gradient(135deg,#14b8a6,#00aa13)" />}
-
-      <div className="flex justify-end mb-4">
-        <button onClick={() => onNavigate("Riders")} className={`flex items-center gap-1.5 text-sm font-semibold px-3.5 py-2 rounded-xl ${t.chip} hover:shadow-md transition-all`}>
-          <Users size={15} /> View Rider Insights <ChevronRight size={14} />
-        </button>
-      </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
         {kpis.map((k, i) => <div key={i} className="pop-in" style={{ animationDelay: `${i * 60}ms` }}><StatCard darkMode={darkMode} {...k} /></div>)}

@@ -22,15 +22,19 @@ body {
 
 /* ── microdelight / chart animations ── */
 @keyframes fadeIn  { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-@keyframes drawLine { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes revealX { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 @keyframes riseBar { from { transform: scaleY(0); } to { transform: scaleY(1); } }
 @keyframes popIn   { 0% { transform: scale(.8); opacity: 0; } 60% { transform: scale(1.04); } 100% { transform: scale(1); opacity: 1; } }
 @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+@keyframes fadeOpacity { from { opacity: 0; } to { opacity: 1; } }
 
-.chart-line { stroke-dasharray: 1; animation: drawLine 1.1s cubic-bezier(.45,0,.15,1) forwards; }
-.rise-bar   { transform-origin: bottom; animation: riseBar .6s cubic-bezier(.34,1.2,.64,1) forwards; }
-.pop-in     { animation: popIn .45s cubic-bezier(.34,1.4,.64,1) backwards; }
+.dot-in { opacity: 0; animation: fadeOpacity .5s ease 1.65s forwards; }
+
+/* left-to-right wipe used to "draw" the trend charts — always reaches the final point */
+.trend-reveal { transform: scaleX(0); transform-origin: left; transform-box: fill-box; animation: revealX 2s cubic-bezier(.25,1,.3,1) forwards; }
+.rise-bar     { transform-origin: bottom; animation: riseBar .6s cubic-bezier(.34,1.2,.64,1) forwards; }
+.pop-in       { animation: popIn .45s cubic-bezier(.34,1.4,.64,1) backwards; }
 
 @media (prefers-reduced-motion: reduce) {
-  .chart-line, .rise-bar, .pop-in { animation: none; stroke-dashoffset: 0; transform: none; opacity: 1; }
+  .trend-reveal, .rise-bar, .pop-in, .dot-in { animation: none; transform: none; opacity: 1; }
 }

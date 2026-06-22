@@ -1278,10 +1278,10 @@ const OWNER_KPIS = [
   { label: "Rider retention", value: "91%", Icon: Heart, trend: 4, accent: "#ec4899" },
 ]
 const OWNER_ALERTS_SEED = [
-  { id: "a1", Icon: AlertTriangle, c: "#ef4444", title: "Friday 6:30pm class has no instructor", sub: "Power Zone Ride · Hampstead · 18 booked", action: "Find cover" },
-  { id: "a2", Icon: Users,         c: "#f59e0b", title: "18 members haven't attended in 14 days", sub: "At risk of churn — worth a re-engagement nudge", action: "Re-engage" },
-  { id: "a3", Icon: TrendingDown,  c: "#f59e0b", title: "Wednesday lunchtime ride only 42% full", sub: "Cadence Control · 12:30 · Shoreditch", action: "Promote" },
-  { id: "a4", Icon: Wrench,        c: "#0ea5e9", title: "Bike 12 maintenance overdue", sub: "Studio 1 · last serviced 92 days ago", action: "Log service" },
+  { id: "a1", Icon: AlertTriangle, c: "#ef4444", title: "Friday 6:30pm class has no instructor", sub: "Power Zone Ride · Hampstead · 18 booked", action: "Find cover", doneLabel: "Cover requested" },
+  { id: "a2", Icon: Users,         c: "#f59e0b", title: "18 members haven't attended in 14 days", sub: "At risk of churn — worth a re-engagement nudge", action: "Re-engage", doneLabel: "Re-engaged" },
+  { id: "a3", Icon: TrendingDown,  c: "#f59e0b", title: "Wednesday lunchtime ride only 42% full", sub: "Cadence Control · 12:30 · Shoreditch", action: "Promote", doneLabel: "Promoting" },
+  { id: "a4", Icon: Wrench,        c: "#0ea5e9", title: "Bike 12 maintenance overdue", sub: "Studio 1 · last serviced 92 days ago", action: "Log service", doneLabel: "Service logged" },
 ]
 const REVENUE = {
   total: "£25,300", trend: 9,
@@ -1319,7 +1319,10 @@ const INSTRUCTOR_PERF = [
 // ── OVERVIEW ──
 export function OwnerOverviewPage({ darkMode, onToggleDarkMode, onNavigate }) {
   const t = tk(darkMode)
-  const [alerts, setAlerts] = useState(OWNER_ALERTS_SEED)
+  const [alerts, setAlerts] = useState(() => OWNER_ALERTS_SEED.map(a => ({ ...a, done: false })))
+  const resolve = id => setAlerts(s => s.map(a => a.id === id ? { ...a, done: true } : a))
+  const openCount = alerts.filter(a => !a.done).length
+  const ordered = [...alerts].sort((a, b) => (a.done ? 1 : 0) - (b.done ? 1 : 0))  // resolved sink to the bottom
   const links = [
     { key: "Revenue", label: "Revenue", sub: "Trends & breakdown", Icon: Wallet, c: GREEN },
     { key: "Classes", label: "Class performance", sub: "Occupancy & fixes", Icon: Activity, c: "#0ea5e9" },
@@ -1341,20 +1344,25 @@ export function OwnerOverviewPage({ darkMode, onToggleDarkMode, onNavigate }) {
             <div className="flex items-center gap-2">
               <span className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "#ef44441a", color: "#ef4444" }}><AlertTriangle size={15} /></span>
               <p className={`text-sm font-semibold ${t.heading}`}>Operational alerts</p>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/15 text-red-500">{alerts.length}</span>
+              {openCount > 0
+                ? <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/15 text-red-500">{openCount}</span>
+                : <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: "#00aa131a", color: GREEN }}>All clear ✓</span>}
             </div>
           </div>
           <div className="flex flex-col gap-2.5">
-            {alerts.length === 0 && <div className={`rounded-xl p-6 text-center ${t.subtle}`}><p className={`text-sm ${t.muted}`}>All clear — nothing needs attention 🎉</p></div>}
-            {alerts.map(a => (
-              <div key={a.id} className={`flex items-center gap-3 rounded-xl p-3.5 ${t.subtle}`}>
-                <span className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: a.c + "1a", color: a.c }}><a.Icon size={16} /></span>
+            {ordered.map(a => (
+              <div key={a.id} className={`flex items-center gap-3 rounded-xl p-3.5 transition-all ${t.subtle} ${a.done ? "opacity-55" : ""}`}>
+                <span className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: (a.done ? "#00aa13" : a.c) + "1a", color: a.done ? GREEN : a.c }}>
+                  {a.done ? <Check size={16} /> : <a.Icon size={16} />}
+                </span>
                 <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-semibold ${t.heading}`}>{a.title}</p>
-                  <p className={`text-xs ${t.muted}`}>{a.sub}</p>
+                  <p className={`text-sm font-semibold ${t.heading} ${a.done ? "line-through" : ""}`}>{a.title}</p>
+                  <p className={`text-xs ${t.muted} ${a.done ? "line-through" : ""}`}>{a.sub}</p>
                 </div>
-                <button onClick={() => setAlerts(s => s.filter(x => x.id !== a.id))}
-                  className="text-xs font-semibold px-3 py-1.5 rounded-lg text-white flex-shrink-0 transition-colors" style={{ background: a.c }}>{a.action}</button>
+                {a.done
+                  ? <span className="flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg flex-shrink-0" style={{ background: "#00aa131a", color: GREEN }}><Check size={13} /> {a.doneLabel}</span>
+                  : <button onClick={() => resolve(a.id)}
+                      className="text-xs font-semibold px-3 py-1.5 rounded-lg text-white flex-shrink-0 transition-colors hover:opacity-90" style={{ background: a.c }}>{a.action}</button>}
               </div>
             ))}
           </div>

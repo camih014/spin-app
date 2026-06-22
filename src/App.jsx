@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from "react"
 import { Home, Calendar, BookOpen, Bike, Trophy, User, Settings, LogOut,
-  ChevronDown, LayoutDashboard, Users, ListMusic, SlidersHorizontal, BarChart3, CalendarClock, Sparkles, Radio, Building2 } from "lucide-react"
+  ChevronDown, LayoutDashboard, Users, ListMusic, SlidersHorizontal, BarChart3, CalendarClock, Sparkles, Radio, Building2, Wallet, Activity, Award } from "lucide-react"
 import {
   LiveModePage, RidersCRMPage, FeedbackPage, SubsMarketplacePage,
   GrowthDashboardPage, AIBuilderPanel, AreaTrend,
+  OwnerOverviewPage, OwnerRevenuePage, OwnerClassesPage, OwnerInstructorsPage,
 } from "./instructorPlatform"
 
 // ─── DATA ───────────────────────────────────────────────────────────────────
@@ -1017,10 +1018,13 @@ const INSTRUCTOR_NAV = [
   { label: "Insights",      icon: BarChart3         },
 ]
 
-// Studio Owner workspace — studio-level ops + the rider CRM
+// Studio Owner workspace — the operating dashboard for the cycling business
 const OWNER_NAV = [
-  { label: "Owner Home", icon: Building2 },
-  { label: "Riders",     icon: Users     },
+  { label: "Overview",    icon: LayoutDashboard },
+  { label: "Revenue",     icon: Wallet          },
+  { label: "Classes",     icon: Activity        },
+  { label: "Instructors", icon: Award           },
+  { label: "Riders",      icon: Users           },
 ]
 
 // Instructor pages reachable but not in the sidebar (e.g. via a dashboard widget)
@@ -1031,7 +1035,7 @@ const INSTRUCTOR_EXTRA_PAGES = ["Subs"]
 const USER_ROLES = [
   { key: "rider",      label: "Rider",        icon: Bike,            nav: RIDER_NAV,      home: "Home" },
   { key: "instructor", label: "Instructor",   icon: LayoutDashboard, nav: INSTRUCTOR_NAV, home: "Studio Home" },
-  { key: "owner",      label: "Studio Owner", icon: Building2,        nav: OWNER_NAV,      home: "Owner Home" },
+  { key: "owner",      label: "Studio Owner", icon: Building2,        nav: OWNER_NAV,      home: "Overview" },
 ]
 
 // Saved / AI-built ride templates surfaced on the Instructor Overview. Segments carry the structure so
@@ -1176,7 +1180,10 @@ export default function App() {
         {activePage === "Insights"      && <InstructorStatsPage   darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
         {activePage === "Subs"          && <SubsMarketplacePage   darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
         {/* Studio Owner */}
-        {activePage === "Owner Home"    && <StudioOwnerHomePage   darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
+        {activePage === "Overview"      && <OwnerOverviewPage     darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
+        {activePage === "Revenue"       && <OwnerRevenuePage      darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
+        {activePage === "Classes"       && <OwnerClassesPage      darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
+        {activePage === "Instructors"   && <OwnerInstructorsPage  darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
         {activePage === "Riders"        && <RidersCRMPage         darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
         {/* Shared */}
         {activePage === "Profile"      && <ProfilePage  darkMode={darkMode} onToggleDarkMode={dm} />}
@@ -5177,115 +5184,6 @@ function InstructorHomePage({ darkMode, onToggleDarkMode, onOpenRoster, onNaviga
           {toast}
         </div>
       )}
-    </div>
-  )
-}
-
-// ─── STUDIO OWNER ────────────────────────────────────────────────────────────
-function StudioOwnerHomePage({ darkMode, onToggleDarkMode, onNavigate }) {
-  const heading = darkMode ? "text-white"    : "text-gray-900"
-  const muted   = darkMode ? "text-gray-400" : "text-gray-500"
-  const card    = `rounded-2xl border transition-colors ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`
-  const subtle  = darkMode ? "bg-gray-800"   : "bg-gray-50"
-
-  const kpis = [
-    { label: "Active members", value: "1,284", sub: "+38 this month", c: "#00aa13" },
-    { label: "Monthly revenue", value: "£48.6k", sub: "+12% MoM", c: "#0ea5e9" },
-    { label: "Avg occupancy", value: "86%", sub: "across 2 studios", c: "#f59e0b" },
-    { label: "Instructors", value: "14", sub: "3 hiring", c: "#8b5cf6" },
-  ]
-  const instructors = [
-    { name: "JIM", classes: 28, rating: 4.9, fill: 92 },
-    { name: "Anna Banana", classes: 24, rating: 4.8, fill: 88 },
-    { name: "Max Lime", classes: 21, rating: 4.7, fill: 81 },
-    { name: "Zen Kiwi", classes: 18, rating: 4.9, fill: 76 },
-  ]
-  const studios = [
-    { name: "Hampstead", occ: 89, classes: 42 },
-    { name: "Shoreditch", occ: 83, classes: 36 },
-  ]
-  const approvals = [
-    { name: "Rhythm Ride", who: "JIM", when: "Sat 10:00", studio: "Shoreditch" },
-    { name: "Night Ride", who: "Max Lime", when: "Tue 20:00", studio: "Shoreditch" },
-  ]
-
-  return (
-    <div className="p-4 md:p-8 max-w-5xl mx-auto pb-16">
-      <InstructorTopBar title="Studio Owner" sub="SpinOut · Hampstead & Shoreditch" darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
-
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-        {kpis.map((k, i) => (
-          <div key={i} className={`${card} p-4`}>
-            <p className={`text-xs ${muted} mb-1`}>{k.label}</p>
-            <p className={`text-2xl font-bold tracking-tight ${heading}`}>{k.value}</p>
-            <p className="text-xs mt-0.5 font-medium" style={{ color: k.c }}>{k.sub}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Rider CRM entry */}
-      <button onClick={() => onNavigate?.("Riders")} className={`${card} w-full p-5 mb-5 flex items-center gap-4 text-left hover:shadow-lg transition-all`}>
-        <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white flex-shrink-0" style={{ background: "linear-gradient(135deg,#8b5cf6,#6366f1)" }}><Users size={22} /></div>
-        <div className="flex-1 min-w-0">
-          <p className={`text-base font-semibold ${heading}`}>Rider CRM</p>
-          <p className={`text-sm ${muted}`}>1,284 riders · attendance, milestones, engagement & notes</p>
-        </div>
-        <span className="text-sm font-semibold text-[#00aa13] flex-shrink-0">Open →</span>
-      </button>
-
-      <div className="grid md:grid-cols-2 gap-4 mb-5">
-        {/* Instructor leaderboard */}
-        <div className={`${card} p-5`}>
-          <p className={`text-sm font-semibold mb-4 ${heading}`}>Instructor performance</p>
-          <div className="flex flex-col gap-3">
-            {instructors.map((ins, i) => (
-              <div key={i} className="flex items-center gap-3">
-                <Avatar name={ins.name} size={34} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <p className={`text-sm font-semibold truncate ${heading}`}>{ins.name}</p>
-                    <span className="text-xs text-amber-500 font-semibold">{ins.rating} ★</span>
-                  </div>
-                  <div className={`h-1.5 rounded-full mt-1.5 ${subtle} overflow-hidden`}>
-                    <div className="h-full rounded-full" style={{ width: `${ins.fill}%`, background: "#00aa13" }} />
-                  </div>
-                </div>
-                <span className={`text-xs ${muted} flex-shrink-0 w-14 text-right`}>{ins.classes} classes</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Studios + approvals */}
-        <div className="flex flex-col gap-4">
-          <div className={`${card} p-5`}>
-            <p className={`text-sm font-semibold mb-4 ${heading}`}>Studios</p>
-            <div className="flex flex-col gap-3">
-              {studios.map((s, i) => (
-                <div key={i} className="flex items-center gap-3">
-                  <span className={`text-sm font-semibold flex-1 ${heading}`}>{s.name}</span>
-                  <div className={`h-1.5 rounded-full w-24 ${subtle} overflow-hidden`}><div className="h-full rounded-full" style={{ width: `${s.occ}%`, background: s.occ >= 85 ? "#fb7512" : "#00aa13" }} /></div>
-                  <span className={`text-xs font-bold tabular-nums w-9 text-right ${heading}`}>{s.occ}%</span>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className={`${card} p-5`}>
-            <div className="flex items-center justify-between mb-3">
-              <p className={`text-sm font-semibold ${heading}`}>Class approvals</p>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-500">{approvals.length} pending</span>
-            </div>
-            <div className="flex flex-col gap-2">
-              {approvals.map((a, i) => (
-                <div key={i} className={`flex items-center gap-3 rounded-xl px-3 py-2 ${subtle}`}>
-                  <div className="flex-1 min-w-0"><p className={`text-sm font-semibold truncate ${heading}`}>{a.name}</p><p className={`text-xs ${muted}`}>{a.who} · {a.when} · {a.studio}</p></div>
-                  <button className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-[#00aa13] text-white">Approve</button>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   )
 }

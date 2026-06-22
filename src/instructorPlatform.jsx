@@ -4,6 +4,7 @@ import {
   Gauge, Zap, Activity, Radio, Bell, Award, Trophy, Target, Flame, TrendingUp,
   TrendingDown, ThumbsUp, MessageSquare, Sparkles, Wand2, Pencil, Save,
   Check, Plus, ChevronRight, Users, Clock, Calendar, Sun, Moon, SlidersHorizontal as SlidersIcon,
+  AlertTriangle, Wallet, Wrench, ArrowUpRight, Building2,
 } from "lucide-react"
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -52,12 +53,12 @@ function DarkToggle({ darkMode, onToggle }) {
   )
 }
 
-function PageHead({ darkMode, onToggleDarkMode, onBack, title, sub, Icon, gradient }) {
+function PageHead({ darkMode, onToggleDarkMode, onBack, title, sub, Icon, gradient, backLabel = "Back" }) {
   const t = tk(darkMode)
   return (
     <div className="mb-6">
       <button onClick={onBack} className={`flex items-center gap-1.5 mb-4 text-sm font-medium ${t.muted} hover:${t.heading} transition-colors`}>
-        <ArrowLeft size={15} /> Instructor Platform
+        <ArrowLeft size={15} /> {backLabel}
       </button>
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3.5 min-w-0">
@@ -681,7 +682,7 @@ export function RidersCRMPage({ darkMode, onToggleDarkMode, onNavigate }) {
 
   return (
     <Shell>
-      <PageHead darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} onBack={() => onNavigate("Platform")}
+      <PageHead darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} onBack={() => onNavigate("Overview")} backLabel="Overview"
         title="Riders CRM" sub={`${RIDERS.length} riders · relationship management`} Icon={Users}
         gradient="linear-gradient(135deg,#8b5cf6,#6366f1)" />
 
@@ -907,7 +908,7 @@ export function SubsMarketplacePage({ darkMode, onToggleDarkMode, onNavigate }) 
 
   return (
     <Shell>
-      <PageHead darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} onBack={() => onNavigate("Platform")}
+      <PageHead darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} onBack={() => onNavigate("Studio Home")} backLabel="Studio Home"
         title="Sub Marketplace" sub="Instructor coverage management" Icon={Calendar}
         gradient="linear-gradient(135deg,#f59e0b,#fb7512)" />
 
@@ -1225,3 +1226,344 @@ export function AIBuilderPanel({ darkMode, onApply, onSaveTemplate }) {
   )
 }
 
+
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  STUDIO OWNER — the operating dashboard for the cycling business
+// ═════════════════════════════════════════════════════════════════════════════
+function OwnerHead({ darkMode, onToggleDarkMode, title, sub }) {
+  const t = tk(darkMode)
+  return (
+    <div className="flex items-start justify-between gap-3 mb-6">
+      <div className="flex items-center gap-3.5">
+        <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg" style={{ background: `linear-gradient(135deg, ${GREEN}, #14b8a6)` }}>
+          <Building2 size={22} />
+        </div>
+        <div>
+          <h1 className={`text-2xl font-semibold tracking-tight ${t.heading}`}>{title}</h1>
+          <p className={`text-sm mt-0.5 ${t.muted}`}>{sub}</p>
+        </div>
+      </div>
+      <DarkToggle darkMode={darkMode} onToggle={onToggleDarkMode} />
+    </div>
+  )
+}
+
+function Donut({ segments, size = 150 }) {
+  const total = segments.reduce((s, x) => s + x.value, 0) || 1
+  const r = size / 2, ir = r * 0.62, cx = r, cy = r
+  const arc = (start, sweep) => {
+    const rad = d => d * Math.PI / 180, sw = Math.min(sweep, 359.99)
+    const x1 = cx + r * Math.cos(rad(start)), y1 = cy + r * Math.sin(rad(start))
+    const x2 = cx + r * Math.cos(rad(start + sw)), y2 = cy + r * Math.sin(rad(start + sw))
+    const x3 = cx + ir * Math.cos(rad(start + sw)), y3 = cy + ir * Math.sin(rad(start + sw))
+    const x4 = cx + ir * Math.cos(rad(start)), y4 = cy + ir * Math.sin(rad(start))
+    const lg = sw > 180 ? 1 : 0
+    return `M${x1},${y1} A${r},${r} 0 ${lg} 1 ${x2},${y2} L${x3},${y3} A${ir},${ir} 0 ${lg} 0 ${x4},${y4} Z`
+  }
+  const paths = []
+  segments.reduce((acc, s) => { paths.push({ d: arc(acc / total * 360 - 90, s.value / total * 360), color: s.color }); return acc + s.value }, 0)
+  return (
+    <svg width={size} height={size} className="flex-shrink-0">
+      {paths.map((p, i) => <path key={i} d={p.d} fill={p.color} />)}
+    </svg>
+  )
+}
+
+const OWNER_KPIS = [
+  { label: "Revenue this month", value: "£25,300", Icon: Wallet, trend: 9, accent: GREEN },
+  { label: "Attendance rate", value: "87%", Icon: Activity, trend: 3, accent: "#14b8a6" },
+  { label: "Active members", value: "642", Icon: Users, trend: 5, accent: "#8b5cf6" },
+  { label: "Classes this week", value: "84", Icon: Calendar, trend: 2, accent: "#0ea5e9" },
+  { label: "Rider retention", value: "91%", Icon: Heart, trend: 4, accent: "#ec4899" },
+]
+const OWNER_ALERTS_SEED = [
+  { id: "a1", Icon: AlertTriangle, c: "#ef4444", title: "Friday 6:30pm class has no instructor", sub: "Power Zone Ride · Hampstead · 18 booked", action: "Find cover" },
+  { id: "a2", Icon: Users,         c: "#f59e0b", title: "18 members haven't attended in 14 days", sub: "At risk of churn — worth a re-engagement nudge", action: "Re-engage" },
+  { id: "a3", Icon: TrendingDown,  c: "#f59e0b", title: "Wednesday lunchtime ride only 42% full", sub: "Cadence Control · 12:30 · Shoreditch", action: "Promote" },
+  { id: "a4", Icon: Wrench,        c: "#0ea5e9", title: "Bike 12 maintenance overdue", sub: "Studio 1 · last serviced 92 days ago", action: "Log service" },
+]
+const REVENUE = {
+  total: "£25,300", trend: 9,
+  monthLabels: ["Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun"],
+  monthly: [18.2, 19.1, 20.4, 21.0, 22.3, 21.6, 23.1, 22.8, 24.0, 24.6, 25.0, 25.3],
+  sources: [
+    { label: "Membership", value: 16200, color: GREEN },
+    { label: "Class packs", value: 6100, color: "#0ea5e9" },
+    { label: "Retail", value: 3000, color: "#f59e0b" },
+  ],
+}
+const CLASS_TOP = [
+  { name: "EDM Power Ride", occ: 97, when: "Fri · 7:00pm", riders: "39 / 40" },
+  { name: "Saturday HIIT", occ: 94, when: "Sat · 9:00am", riders: "38 / 40" },
+  { name: "Beginner Ride", occ: 91, when: "Tue · 6:00pm", riders: "22 / 24" },
+]
+const CLASS_LOW = [
+  { name: "Monday 1pm Express", occ: 38, when: "Mon · 1:00pm", riders: "9 / 24" },
+  { name: "Thursday 11am Flow", occ: 44, when: "Thu · 11:00am", riders: "11 / 24" },
+]
+const CLASS_RECS = [
+  { Icon: Clock, title: "Move Monday 1pm → 5:30pm", detail: "Lunchtime demand is low; evening slots run 88% full.", uplift: "+22 riders / month" },
+  { Icon: Calendar, title: "Add a second Saturday HIIT", detail: "94% full with a waitlist most weeks — capture the overflow.", uplift: "+£640 / month" },
+  { Icon: Sparkles, title: "Promote the Wednesday lunch ride", detail: "Email lapsed members a free class pass to refill it.", uplift: "+15 riders / month" },
+]
+const INSTRUCTOR_PERF = [
+  { name: "JIM",          att: 92, ret: 90, rating: 4.9, repeat: 68, classes: 28, growth: 12 },
+  { name: "Anna Banana",  att: 88, ret: 86, rating: 4.8, repeat: 62, classes: 24, growth: 8 },
+  { name: "Rio Banana",   att: 84, ret: 80, rating: 4.6, repeat: 58, classes: 20, growth: 9 },
+  { name: "Max Lime",     att: 81, ret: 79, rating: 4.7, repeat: 55, classes: 21, growth: 18 },
+  { name: "Zen Kiwi",     att: 76, ret: 82, rating: 4.9, repeat: 60, classes: 18, growth: 5 },
+  { name: "Alex Papaya",  att: 79, ret: 74, rating: 4.7, repeat: 50, classes: 16, growth: 22 },
+]
+
+// ── OVERVIEW ──
+export function OwnerOverviewPage({ darkMode, onToggleDarkMode, onNavigate }) {
+  const t = tk(darkMode)
+  const [alerts, setAlerts] = useState(OWNER_ALERTS_SEED)
+  const links = [
+    { key: "Revenue", label: "Revenue", sub: "Trends & breakdown", Icon: Wallet, c: GREEN },
+    { key: "Classes", label: "Class performance", sub: "Occupancy & fixes", Icon: Activity, c: "#0ea5e9" },
+    { key: "Instructors", label: "Instructors", sub: "Leaderboard & ratings", Icon: Award, c: "#8b5cf6" },
+    { key: "Riders", label: "Rider CRM", sub: "642 members", Icon: Users, c: "#ec4899" },
+  ]
+  return (
+    <Shell>
+      <OwnerHead darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} title="Studio Overview" sub="SpinOut · Hampstead & Shoreditch" />
+
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-5">
+        {OWNER_KPIS.map((k, i) => <div key={i} className="pop-in" style={{ animationDelay: `${i * 60}ms` }}><StatCard darkMode={darkMode} {...k} /></div>)}
+      </div>
+
+      <div className="grid lg:grid-cols-[1.5fr_1fr] gap-4">
+        {/* Alerts */}
+        <div className={`${t.card} p-5`}>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <span className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "#ef44441a", color: "#ef4444" }}><AlertTriangle size={15} /></span>
+              <p className={`text-sm font-semibold ${t.heading}`}>Operational alerts</p>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/15 text-red-500">{alerts.length}</span>
+            </div>
+          </div>
+          <div className="flex flex-col gap-2.5">
+            {alerts.length === 0 && <div className={`rounded-xl p-6 text-center ${t.subtle}`}><p className={`text-sm ${t.muted}`}>All clear — nothing needs attention 🎉</p></div>}
+            {alerts.map(a => (
+              <div key={a.id} className={`flex items-center gap-3 rounded-xl p-3.5 ${t.subtle}`}>
+                <span className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: a.c + "1a", color: a.c }}><a.Icon size={16} /></span>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm font-semibold ${t.heading}`}>{a.title}</p>
+                  <p className={`text-xs ${t.muted}`}>{a.sub}</p>
+                </div>
+                <button onClick={() => setAlerts(s => s.filter(x => x.id !== a.id))}
+                  className="text-xs font-semibold px-3 py-1.5 rounded-lg text-white flex-shrink-0 transition-colors" style={{ background: a.c }}>{a.action}</button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Revenue snapshot + quick links */}
+        <div className="flex flex-col gap-4">
+          <button onClick={() => onNavigate("Revenue")} className={`${t.card} p-5 text-left hover:shadow-lg transition-all`}>
+            <div className="flex items-center justify-between mb-1">
+              <p className={`text-sm font-semibold ${t.heading}`}>Revenue this month</p>
+              <span className="flex items-center gap-0.5 text-xs font-semibold text-[#00aa13]"><TrendingUp size={12} />9%</span>
+            </div>
+            <p className={`text-3xl font-bold tracking-tight ${t.heading} mb-2`}>£25,300</p>
+            <AreaTrend points={REVENUE.monthly} labels={REVENUE.monthLabels} valueFmt={v => `£${v}k`} darkMode={darkMode} color={GREEN} height={90} />
+            <p className="text-xs font-semibold text-[#00aa13] mt-2">View revenue →</p>
+          </button>
+          <div className={`${t.card} p-3`}>
+            {links.slice(1).map(l => (
+              <button key={l.key} onClick={() => onNavigate(l.key)} className={`w-full flex items-center gap-3 p-2.5 rounded-xl text-left transition-colors ${darkMode ? "hover:bg-gray-800" : "hover:bg-gray-50"}`}>
+                <span className="w-9 h-9 rounded-xl flex items-center justify-center text-white flex-shrink-0" style={{ background: `linear-gradient(135deg,${l.c},${l.c}cc)` }}><l.Icon size={16} /></span>
+                <div className="flex-1 min-w-0"><p className={`text-sm font-semibold ${t.heading}`}>{l.label}</p><p className={`text-xs ${t.muted}`}>{l.sub}</p></div>
+                <ChevronRight size={16} className={t.faint} />
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </Shell>
+  )
+}
+
+// ── REVENUE ──
+export function OwnerRevenuePage({ darkMode, onToggleDarkMode, onNavigate }) {
+  const t = tk(darkMode)
+  const srcTotal = REVENUE.sources.reduce((s, x) => s + x.value, 0)
+  const cards = [
+    { label: "Monthly revenue", value: "£25,300", Icon: Wallet, accent: GREEN, trend: 9 },
+    { label: "Membership", value: "£16,200", Icon: Users, accent: GREEN, trend: 6 },
+    { label: "Class packs", value: "£6,100", Icon: Calendar, accent: "#0ea5e9", trend: 14 },
+    { label: "Retail", value: "£3,000", Icon: ArrowUpRight, accent: "#f59e0b", trend: 4 },
+  ]
+  return (
+    <Shell>
+      <PageHead darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} onBack={() => onNavigate("Overview")} backLabel="Overview"
+        title="Revenue" sub="Where the money comes from" Icon={Wallet} gradient="linear-gradient(135deg,#00aa13,#14b8a6)" />
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+        {cards.map((c, i) => <div key={i} className="pop-in" style={{ animationDelay: `${i * 60}ms` }}><StatCard darkMode={darkMode} {...c} /></div>)}
+      </div>
+
+      <div className="grid lg:grid-cols-[1.6fr_1fr] gap-4">
+        <div className={`${t.card} p-5`}>
+          <div className="flex items-center justify-between mb-1">
+            <p className={`text-sm font-semibold ${t.heading}`}>Monthly revenue trend</p>
+            <span className="text-xs font-semibold text-[#00aa13]">+39% YoY</span>
+          </div>
+          <p className={`text-3xl font-bold tracking-tight ${t.heading} mb-2`}>£25.3k <span className={`text-sm font-medium ${t.muted}`}>this month</span></p>
+          <AreaTrend points={REVENUE.monthly} labels={REVENUE.monthLabels} valueFmt={v => `£${v}k`} darkMode={darkMode} color={GREEN} height={180} />
+          <div className={`flex justify-between text-[10px] mt-1 ${t.muted}`}><span>Jul</span><span>Jun</span></div>
+        </div>
+
+        <div className={`${t.card} p-5`}>
+          <p className={`text-sm font-semibold mb-4 ${t.heading}`}>Revenue breakdown</p>
+          <div className="flex items-center justify-center mb-4 relative">
+            <Donut segments={REVENUE.sources} size={150} />
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <p className={`text-xl font-bold ${t.heading}`}>£25.3k</p>
+              <p className={`text-[10px] ${t.faint}`}>total</p>
+            </div>
+          </div>
+          <div className="flex flex-col gap-2">
+            {REVENUE.sources.map((s, i) => (
+              <div key={i} className="flex items-center gap-2.5">
+                <span className="w-2.5 h-2.5 rounded-sm" style={{ background: s.color }} />
+                <span className={`text-sm flex-1 ${t.heading}`}>{s.label}</span>
+                <span className={`text-xs ${t.muted}`}>{Math.round(s.value / srcTotal * 100)}%</span>
+                <span className={`text-sm font-bold tabular-nums w-16 text-right ${t.heading}`}>£{(s.value / 1000).toFixed(1)}k</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </Shell>
+  )
+}
+
+// ── CLASS PERFORMANCE ──
+function OccRow({ c, darkMode }) {
+  const t = tk(darkMode)
+  const col = c.occ >= 85 ? GREEN : c.occ >= 60 ? "#f59e0b" : "#ef4444"
+  return (
+    <div className={`flex items-center gap-3 rounded-xl p-3.5 ${t.subtle}`}>
+      <div className="flex-1 min-w-0">
+        <p className={`text-sm font-semibold truncate ${t.heading}`}>{c.name}</p>
+        <p className={`text-xs ${t.muted}`}>{c.when} · {c.riders}</p>
+        <div className={`h-2 rounded-full mt-2 ${darkMode ? "bg-gray-900" : "bg-white"} overflow-hidden`}>
+          <div className="h-full rounded-full" style={{ width: `${c.occ}%`, background: col }} />
+        </div>
+      </div>
+      <span className="text-lg font-bold tabular-nums w-12 text-right" style={{ color: col }}>{c.occ}%</span>
+    </div>
+  )
+}
+export function OwnerClassesPage({ darkMode, onToggleDarkMode, onNavigate }) {
+  const t = tk(darkMode)
+  return (
+    <Shell>
+      <PageHead darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} onBack={() => onNavigate("Overview")} backLabel="Overview"
+        title="Class performance" sub="Occupancy, demand & quick wins" Icon={Activity} gradient="linear-gradient(135deg,#0ea5e9,#6366f1)" />
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+        <StatCard darkMode={darkMode} label="Avg occupancy" value="78%" Icon={Activity} accent="#0ea5e9" trend={4} />
+        <StatCard darkMode={darkMode} label="Sold-out classes" value="23" Icon={Trophy} accent={GREEN} trend={6} />
+        <StatCard darkMode={darkMode} label="Under 50% full" value="5" Icon={TrendingDown} accent="#ef4444" trend={-2} />
+        <StatCard darkMode={darkMode} label="Waitlisted riders" value="61" Icon={Users} accent="#8b5cf6" trend={11} />
+      </div>
+
+      <div className="grid lg:grid-cols-2 gap-4 mb-4">
+        <div className={`${t.card} p-5`}>
+          <div className="flex items-center gap-2 mb-3"><span className="w-6 h-6 rounded-lg flex items-center justify-center" style={{ background: GREEN + "1a", color: GREEN }}><Trophy size={14} /></span><p className={`text-sm font-semibold ${t.heading}`}>Top performing</p></div>
+          <div className="flex flex-col gap-2.5">{CLASS_TOP.map((c, i) => <OccRow key={i} c={c} darkMode={darkMode} />)}</div>
+        </div>
+        <div className={`${t.card} p-5`}>
+          <div className="flex items-center gap-2 mb-3"><span className="w-6 h-6 rounded-lg flex items-center justify-center" style={{ background: "#ef44441a", color: "#ef4444" }}><TrendingDown size={14} /></span><p className={`text-sm font-semibold ${t.heading}`}>Needs attention</p></div>
+          <div className="flex flex-col gap-2.5">{CLASS_LOW.map((c, i) => <OccRow key={i} c={c} darkMode={darkMode} />)}</div>
+        </div>
+      </div>
+
+      <div className={`${t.card} p-5`}>
+        <div className="flex items-center gap-2 mb-4"><span className="w-6 h-6 rounded-lg flex items-center justify-center text-white" style={{ background: "#8b5cf6" }}><Sparkles size={13} /></span><p className={`text-sm font-semibold ${t.heading}`}>Recommendations</p></div>
+        <div className="grid md:grid-cols-3 gap-3">
+          {CLASS_RECS.map((r, i) => (
+            <div key={i} className={`rounded-xl p-4 ${t.subtle} flex flex-col`}>
+              <span className="w-9 h-9 rounded-xl flex items-center justify-center mb-3" style={{ background: "#8b5cf61a", color: "#8b5cf6" }}><r.Icon size={16} /></span>
+              <p className={`text-sm font-semibold ${t.heading}`}>{r.title}</p>
+              <p className={`text-xs mt-1 flex-1 ${t.muted}`}>{r.detail}</p>
+              <div className="flex items-center justify-between mt-3">
+                <span className="text-xs font-bold text-[#00aa13]">{r.uplift}</span>
+                <button className={`text-xs font-semibold px-3 py-1.5 rounded-lg ${t.chip}`}>Apply</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Shell>
+  )
+}
+
+// ── INSTRUCTOR PERFORMANCE ──
+export function OwnerInstructorsPage({ darkMode, onToggleDarkMode, onNavigate }) {
+  const t = tk(darkMode)
+  const ranked = [...INSTRUCTOR_PERF].sort((a, b) => b.att - a.att)
+  const popular = [...INSTRUCTOR_PERF].sort((a, b) => b.classes - a.classes)[0]
+  const growing = [...INSTRUCTOR_PERF].sort((a, b) => b.growth - a.growth)[0]
+  const rated = [...INSTRUCTOR_PERF].sort((a, b) => b.rating - a.rating)[0]
+  const highlights = [
+    { label: "Most popular", name: popular.name, meta: `${popular.classes} classes this month`, Icon: Trophy, c: "#f59e0b" },
+    { label: "Fastest growing", name: growing.name, meta: `+${growing.growth}% riders`, Icon: TrendingUp, c: GREEN },
+    { label: "Highest rated", name: rated.name, meta: `${rated.rating} ★ average`, Icon: Star, c: "#8b5cf6" },
+  ]
+  const metric = (label, val, col) => (
+    <div className="flex-1 min-w-0">
+      <p className={`text-[10px] ${t.muted}`}>{label}</p>
+      <p className={`text-sm font-bold ${t.heading}`}>{val}</p>
+      <div className={`h-1.5 rounded-full mt-1 ${darkMode ? "bg-gray-800" : "bg-gray-100"} overflow-hidden`}><div className="h-full rounded-full" style={{ width: `${typeof val === "string" && val.includes("%") ? parseInt(val) : 0}%`, background: col }} /></div>
+    </div>
+  )
+  return (
+    <Shell>
+      <PageHead darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} onBack={() => onNavigate("Overview")} backLabel="Overview"
+        title="Instructor performance" sub="Who's driving attendance & loyalty" Icon={Award} gradient="linear-gradient(135deg,#8b5cf6,#6366f1)" />
+
+      <div className="grid sm:grid-cols-3 gap-3 mb-4">
+        {highlights.map((h, i) => (
+          <div key={i} className={`${t.card} p-4 flex items-center gap-3 pop-in`} style={{ animationDelay: `${i * 70}ms` }}>
+            <span className="w-11 h-11 rounded-2xl flex items-center justify-center text-white flex-shrink-0" style={{ background: `linear-gradient(135deg,${h.c},${h.c}cc)` }}><h.Icon size={19} /></span>
+            <div className="min-w-0">
+              <p className={`text-[11px] font-semibold uppercase tracking-wider`} style={{ color: h.c }}>{h.label}</p>
+              <p className={`text-base font-bold truncate ${t.heading}`}>{h.name}</p>
+              <p className={`text-xs ${t.muted}`}>{h.meta}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className={`${t.card} p-5`}>
+        <p className={`text-sm font-semibold mb-4 ${t.heading}`}>Leaderboard</p>
+        <div className="flex flex-col gap-2.5">
+          {ranked.map((ins, i) => (
+            <div key={i} className={`flex items-center gap-3 rounded-xl p-3 ${t.subtle}`}>
+              <span className={`text-sm font-bold w-5 text-center ${i < 3 ? "text-[#00aa13]" : t.muted}`}>{i + 1}</span>
+              <Avatar name={ins.name} size={38} />
+              <div className="w-28 flex-shrink-0 min-w-0">
+                <p className={`text-sm font-semibold truncate ${t.heading}`}>{ins.name}</p>
+                <p className={`text-xs ${t.muted}`}>{ins.classes} classes · <span className="text-[#00aa13] font-semibold">+{ins.growth}%</span></p>
+              </div>
+              <div className="hidden sm:flex items-center gap-4 flex-1">
+                {metric("Attendance", `${ins.att}%`, GREEN)}
+                {metric("Retention", `${ins.ret}%`, "#0ea5e9")}
+                {metric("Repeat", `${ins.repeat}%`, "#8b5cf6")}
+              </div>
+              <div className="flex items-center gap-1 flex-shrink-0 w-14 justify-end">
+                <Star size={13} className="text-amber-400 fill-amber-400" />
+                <span className={`text-sm font-bold ${t.heading}`}>{ins.rating}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Shell>
+  )
+}

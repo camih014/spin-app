@@ -1080,7 +1080,7 @@ export default function App() {
   const [activePage, setActivePage] = useState("Home")
   const [darkMode, setDarkMode]     = useState(false)
   const [authed, setAuthed]         = useState(true)
-  const [openSections, setOpenSections] = useState({ rider: true, instructor: false, owner: false })
+  const [openSections, setOpenSections] = useState({ rider: true, instructor: true, owner: true })
   const [rosterClass, setRosterClass]   = useState(null)
   const [builtClasses, setBuiltClasses] = useState(SEED_BUILT_CLASSES)
   const [templates, setTemplates]       = useState(INSTRUCTOR_TEMPLATE_SEED)  // Instructor Platform ride templates

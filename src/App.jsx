@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react"
 import { Home, Calendar, BookOpen, Bike, Trophy, User, Settings, LogOut,
-  ChevronDown, LayoutDashboard, Users, ListMusic, SlidersHorizontal, BarChart3, CalendarClock, Sparkles, Radio, Building2, Wallet, Activity, Award } from "lucide-react"
+  ChevronDown, PanelLeftClose, PanelLeftOpen, LayoutDashboard, Users, ListMusic, SlidersHorizontal, BarChart3, CalendarClock, Sparkles, Radio, Building2, Wallet, Activity, Award } from "lucide-react"
 import {
   LiveModePage, RidersCRMPage, FeedbackPage, SubsMarketplacePage,
   GrowthDashboardPage, AIBuilderPanel, AreaTrend,
@@ -707,12 +707,12 @@ function StatusBadge({ status }) {
   return null
 }
 
-function NavItem({ label, icon: Icon, active, onClick, darkMode }) {
+function NavItem({ label, icon: Icon, active, onClick, darkMode, expanded = true }) {
   return (
     <button
       onClick={onClick}
       title={label}
-      className={`flex items-center gap-3 justify-center lg:justify-start px-2 lg:px-3 py-2 rounded-lg text-sm w-full text-left transition-colors border-l-2
+      className={`flex items-center gap-3 ${expanded ? "justify-start px-3" : "justify-center px-2"} py-2 rounded-lg text-sm w-full text-left transition-colors border-l-2
         ${active
           ? "font-medium border-[#00aa13] bg-[#e6f9e8] text-[#00aa13]"
           : darkMode
@@ -720,27 +720,27 @@ function NavItem({ label, icon: Icon, active, onClick, darkMode }) {
             : "text-gray-400 hover:bg-gray-50 border-transparent"
         }`}
     >
-      <Icon size={15} />
-      <span className="hidden lg:block">{label}</span>
+      <Icon size={15} className="flex-shrink-0" />
+      {expanded && <span className="truncate">{label}</span>}
     </button>
   )
 }
 
-function NavSection({ title, icon: Icon, items, activePage, onSelect, darkMode, open, onToggle }) {
+function NavSection({ title, icon: Icon, items, activePage, onSelect, darkMode, open, onToggle, expanded = true }) {
   const hasActive = items.some(it => it.label === activePage)
   return (
     <div>
       <button onClick={onToggle} title={title}
-        className={`flex items-center gap-2 justify-center lg:justify-start px-2 lg:px-3 py-2 rounded-lg w-full text-left transition-colors
+        className={`flex items-center gap-2 ${expanded ? "justify-start px-3" : "justify-center px-2"} py-2 rounded-lg w-full text-left transition-colors
           ${darkMode ? "hover:bg-gray-800" : "hover:bg-gray-50"}`}>
-        <Icon size={15} className={hasActive ? "text-[#00aa13]" : darkMode ? "text-gray-300" : "text-gray-600"} />
-        <span className={`hidden lg:block flex-1 text-xs font-semibold uppercase tracking-wider ${hasActive ? "text-[#00aa13]" : darkMode ? "text-gray-300" : "text-gray-600"}`}>{title}</span>
-        <ChevronDown size={13} className={`hidden lg:block transition-transform ${open ? "rotate-180" : ""} ${darkMode ? "text-gray-500" : "text-gray-400"}`} />
+        <Icon size={15} className={`flex-shrink-0 ${hasActive ? "text-[#00aa13]" : darkMode ? "text-gray-300" : "text-gray-600"}`} />
+        {expanded && <span className={`flex-1 text-xs font-semibold uppercase tracking-wider ${hasActive ? "text-[#00aa13]" : darkMode ? "text-gray-300" : "text-gray-600"}`}>{title}</span>}
+        {expanded && <ChevronDown size={13} className={`transition-transform ${open ? "rotate-180" : ""} ${darkMode ? "text-gray-500" : "text-gray-400"}`} />}
       </button>
       {open && (
-        <div className="flex flex-col gap-0.5 mt-0.5 lg:pl-2">
+        <div className={`flex flex-col gap-0.5 mt-0.5 ${expanded ? "pl-2" : ""}`}>
           {items.map(item => (
-            <NavItem key={item.label} label={item.label} icon={item.icon}
+            <NavItem key={item.label} label={item.label} icon={item.icon} expanded={expanded}
               active={activePage === item.label} onClick={() => onSelect(item.label)} darkMode={darkMode} />
           ))}
         </div>
@@ -860,7 +860,7 @@ function AuthPage({ onAuth }) {
                 <circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/>
               </svg>
             </div>
-            <span className="text-white font-bold text-xl tracking-tight">SpinOut</span>
+            <span className="text-white font-bold text-xl tracking-tight">CycleHQ</span>
           </div>
 
           <h1 className="text-4xl font-bold text-white leading-tight mb-4">
@@ -885,7 +885,7 @@ function AuthPage({ onAuth }) {
               </div>
             </div>
           ))}
-          <p className="text-gray-600 text-xs mt-4">SpinOut · Hampstead, London</p>
+          <p className="text-gray-600 text-xs mt-4">CycleHQ · Hampstead, London</p>
         </div>
       </div>
 
@@ -899,7 +899,7 @@ function AuthPage({ onAuth }) {
               <circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/>
             </svg>
           </div>
-          <span className="font-bold text-xl tracking-tight text-gray-900">SpinOut</span>
+          <span className="font-bold text-xl tracking-tight text-gray-900">CycleHQ</span>
         </div>
 
         <div className="w-full max-w-sm">
@@ -907,7 +907,7 @@ function AuthPage({ onAuth }) {
             {mode === "login" ? "Welcome back" : "Create account"}
           </h2>
           <p className="text-sm text-gray-500 mb-8">
-            {mode === "login" ? "Sign in to your SpinOut account" : "Join SpinOut in Hampstead, London"}
+            {mode === "login" ? "Sign in to your CycleHQ account" : "Join CycleHQ in Hampstead, London"}
           </p>
 
           <form onSubmit={submit} className="flex flex-col gap-4">
@@ -1081,6 +1081,14 @@ export default function App() {
   const [darkMode, setDarkMode]     = useState(false)
   const [authed, setAuthed]         = useState(true)
   const [openSections, setOpenSections] = useState({ rider: true, instructor: true, owner: true })
+  // Sidebar starts expanded on large screens and icon-only on smaller ones; the toggle overrides it until the breakpoint changes
+  const [navExpanded, setNavExpanded]   = useState(() => typeof window === "undefined" || window.matchMedia("(min-width: 1024px)").matches)
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)")
+    const sync = e => setNavExpanded(e.matches)
+    mq.addEventListener("change", sync)
+    return () => mq.removeEventListener("change", sync)
+  }, [])
   const [rosterClass, setRosterClass]   = useState(null)
   const [builtClasses, setBuiltClasses] = useState(SEED_BUILT_CLASSES)
   const [templates, setTemplates]       = useState(INSTRUCTOR_TEMPLATE_SEED)  // Instructor Platform ride templates
@@ -1128,27 +1136,36 @@ export default function App() {
   return (
     <div className={`flex h-screen font-sans transition-colors ${darkMode ? "bg-gray-950 text-white" : "bg-gray-50 text-gray-900"}`}>
 
-      {/* ── Sidebar (hidden on mobile, icon-only on md, full on lg) ── */}
-      <aside className={`hidden md:flex md:w-16 lg:w-48 border-r flex-col py-6 px-3 flex-shrink-0 transition-all
+      {/* ── Sidebar (hidden on mobile; expandable / collapsible on md+) ── */}
+      <aside className={`hidden md:flex ${navExpanded ? "w-48" : "w-16"} border-r flex-col py-6 px-3 flex-shrink-0 transition-all
         ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`}>
 
         {/* Logo */}
-        <div className="flex items-center justify-center lg:justify-start lg:px-3 mb-6 gap-2">
+        <div className={`flex items-center ${navExpanded ? "justify-start px-3" : "justify-center"} mb-3 gap-2`}>
           <div className="w-7 h-7 rounded-lg bg-[#00aa13] flex items-center justify-center flex-shrink-0">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
           </div>
-          <p className={`hidden lg:block font-bold text-base ${darkMode ? "text-white" : "text-gray-900"}`}>SpinOut</p>
+          {navExpanded && <p className={`font-bold text-base ${darkMode ? "text-white" : "text-gray-900"}`}>CycleHQ</p>}
         </div>
+
+        {/* Expand / collapse toggle */}
+        <button onClick={() => setNavExpanded(v => !v)}
+          title={navExpanded ? "Collapse sidebar" : "Expand sidebar"} aria-label={navExpanded ? "Collapse sidebar" : "Expand sidebar"} aria-expanded={navExpanded}
+          className={`flex items-center gap-3 ${navExpanded ? "justify-start px-3" : "justify-center px-2"} py-2 mb-3 rounded-lg text-sm w-full transition-colors
+            ${darkMode ? "text-gray-400 hover:bg-gray-800" : "text-gray-400 hover:bg-gray-50"}`}>
+          {navExpanded ? <PanelLeftClose size={15} className="flex-shrink-0" /> : <PanelLeftOpen size={15} className="flex-shrink-0" />}
+          {navExpanded && <span>Collapse</span>}
+        </button>
 
         {/* Workspaces */}
         <div className="flex flex-col gap-2 flex-1 overflow-y-auto">
-          <NavSection title="Rider" icon={Bike} items={RIDER_NAV}
+          <NavSection title="Rider" icon={Bike} items={RIDER_NAV} expanded={navExpanded}
             activePage={activePage} onSelect={navTo} darkMode={darkMode}
             open={openSections.rider} onToggle={() => toggle("rider")} />
-          <NavSection title="Instructor" icon={LayoutDashboard} items={INSTRUCTOR_NAV}
+          <NavSection title="Instructor" icon={LayoutDashboard} items={INSTRUCTOR_NAV} expanded={navExpanded}
             activePage={activePage} onSelect={navTo} darkMode={darkMode}
             open={openSections.instructor} onToggle={() => toggle("instructor")} />
-          <NavSection title="Studio Owner" icon={Building2} items={OWNER_NAV}
+          <NavSection title="Studio Owner" icon={Building2} items={OWNER_NAV} expanded={navExpanded}
             activePage={activePage} onSelect={navTo} darkMode={darkMode}
             open={openSections.owner} onToggle={() => toggle("owner")} />
         </div>
@@ -1156,7 +1173,7 @@ export default function App() {
         {/* Bottom nav */}
         <div className={`flex flex-col gap-1 border-t pt-4 ${darkMode ? "border-gray-800" : "border-gray-100"}`}>
           {bottomItems.map(item => (
-            <NavItem key={item.label} label={item.label} icon={item.icon}
+            <NavItem key={item.label} label={item.label} icon={item.icon} expanded={navExpanded}
               active={activePage === item.label} onClick={() => navTo(item.label)} darkMode={darkMode} />
           ))}
         </div>
@@ -4648,7 +4665,7 @@ function ProfilePage({ darkMode, onToggleDarkMode }) {
             </svg>
           </div>
           <div className="flex-1 min-w-0">
-            <p className={`text-sm font-semibold ${heading}`}>SpinOut · Hampstead, London</p>
+            <p className={`text-sm font-semibold ${heading}`}>CycleHQ · Hampstead, London</p>
             <p className={`text-xs ${muted}`}>Studio 1 & Studio 2</p>
           </div>
           <span className="text-xs font-semibold px-2 py-1 rounded-full bg-[#e6f9e8] text-[#00aa13] flex-shrink-0">Connected</span>
@@ -4707,7 +4724,7 @@ function LogOutPage({ darkMode, onLogout, onStay }) {
 
 const INSTRUCTOR_TODAY = "Thu 26 Feb"
 
-const LOCATIONS = ["SpinOut · Hampstead", "SpinOut · Shoreditch"]
+const LOCATIONS = ["CycleHQ · Hampstead", "CycleHQ · Shoreditch"]
 
 const RIDER_POOL = [
   "Olivia Hart","Noah Patel","Emma Cole","Liam Ward","Ava Reid","Jack Doyle","Mia Foster",
@@ -4737,29 +4754,29 @@ function rosterFor(seed, booked, canCheckIn = false) {
 }
 
 const instructorClasses = [
-  { dateLabel: "Today",     dateIso: "2026-02-26", time: "06:15", name: "Sunrise Power",   studio: "Studio 1", location: "SpinOut · Hampstead",  capacity: 24, booked: 22, waitlist: 3, status: "upcoming", seed: 3 },
-  { dateLabel: "Today",     dateIso: "2026-02-26", time: "12:00", name: "Lunch Sprint",    studio: "Studio 2", location: "SpinOut · Shoreditch", capacity: 20, booked: 16, waitlist: 0, status: "upcoming", seed: 7 },
-  { dateLabel: "Today",     dateIso: "2026-02-26", time: "18:00", name: "Evening Flow",    studio: "Studio 1", location: "SpinOut · Hampstead",  capacity: 24, booked: 14, waitlist: 0, status: "upcoming", seed: 11 },
-  { dateLabel: "Tomorrow",  dateIso: "2026-02-27", time: "08:00", name: "Cadence Control", studio: "Studio 1", location: "SpinOut · Hampstead",  capacity: 24, booked: 19, waitlist: 0, status: "upcoming", seed: 5 },
-  { dateLabel: "Tomorrow",  dateIso: "2026-02-27", time: "19:00", name: "HIIT Blast",      studio: "Studio 1", location: "SpinOut · Shoreditch", capacity: 24, booked: 24, waitlist: 6, status: "upcoming", seed: 9 },
-  { dateLabel: "Sat 28 Feb",dateIso: "2026-02-28", time: "09:00", name: "Rhythm Ride",     studio: "Studio 1", location: "SpinOut · Hampstead",  capacity: 24, booked: 21, waitlist: 1, status: "upcoming", seed: 2 },
+  { dateLabel: "Today",     dateIso: "2026-02-26", time: "06:15", name: "Sunrise Power",   studio: "Studio 1", location: "CycleHQ · Hampstead",  capacity: 24, booked: 22, waitlist: 3, status: "upcoming", seed: 3 },
+  { dateLabel: "Today",     dateIso: "2026-02-26", time: "12:00", name: "Lunch Sprint",    studio: "Studio 2", location: "CycleHQ · Shoreditch", capacity: 20, booked: 16, waitlist: 0, status: "upcoming", seed: 7 },
+  { dateLabel: "Today",     dateIso: "2026-02-26", time: "18:00", name: "Evening Flow",    studio: "Studio 1", location: "CycleHQ · Hampstead",  capacity: 24, booked: 14, waitlist: 0, status: "upcoming", seed: 11 },
+  { dateLabel: "Tomorrow",  dateIso: "2026-02-27", time: "08:00", name: "Cadence Control", studio: "Studio 1", location: "CycleHQ · Hampstead",  capacity: 24, booked: 19, waitlist: 0, status: "upcoming", seed: 5 },
+  { dateLabel: "Tomorrow",  dateIso: "2026-02-27", time: "19:00", name: "HIIT Blast",      studio: "Studio 1", location: "CycleHQ · Shoreditch", capacity: 24, booked: 24, waitlist: 6, status: "upcoming", seed: 9 },
+  { dateLabel: "Sat 28 Feb",dateIso: "2026-02-28", time: "09:00", name: "Rhythm Ride",     studio: "Studio 1", location: "CycleHQ · Hampstead",  capacity: 24, booked: 21, waitlist: 1, status: "upcoming", seed: 2 },
   // past
-  { dateLabel: "Wed 25 Feb",dateIso: "2026-02-25", time: "07:00", name: "Threshold Push",  studio: "Studio 1", location: "SpinOut · Hampstead",  capacity: 24, booked: 23, waitlist: 0, status: "done", seed: 4, rating: 4.9, attended: 21 },
-  { dateLabel: "Tue 24 Feb",dateIso: "2026-02-24", time: "18:30", name: "Climb Intervals", studio: "Studio 2", location: "SpinOut · Shoreditch", capacity: 20, booked: 18, waitlist: 0, status: "done", seed: 8, rating: 4.8, attended: 17 },
-  { dateLabel: "Mon 23 Feb",dateIso: "2026-02-23", time: "06:30", name: "Sunrise Power",   studio: "Studio 1", location: "SpinOut · Hampstead",  capacity: 24, booked: 24, waitlist: 2, status: "done", seed: 6, rating: 5.0, attended: 23 },
+  { dateLabel: "Wed 25 Feb",dateIso: "2026-02-25", time: "07:00", name: "Threshold Push",  studio: "Studio 1", location: "CycleHQ · Hampstead",  capacity: 24, booked: 23, waitlist: 0, status: "done", seed: 4, rating: 4.9, attended: 21 },
+  { dateLabel: "Tue 24 Feb",dateIso: "2026-02-24", time: "18:30", name: "Climb Intervals", studio: "Studio 2", location: "CycleHQ · Shoreditch", capacity: 20, booked: 18, waitlist: 0, status: "done", seed: 8, rating: 4.8, attended: 17 },
+  { dateLabel: "Mon 23 Feb",dateIso: "2026-02-23", time: "06:30", name: "Sunrise Power",   studio: "Studio 1", location: "CycleHQ · Hampstead",  capacity: 24, booked: 24, waitlist: 2, status: "done", seed: 6, rating: 5.0, attended: 23 },
   // upcoming — future weeks (March)
-  { dateLabel: "Mon 2 Mar", dateIso: "2026-03-02", time: "06:30", name: "Sunrise Power",   studio: "Studio 1", location: "SpinOut · Hampstead",  capacity: 24, booked: 12, waitlist: 0, status: "upcoming", seed: 3 },
-  { dateLabel: "Mon 2 Mar", dateIso: "2026-03-02", time: "18:30", name: "Threshold Push",  studio: "Studio 1", location: "SpinOut · Hampstead",  capacity: 24, booked: 9,  waitlist: 0, status: "upcoming", seed: 4 },
-  { dateLabel: "Wed 4 Mar", dateIso: "2026-03-04", time: "07:00", name: "Cadence Control", studio: "Studio 2", location: "SpinOut · Shoreditch", capacity: 20, booked: 7,  waitlist: 0, status: "upcoming", seed: 5 },
-  { dateLabel: "Thu 5 Mar", dateIso: "2026-03-05", time: "12:00", name: "Lunch Sprint",    studio: "Studio 2", location: "SpinOut · Shoreditch", capacity: 20, booked: 5,  waitlist: 0, status: "upcoming", seed: 7 },
-  { dateLabel: "Fri 6 Mar", dateIso: "2026-03-06", time: "19:00", name: "HIIT Blast",      studio: "Studio 1", location: "SpinOut · Hampstead",  capacity: 24, booked: 14, waitlist: 0, status: "upcoming", seed: 9 },
-  { dateLabel: "Sat 7 Mar", dateIso: "2026-03-07", time: "09:00", name: "Rhythm Ride",     studio: "Studio 1", location: "SpinOut · Hampstead",  capacity: 24, booked: 11, waitlist: 0, status: "upcoming", seed: 2 },
-  { dateLabel: "Mon 9 Mar", dateIso: "2026-03-09", time: "06:30", name: "Sunrise Power",   studio: "Studio 1", location: "SpinOut · Hampstead",  capacity: 24, booked: 6,  waitlist: 0, status: "upcoming", seed: 6 },
-  { dateLabel: "Thu 12 Mar",dateIso: "2026-03-12", time: "18:00", name: "Evening Flow",    studio: "Studio 2", location: "SpinOut · Shoreditch", capacity: 20, booked: 4,  waitlist: 0, status: "upcoming", seed: 11 },
+  { dateLabel: "Mon 2 Mar", dateIso: "2026-03-02", time: "06:30", name: "Sunrise Power",   studio: "Studio 1", location: "CycleHQ · Hampstead",  capacity: 24, booked: 12, waitlist: 0, status: "upcoming", seed: 3 },
+  { dateLabel: "Mon 2 Mar", dateIso: "2026-03-02", time: "18:30", name: "Threshold Push",  studio: "Studio 1", location: "CycleHQ · Hampstead",  capacity: 24, booked: 9,  waitlist: 0, status: "upcoming", seed: 4 },
+  { dateLabel: "Wed 4 Mar", dateIso: "2026-03-04", time: "07:00", name: "Cadence Control", studio: "Studio 2", location: "CycleHQ · Shoreditch", capacity: 20, booked: 7,  waitlist: 0, status: "upcoming", seed: 5 },
+  { dateLabel: "Thu 5 Mar", dateIso: "2026-03-05", time: "12:00", name: "Lunch Sprint",    studio: "Studio 2", location: "CycleHQ · Shoreditch", capacity: 20, booked: 5,  waitlist: 0, status: "upcoming", seed: 7 },
+  { dateLabel: "Fri 6 Mar", dateIso: "2026-03-06", time: "19:00", name: "HIIT Blast",      studio: "Studio 1", location: "CycleHQ · Hampstead",  capacity: 24, booked: 14, waitlist: 0, status: "upcoming", seed: 9 },
+  { dateLabel: "Sat 7 Mar", dateIso: "2026-03-07", time: "09:00", name: "Rhythm Ride",     studio: "Studio 1", location: "CycleHQ · Hampstead",  capacity: 24, booked: 11, waitlist: 0, status: "upcoming", seed: 2 },
+  { dateLabel: "Mon 9 Mar", dateIso: "2026-03-09", time: "06:30", name: "Sunrise Power",   studio: "Studio 1", location: "CycleHQ · Hampstead",  capacity: 24, booked: 6,  waitlist: 0, status: "upcoming", seed: 6 },
+  { dateLabel: "Thu 12 Mar",dateIso: "2026-03-12", time: "18:00", name: "Evening Flow",    studio: "Studio 2", location: "CycleHQ · Shoreditch", capacity: 20, booked: 4,  waitlist: 0, status: "upcoming", seed: 11 },
   // pending — awaiting studio owner approval
-  { dateLabel: "Tue 10 Mar",dateIso: "2026-03-10", time: "20:00", name: "Night Ride",      studio: "Studio 2", location: "SpinOut · Shoreditch", capacity: 20, booked: 0,  waitlist: 0, status: "pending", seed: 8 },
-  { dateLabel: "Fri 13 Mar",dateIso: "2026-03-13", time: "12:30", name: "Midday Burn",     studio: "Studio 1", location: "SpinOut · Hampstead",  capacity: 24, booked: 0,  waitlist: 0, status: "pending", seed: 7 },
-  { dateLabel: "Mon 16 Mar",dateIso: "2026-03-16", time: "07:00", name: "Power Tempo",     studio: "Studio 1", location: "SpinOut · Hampstead",  capacity: 24, booked: 0,  waitlist: 0, status: "pending", seed: 5 },
+  { dateLabel: "Tue 10 Mar",dateIso: "2026-03-10", time: "20:00", name: "Night Ride",      studio: "Studio 2", location: "CycleHQ · Shoreditch", capacity: 20, booked: 0,  waitlist: 0, status: "pending", seed: 8 },
+  { dateLabel: "Fri 13 Mar",dateIso: "2026-03-13", time: "12:30", name: "Midday Burn",     studio: "Studio 1", location: "CycleHQ · Hampstead",  capacity: 24, booked: 0,  waitlist: 0, status: "pending", seed: 7 },
+  { dateLabel: "Mon 16 Mar",dateIso: "2026-03-16", time: "07:00", name: "Power Tempo",     studio: "Studio 1", location: "CycleHQ · Hampstead",  capacity: 24, booked: 0,  waitlist: 0, status: "pending", seed: 5 },
 ]
 
 const INSTRUCTOR_TODAY_ISO = "2026-02-26"
@@ -4970,11 +4987,11 @@ function CapacityBar({ booked, capacity, darkMode }) {
 // Owner-programmed classes needing cover — surfaced on Studio Home, filtered by location.
 // Each carries a short brief so a covering instructor knows the "normal" feel of the session.
 const COVERAGE = [
-  { id: "c1", day: "Today",      time: "7:30 PM",  cls: "Power Zone Ride",   mins: 45, location: "SpinOut · Hampstead",  studio: "Studio 1", instructor: "Alex Papaya", booked: 18, capacity: 24, vibe: "Steady, focused power build", music: "Melodic techno · 124–128 BPM", intensity: "Z3–4 sustained", pay: "£75", brief: "Owner-programmed power-zone session — long threshold blocks, minimal chat. Regulars expect a tough but controlled ride; let the music carry the work." },
-  { id: "c2", day: "Fri 20 Jun", time: "6:30 PM",  cls: "Rhythm Ride",       mins: 45, location: "SpinOut · Hampstead",  studio: "Studio 2", instructor: "Zen Kiwi",   booked: 21, capacity: 24, vibe: "High-energy, beat-driven", music: "Pop & dance anthems · 120–130 BPM", intensity: "Z2–4 intervals", pay: "£75", brief: "Social rhythm class — choreography on the beat, big sing-along moments. The room loves a theme; keep the energy up and everyone together." },
-  { id: "c3", day: "Sat 21 Jun", time: "9:00 AM",  cls: "Saturday HIIT",     mins: 45, location: "SpinOut · Hampstead",  studio: "Studio 1", instructor: "Max Lime",   booked: 23, capacity: 24, vibe: "All-out intervals", music: "EDM / drum & bass · 128–174 BPM", intensity: "Z4–5 bursts", pay: "£75", brief: "Owner's flagship HIIT — six hard intervals with short recoveries. Near sold-out, competitive regulars who chase the leaderboard." },
-  { id: "c4", day: "Today",      time: "12:00 PM", cls: "Lunch Sprint",      mins: 30, location: "SpinOut · Shoreditch", studio: "Studio 2", instructor: "Anna Banana", booked: 14, capacity: 20, vibe: "Fast & efficient", music: "Hip-hop / house · 100–124 BPM", intensity: "Z3–5 sprints", pay: "£55", brief: "30-minute express sprint for the lunch crowd. Punchy, no-nonsense — in, sweat, out. Keep cues tight and the clock moving." },
-  { id: "c5", day: "Mon 23 Jun", time: "7:00 AM",  cls: "Sunrise Endurance", mins: 60, location: "SpinOut · Shoreditch", studio: "Studio 1", instructor: "Rio Banana",  booked: 12, capacity: 20, vibe: "Calm aerobic base", music: "Melodic house · 118–124 BPM", intensity: "Z2 endurance", pay: "£90", brief: "Early steady-state endurance ride. Low chat, long Zone-2 blocks. Regulars are training for events — respect the easy pace." },
+  { id: "c1", day: "Today",      time: "7:30 PM",  cls: "Power Zone Ride",   mins: 45, location: "CycleHQ · Hampstead",  studio: "Studio 1", instructor: "Alex Papaya", booked: 18, capacity: 24, vibe: "Steady, focused power build", music: "Melodic techno · 124–128 BPM", intensity: "Z3–4 sustained", pay: "£75", brief: "Owner-programmed power-zone session — long threshold blocks, minimal chat. Regulars expect a tough but controlled ride; let the music carry the work." },
+  { id: "c2", day: "Fri 20 Jun", time: "6:30 PM",  cls: "Rhythm Ride",       mins: 45, location: "CycleHQ · Hampstead",  studio: "Studio 2", instructor: "Zen Kiwi",   booked: 21, capacity: 24, vibe: "High-energy, beat-driven", music: "Pop & dance anthems · 120–130 BPM", intensity: "Z2–4 intervals", pay: "£75", brief: "Social rhythm class — choreography on the beat, big sing-along moments. The room loves a theme; keep the energy up and everyone together." },
+  { id: "c3", day: "Sat 21 Jun", time: "9:00 AM",  cls: "Saturday HIIT",     mins: 45, location: "CycleHQ · Hampstead",  studio: "Studio 1", instructor: "Max Lime",   booked: 23, capacity: 24, vibe: "All-out intervals", music: "EDM / drum & bass · 128–174 BPM", intensity: "Z4–5 bursts", pay: "£75", brief: "Owner's flagship HIIT — six hard intervals with short recoveries. Near sold-out, competitive regulars who chase the leaderboard." },
+  { id: "c4", day: "Today",      time: "12:00 PM", cls: "Lunch Sprint",      mins: 30, location: "CycleHQ · Shoreditch", studio: "Studio 2", instructor: "Anna Banana", booked: 14, capacity: 20, vibe: "Fast & efficient", music: "Hip-hop / house · 100–124 BPM", intensity: "Z3–5 sprints", pay: "£55", brief: "30-minute express sprint for the lunch crowd. Punchy, no-nonsense — in, sweat, out. Keep cues tight and the clock moving." },
+  { id: "c5", day: "Mon 23 Jun", time: "7:00 AM",  cls: "Sunrise Endurance", mins: 60, location: "CycleHQ · Shoreditch", studio: "Studio 1", instructor: "Rio Banana",  booked: 12, capacity: 20, vibe: "Calm aerobic base", music: "Melodic house · 118–124 BPM", intensity: "Z2 endurance", pay: "£90", brief: "Early steady-state endurance ride. Low chat, long Zone-2 blocks. Regulars are training for events — respect the easy pace." },
 ]
 
 function InstructorHomePage({ darkMode, onToggleDarkMode, onOpenRoster, onNavigate, templates = [], onOpenBuilder }) {
@@ -5009,7 +5026,7 @@ function InstructorHomePage({ darkMode, onToggleDarkMode, onOpenRoster, onNaviga
     setToast(`Applied to cover ${c.cls} — the studio will confirm`)
     setTimeout(() => setToast(""), 2600)
   }
-  const locShort = l => l.replace("SpinOut · ", "")
+  const locShort = l => l.replace("CycleHQ · ", "")
 
   return (
     <div className="p-4 md:p-8 max-w-5xl mx-auto pb-16">
@@ -5225,7 +5242,7 @@ function ClassRoster({ cls, darkMode }) {
             <h2 className={`text-lg font-bold ${heading}`}>{cls.name}</h2>
             {isSocialClass(cls.name) && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-[#e6f9e8] text-[#00aa13]">🎲 Social</span>}
           </div>
-          <p className={`text-xs mt-0.5 ${muted}`}>{cls.dateLabel} · {cls.time} · {cls.location?.replace("SpinOut · ","")} · {cls.studio}</p>
+          <p className={`text-xs mt-0.5 ${muted}`}>{cls.dateLabel} · {cls.time} · {cls.location?.replace("CycleHQ · ","")} · {cls.studio}</p>
         </div>
         {past
           ? <span className="text-xs font-semibold text-amber-500 flex-shrink-0">{cls.rating} ★</span>
@@ -5428,7 +5445,7 @@ function InstructorClassesPage({ darkMode, onToggleDarkMode, initialClass }) {
         <div className={`w-px self-stretch flex-shrink-0 ${darkMode ? "bg-gray-700" : "bg-gray-200"}`} />
         <div className="flex-1 min-w-0">
           <p className={`text-sm font-semibold truncate ${heading}`}>{c.name}</p>
-          <p className={`text-xs mt-0.5 truncate ${muted}`}>{c.location?.replace("SpinOut · ","")} · {c.studio}{c.waitlist > 0 ? ` · ${c.waitlist} waitlist` : ""}</p>
+          <p className={`text-xs mt-0.5 truncate ${muted}`}>{c.location?.replace("CycleHQ · ","")} · {c.studio}{c.waitlist > 0 ? ` · ${c.waitlist} waitlist` : ""}</p>
         </div>
         {done ? (
           <span className="text-sm font-semibold text-amber-500 flex-shrink-0">{c.rating} ★</span>
@@ -5488,7 +5505,7 @@ function InstructorClassesPage({ darkMode, onToggleDarkMode, initialClass }) {
 
   return (
     <div className="p-4 md:p-8 max-w-5xl mx-auto pb-16">
-      <InstructorTopBar title="My Classes" sub="Classes you're teaching at SpinOut" darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
+      <InstructorTopBar title="My Classes" sub="Classes you're teaching at CycleHQ" darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
 
       {/* View toggle */}
       <div className="flex items-center justify-end gap-3 mb-5">
@@ -6733,9 +6750,9 @@ function InstructorStatsPage({ darkMode, onToggleDarkMode, onNavigate }) {
 const DAY_ORDER = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]
 
 const CLASS_REQUESTS = [
-  { name: "Sunrise Power", location: "SpinOut · Hampstead",  studio: "Either",   recurring: true,  slots: [{ day: "Mon", time: "06:15" }, { day: "Wed", time: "06:15" }, { day: "Fri", time: "06:15" }], status: "approved" },
-  { name: "HIIT Blast",    location: "SpinOut · Hampstead",  studio: "Studio 1", recurring: true,  slots: [{ day: "Wed", time: "19:00" }], status: "approved" },
-  { name: "Rhythm Ride",   location: "SpinOut · Shoreditch", studio: "Studio 2", recurring: false, social: true, slots: [{ day: "Sat", time: "10:00" }], status: "pending"  },
+  { name: "Sunrise Power", location: "CycleHQ · Hampstead",  studio: "Either",   recurring: true,  slots: [{ day: "Mon", time: "06:15" }, { day: "Wed", time: "06:15" }, { day: "Fri", time: "06:15" }], status: "approved" },
+  { name: "HIIT Blast",    location: "CycleHQ · Hampstead",  studio: "Studio 1", recurring: true,  slots: [{ day: "Wed", time: "19:00" }], status: "approved" },
+  { name: "Rhythm Ride",   location: "CycleHQ · Shoreditch", studio: "Studio 2", recurring: false, social: true, slots: [{ day: "Sat", time: "10:00" }], status: "pending"  },
 ]
 function reqSortKey(r) {
   const s = r.slots?.[0] || { day: "Sun", time: "23:59" }
@@ -7047,7 +7064,7 @@ function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] 
             </div>
             <div className="flex-1 min-w-0">
               <p className={`text-sm font-semibold ${heading}`}>{r.name}{r.series && <span className="ml-1.5">📈</span>}{r.social && <span className="ml-1.5">🎲</span>}</p>
-              <p className={`text-xs mt-0.5 ${muted}`}>{r.location ? `${r.location.replace("SpinOut · ","")} · ` : ""}{r.studio}{r.series ? ` · ${r.weeks}-session set across ${r.slots.map(s=>s.day).join(" & ")}` : r.recurring ? ` · Weekly · ${r.slots.length} slot${r.slots.length > 1 ? "s" : ""}` : ""}</p>
+              <p className={`text-xs mt-0.5 ${muted}`}>{r.location ? `${r.location.replace("CycleHQ · ","")} · ` : ""}{r.studio}{r.series ? ` · ${r.weeks}-session set across ${r.slots.map(s=>s.day).join(" & ")}` : r.recurring ? ` · Weekly · ${r.slots.length} slot${r.slots.length > 1 ? "s" : ""}` : ""}</p>
             </div>
             {r.status === "approved"
               ? <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-[#e6f9e8] text-[#00aa13] flex-shrink-0">Approved</span>

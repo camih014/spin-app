@@ -1331,7 +1331,7 @@ export function OwnerOverviewPage({ darkMode, onToggleDarkMode, onNavigate }) {
   ]
   return (
     <Shell>
-      <OwnerHead darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} title="Studio Overview" sub="SpinOut · Hampstead & Shoreditch" />
+      <OwnerHead darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} title="Studio Overview" sub="CycleHQ · Hampstead & Shoreditch" />
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-5">
         {OWNER_KPIS.map((k, i) => <div key={i} className="pop-in" style={{ animationDelay: `${i * 60}ms` }}><StatCard darkMode={darkMode} {...k} /></div>)}

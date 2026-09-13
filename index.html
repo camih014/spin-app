@@ -58,6 +58,11 @@
       .role-toggles .tick { width: 17px; height: 17px; border-radius: 50%; border: 1.5px solid #cbd2da; display: grid; place-items: center; transition: background .15s, border-color .15s; }
       .role-toggles button[aria-pressed="true"] { color: var(--text); background: #e6f9e8; border-color: var(--brand); }
       .role-toggles button[aria-pressed="true"] .tick { background: var(--brand); border-color: var(--brand); }
+      /* Each workspace keeps its own colour, matching the app's sidebar */
+      .role-toggles button[data-role="instructor"][aria-pressed="true"] { background: #e0f2fe; border-color: #0284c7; }
+      .role-toggles button[data-role="instructor"][aria-pressed="true"] .tick { background: #0284c7; border-color: #0284c7; }
+      .role-toggles button[data-role="owner"][aria-pressed="true"] { background: #ede9fe; border-color: #7c3aed; }
+      .role-toggles button[data-role="owner"][aria-pressed="true"] .tick { background: #7c3aed; border-color: #7c3aed; }
       .role-toggles button[aria-pressed="false"] .tick svg { visibility: hidden; }
       .role-toggles button[aria-disabled="true"] { cursor: not-allowed; }
       .role-toggles button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }

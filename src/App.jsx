@@ -708,18 +708,20 @@ function StatusBadge({ status }) {
   return null
 }
 
-function NavItem({ label, icon: Icon, active, onClick, darkMode, expanded = true }) {
+function NavItem({ label, icon: Icon, active, onClick, darkMode, expanded = true, accent = "#00aa13" }) {
   return (
     <button
       onClick={onClick}
       title={label}
+      aria-current={active ? "page" : undefined}
       className={`flex items-center gap-3 ${expanded ? "justify-start px-3" : "justify-center px-2"} py-2 rounded-lg text-sm w-full text-left transition-colors border-l-2
         ${active
-          ? "font-medium border-[#00aa13] bg-[#e6f9e8] text-[#00aa13]"
+          ? "font-medium"
           : darkMode
             ? "text-gray-400 hover:bg-gray-800 border-transparent"
             : "text-gray-400 hover:bg-gray-50 border-transparent"
         }`}
+      style={active ? { borderColor: accent, background: accent + (darkMode ? "2e" : "14"), color: darkMode ? "#fff" : accent } : undefined}
     >
       <Icon size={15} className="flex-shrink-0" />
       {expanded && <span className="truncate">{label}</span>}
@@ -727,21 +729,24 @@ function NavItem({ label, icon: Icon, active, onClick, darkMode, expanded = true
   )
 }
 
-function NavSection({ title, icon: Icon, items, activePage, onSelect, darkMode, open, onToggle, expanded = true }) {
+function NavSection({ title, icon: Icon, items, activePage, onSelect, darkMode, open, onToggle, expanded = true, accent = "#00aa13" }) {
   const hasActive = items.some(it => it.label === activePage)
   return (
     <div>
       <button onClick={onToggle} title={title}
         className={`flex items-center gap-2 ${expanded ? "justify-start px-3" : "justify-center px-2"} py-2 rounded-lg w-full text-left transition-colors
           ${darkMode ? "hover:bg-gray-800" : "hover:bg-gray-50"}`}>
-        <Icon size={15} className={`flex-shrink-0 ${hasActive ? "text-[#00aa13]" : darkMode ? "text-gray-300" : "text-gray-600"}`} />
-        {expanded && <span className={`flex-1 text-xs font-semibold uppercase tracking-wider ${hasActive ? "text-[#00aa13]" : darkMode ? "text-gray-300" : "text-gray-600"}`}>{title}</span>}
+        {/* The workspace's colour lives in its icon chip, so sections are easy to tell apart at a glance */}
+        <span className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0" style={{ background: accent + (darkMode ? "33" : "1a"), color: accent }}>
+          <Icon size={14} />
+        </span>
+        {expanded && <span className={`flex-1 text-xs font-semibold uppercase tracking-wider ${hasActive ? "" : darkMode ? "text-gray-300" : "text-gray-600"}`} style={hasActive ? { color: accent } : undefined}>{title}</span>}
         {expanded && <ChevronDown size={13} className={`transition-transform ${open ? "rotate-180" : ""} ${darkMode ? "text-gray-500" : "text-gray-400"}`} />}
       </button>
       {open && (
-        <div className={`flex flex-col gap-0.5 mt-0.5 ${expanded ? "pl-2" : ""}`}>
+        <div className={`flex flex-col gap-0.5 mt-0.5 ${expanded ? "ml-5 pl-1.5 border-l" : ""}`} style={expanded ? { borderColor: accent + "33" } : undefined}>
           {items.map(item => (
-            <NavItem key={item.label} label={item.label} icon={item.icon} expanded={expanded}
+            <NavItem key={item.label} label={item.label} icon={item.icon} expanded={expanded} accent={accent}
               active={activePage === item.label} onClick={() => onSelect(item.label)} darkMode={darkMode} />
           ))}
         </div>
@@ -1035,9 +1040,10 @@ const INSTRUCTOR_EXTRA_PAGES = ["Subs"]
 // Every role a person can hold. The demo user holds all three by default; ?roles=rider,owner (or the
 // prototype's "View as" toggles) narrows it. With a single role there's no workspace switcher.
 const USER_ROLES = [
-  { key: "rider",      label: "Rider",        icon: Bike,            nav: RIDER_NAV,      home: "Home" },
-  { key: "instructor", label: "Instructor",   icon: LayoutDashboard, nav: INSTRUCTOR_NAV, home: "Studio Home" },
-  { key: "owner",      label: "Studio Owner", icon: Building2,        nav: OWNER_NAV,      home: "Overview" },
+  // accent: each workspace's own colour (sidebar section, active page, phone switcher)
+  { key: "rider",      label: "Rider",        icon: Bike,            nav: RIDER_NAV,      home: "Home",        accent: "#00aa13" },
+  { key: "instructor", label: "Instructor",   icon: LayoutDashboard, nav: INSTRUCTOR_NAV, home: "Studio Home", accent: "#0284c7" },
+  { key: "owner",      label: "Studio Owner", icon: Building2,        nav: OWNER_NAV,      home: "Overview",    accent: "#7c3aed" },
 ]
 
 // Instructor class-change requests, shared so a class's detail view can submit them and show their status
@@ -1169,6 +1175,7 @@ export default function App() {
   // Keep the mobile nav + role toggle in sync with the page, limited to the roles this person holds
   const workspace = roleKeys.includes(workspaceOf(activePage)) ? workspaceOf(activePage) : roles[0].key
   const mobileNav = roles.find(r => r.key === workspace).nav
+  const workspaceAccent = roles.find(r => r.key === workspace).accent
 
   function openRoster(cls) { setRosterClass(cls); setActivePage("My Classes") }
   function navTo(page) {
@@ -1210,7 +1217,7 @@ export default function App() {
         {/* Workspaces */}
         <div className="flex flex-col gap-2 flex-1 overflow-y-auto">
           {roles.map(r => (
-            <NavSection key={r.key} title={r.label} icon={r.icon} items={r.nav} expanded={navExpanded}
+            <NavSection key={r.key} title={r.label} icon={r.icon} items={r.nav} expanded={navExpanded} accent={r.accent}
               activePage={activePage} onSelect={navTo} darkMode={darkMode}
               open={openSections[r.key]} onToggle={() => toggle(r.key)} />
           ))}
@@ -1307,9 +1314,9 @@ export default function App() {
               {roles.map(r => {
                 const on = r.key === workspace
                 return (
-                  <button key={r.key} onClick={() => switchWorkspace(r.key)}
+                  <button key={r.key} onClick={() => switchWorkspace(r.key)} style={on ? { background: r.accent } : { color: r.accent }}
                     className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-colors
-                      ${on ? "bg-[#00aa13] text-white" : darkMode ? "text-gray-400" : "text-gray-500"}`}>
+                      ${on ? "text-white" : ""}`}>
                     <r.icon size={13} /> {r.label}
                   </button>
                 )
@@ -1323,9 +1330,10 @@ export default function App() {
             <button
               key={item.label}
               onClick={() => navTo(item.label)}
+              style={activePage === item.label ? { color: workspaceAccent } : undefined}
               className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg transition-colors
                 ${activePage === item.label
-                  ? "text-[#00aa13]"
+                  ? ""
                   : darkMode ? "text-gray-500" : "text-gray-400"}`}
             >
               <item.icon size={20} />
@@ -2901,6 +2909,31 @@ function SessionBookingPanel({ session, isPast, booked, selectedBike, onPickBike
   )
 }
 
+// ─── Class brands ─────────────────────────────────────────────────────────────
+// Each class type belongs to one brand (its colour); tags like "Beginner-friendly" can overlap across brands
+const BRANDS = {
+  Power:     { color: "#f97316", blurb: "Strength and threshold work" },
+  Endurance: { color: "#0ea5e9", blurb: "Steady rides that go the distance" },
+  HIIT:      { color: "#ef4444", blurb: "Short, sharp all-out intervals" },
+  Rhythm:    { color: "#8b5cf6", blurb: "Music-led, social rides to the beat" },
+  Recovery:  { color: "#14b8a6", blurb: "Easy spins to reset" },
+  Technique: { color: "#eab308", blurb: "Cadence and form drills" },
+}
+const CLASS_BRAND = {
+  "Sunrise Power": ["Power"], "Power Tempo": ["Power"], "Power Zone Ride": ["Power"], "Power Ride": ["Power"], "Threshold Push": ["Power"], "Climb Intervals": ["Power"],
+  "HIIT Blast": ["HIIT"], "Saturday HIIT": ["HIIT"], "Midday Burn": ["HIIT"], "Lunch Sprint": ["HIIT"],
+  "Endurance Builder": ["Endurance"], "Easy Endurance": ["Endurance", "Beginner-friendly"], "Tempo Foundation": ["Endurance", "Beginner-friendly"], "Night Ride": ["Endurance"], "Sunrise Endurance": ["Endurance"],
+  "Rhythm Ride": ["Rhythm", "Beginner-friendly"], "Evening Flow": ["Rhythm", "Beginner-friendly"], "Rhythm Stat": ["Rhythm"],
+  "Recovery Ride": ["Recovery", "Beginner-friendly"],
+  "Cadence Control": ["Technique"], "Core + Ride": ["Technique", "Beginner-friendly"],
+}
+function brandOf(name) {
+  const [brand = "Signature", ...tags] = CLASS_BRAND[name] || []
+  return { name: brand, color: BRANDS[brand]?.color || "#6b7280", tags }
+}
+const BRAND_FILTERS = [{ key: "All", color: "#374151" }, ...Object.entries(BRANDS).map(([key, b]) => ({ key, color: b.color })), { key: "Beginner-friendly", color: "#00aa13" }]
+const inCategory = (s, key) => key === "All" || (key === "Beginner-friendly" ? brandOf(s.name).tags.includes(key) : brandOf(s.name).name === key)
+
 function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onCollapseNav, initialDate, riderChanges = {}, setRiderChanges }) {
   const [selectedSession, setSelectedSession] = useState(null)
   const [selectedBike, setSelectedBike]       = useState(null)
@@ -2922,7 +2955,8 @@ function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onColla
   const weekDates   = getWeekDates(weekOffset)
   // Timetable + your schedule + changes — the same data the Calendar shows
   const daySessions = riderDay(selectedDate, riderChanges)
-  const dayData     = Object.fromEntries(["morning", "afternoon", "evening"].map(part => [part, daySessions.filter(s => s.part === part)]))
+  const [category, setCategory] = useState("All")   // browse by class brand / tag — "All" is the full list
+  const dayData     = Object.fromEntries(["morning", "afternoon", "evening"].map(part => [part, daySessions.filter(s => s.part === part && inCategory(s, category))]))
   const hasSessions = Object.values(dayData).some(arr => arr.length > 0)
   const monthCells  = getMonthGrid(monthView.year, monthView.month)
   const isPast      = selectedDate < BOOKING_TODAY
@@ -2998,15 +3032,23 @@ function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onColla
     const isBooked   = session.state === "booked"
     const isSelected = selectedSession?.name === session.name && selectedSession?.time === session.time
     const myBike     = isBooked && !isSocialClass(session.name) ? seatPlan(session).mine : null
+    const brand      = brandOf(session.name)
     return (
       <div
         onClick={() => { setSelectedSession(session); setSelectedBike(null) }}
-        className={`p-4 border-b cursor-pointer transition-all ${divider}
-          ${isSelected ? "border-l-2 border-l-[#00aa13] bg-[#e6f9e8]" : darkMode ? "hover:bg-gray-800" : "hover:bg-gray-50"}`}
+        className={`p-4 pl-5 border-b cursor-pointer transition-all ${divider}
+          ${isSelected ? (darkMode ? "bg-gray-800" : "bg-[#e6f9e8]") : darkMode ? "hover:bg-gray-800" : "hover:bg-gray-50"}`}
+        style={{ boxShadow: `inset ${isSelected ? 5 : 3}px 0 0 ${brand.color}` }}
       >
         <div className="flex items-center justify-between">
           <div className="flex-1">
-            <p className={`text-xs mb-1 ${muted}`}>{session.time}</p>
+            <p className={`text-xs mb-1 flex flex-wrap items-center gap-x-2 gap-y-1 ${muted}`}>
+              <span>{session.time}</span>
+              <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: brand.color }}>{brand.name}</span>
+              {brand.tags.includes("Beginner-friendly") && (
+                <span className={`text-[10px] font-medium px-1.5 rounded-full ${darkMode ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-500"}`}>Beginner-friendly</span>
+              )}
+            </p>
             <p className={`text-sm font-medium ${isSelected ? "text-[#00aa13]" : heading}`}>{session.name}</p>
             <p className={`text-xs ${muted}`}>{session.instructor} · 45 mins · {session.studio}</p>
           </div>
@@ -3222,6 +3264,24 @@ function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onColla
             })}
           </div>
 
+          {/* Browse by class type — "All" keeps the full list */}
+          <div role="tablist" aria-label="Class type" className="flex gap-1.5 overflow-x-auto pb-1 mb-3">
+            {BRAND_FILTERS.map(f => {
+              const on = category === f.key
+              const count = daySessions.filter(s => inCategory(s, f.key)).length
+              return (
+                <button key={f.key} role="tab" aria-selected={on} onClick={() => { setCategory(f.key); setSelectedSession(null) }}
+                  className={`flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors
+                    ${on ? "text-white border-transparent" : darkMode ? "border-gray-700 text-gray-300 hover:bg-gray-800" : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"}`}
+                  style={on ? { background: f.color } : undefined}>
+                  {f.key !== "All" && <span className="w-2 h-2 rounded-full" style={{ background: on ? "#fff" : f.color }} />}
+                  {f.key}
+                  <span className={on ? "opacity-80" : darkMode ? "text-gray-500" : "text-gray-400"}>{count}</span>
+                </button>
+              )
+            })}
+          </div>
+
           {/* Sessions list + Detail panel */}
           <div className="flex flex-col md:flex-row gap-4 md:gap-6 flex-1 md:overflow-hidden md:min-h-0">
 
@@ -3240,8 +3300,11 @@ function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onColla
                   })
                 : <div className="flex flex-col items-center justify-center h-full py-16 gap-3">
                     <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-2xl ${darkMode ? "bg-gray-800" : "bg-gray-50"}`}>🗓️</div>
-                    <p className={`text-sm font-semibold ${heading}`}>No classes this day</p>
-                    <p className={`text-xs text-center max-w-xs ${muted}`}>There aren't any classes on this day — try another date.</p>
+                    <p className={`text-sm font-semibold ${heading}`}>{category !== "All" && daySessions.length ? `No ${category} classes this day` : "No classes this day"}</p>
+                    <p className={`text-xs text-center max-w-xs ${muted}`}>{category !== "All" && daySessions.length ? "Try another day, or browse every class." : "There aren't any classes on this day — try another date."}</p>
+                    {category !== "All" && daySessions.length > 0 && (
+                      <button onClick={() => setCategory("All")} className="text-xs font-semibold text-[#00aa13] hover:underline">Show all {daySessions.length} classes</button>
+                    )}
                   </div>
               }
             </div>

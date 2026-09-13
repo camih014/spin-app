@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CycleHQ · Prototype</title>
+    <style>
+      :root {
+        --brand: #00aa13;
+        --ink: #1b2333;
+        --muted: #6b7280;
+        --page: #eef1f4;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; }
+      body {
+        font-family: 'Poppins', system-ui, -apple-system, 'Segoe UI', sans-serif;
+        color: var(--ink);
+        background: radial-gradient(1200px 700px at 50% 30%, #ffffff 0%, var(--page) 60%, #e2e7ec 100%);
+        display: flex; flex-direction: column; overflow: hidden;
+      }
+
+      /* ── Toolbar ── */
+      .toolbar {
+        display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+        padding: 14px 24px;
+      }
+      .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+      .brand-mark { width: 30px; height: 30px; border-radius: 9px; background: var(--brand); display: grid; place-items: center; flex-shrink: 0; }
+      .brand-name { font-weight: 700; font-size: 16px; line-height: 1.1; }
+      .brand-sub { font-size: 12px; color: var(--muted); }
+      .controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+      .segmented { display: inline-flex; padding: 3px; border-radius: 999px; background: #fff; border: 1px solid #e3e7ec; box-shadow: 0 1px 2px rgba(20,30,50,.05); }
+      .segmented button {
+        font: inherit; font-size: 13px; font-weight: 600; border: 0; background: transparent; color: var(--muted);
+        padding: 6px 14px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+      }
+      .segmented button[aria-pressed="true"] { background: var(--brand); color: #fff; }
+      .segmented button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+      .readout { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 64px; }
+      .hint { font-size: 12px; color: var(--muted); }
+      .open-link { font-size: 13px; font-weight: 600; color: var(--brand); text-decoration: none; }
+      .open-link:hover { text-decoration: underline; }
+
+      /* ── Stage (scaled to fit) ── */
+      .stage-wrap { flex: 1; display: grid; place-items: center; padding: 8px 24px 24px; min-height: 0; }
+      .stage { position: relative; }
+      .device { position: absolute; top: 0; left: 0; width: 1760px; height: 1000px; transform-origin: 0 0; }
+
+      /* ── MacBook ── */
+      .lid {
+        position: absolute; left: 108px; top: 0; width: 1544px; height: 976px;
+        background: #0d0e10; border-radius: 30px 30px 14px 14px; padding: 16px;
+        box-shadow: 0 0 0 2px #2a2c30 inset, 0 30px 60px rgba(20,30,50,.18);
+      }
+      .notch {
+        position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
+        width: 190px; height: 30px; background: #0d0e10; border-radius: 0 0 12px 12px; z-index: 5;
+      }
+      .notch::after { content: ""; position: absolute; top: 10px; left: 50%; width: 9px; height: 9px; margin-left: -4.5px; border-radius: 50%; background: #1d2330; box-shadow: 0 0 0 2px #15181e; }
+      .screen {
+        position: relative; width: 1512px; height: 944px; border-radius: 14px; overflow: hidden;
+        background:
+          radial-gradient(900px 600px at 15% 20%, rgba(0,170,19,.55), transparent 60%),
+          radial-gradient(800px 700px at 85% 80%, rgba(14,116,144,.55), transparent 60%),
+          linear-gradient(135deg, #0f2a1c 0%, #10202c 100%);
+      }
+      .base {
+        position: absolute; left: 0; top: 972px; width: 1760px; height: 26px;
+        background: linear-gradient(#e7e9ec, #b9bdc3 70%, #8f949b);
+        border-radius: 4px 4px 40px 40px / 4px 4px 20px 20px;
+        box-shadow: 0 18px 30px rgba(20,30,50,.22);
+      }
+      .base::before { content: ""; position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 240px; height: 9px; background: linear-gradient(#a9adb3, #c9ccd1); border-radius: 0 0 10px 10px; }
+
+      /* ── macOS-style menu bar ── */
+      .menubar {
+        position: absolute; top: 0; left: 0; right: 0; height: 30px; padding: 0 18px;
+        display: flex; align-items: center; justify-content: space-between;
+        background: rgba(10,14,20,.35); backdrop-filter: blur(20px); color: rgba(255,255,255,.92); font-size: 13px;
+      }
+      .menubar .left, .menubar .right { display: flex; gap: 20px; align-items: center; }
+      .menubar b { font-weight: 600; }
+
+      /* ── App window ── */
+      .window {
+        position: absolute; top: 50px; left: 50%; transform: translateX(-50%);
+        height: 870px; border-radius: 12px; background: #fff; overflow: visible;
+        box-shadow: 0 0 0 1px rgba(0,0,0,.25), 0 25px 60px rgba(0,0,0,.45);
+      }
+      .window.animate { transition: width .35s cubic-bezier(.2,.8,.2,1); }
+      .window-inner { position: absolute; inset: 0; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; }
+      .titlebar {
+        height: 40px; flex-shrink: 0; display: flex; align-items: center; gap: 12px; padding: 0 14px;
+        background: #f3f4f6; border-bottom: 1px solid #e5e7eb;
+      }
+      .lights { display: flex; gap: 8px; flex-shrink: 0; }
+      .lights span { width: 12px; height: 12px; border-radius: 50%; }
+      .lights span:nth-child(1) { background: #ff5f57; }
+      .lights span:nth-child(2) { background: #febc2e; }
+      .lights span:nth-child(3) { background: #28c840; }
+      .url {
+        flex: 1; min-width: 0; margin: 0 auto; max-width: 420px; height: 26px; border-radius: 7px; background: #fff; border: 1px solid #e5e7eb;
+        display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 12.5px; color: #4b5563; white-space: nowrap; overflow: hidden;
+      }
+      .size-chip {
+        flex-shrink: 0; font-size: 11.5px; font-weight: 600; padding: 3px 9px; border-radius: 999px;
+        background: #e6f9e8; color: var(--brand); font-variant-numeric: tabular-nums; white-space: nowrap;
+      }
+      iframe { flex: 1; width: 100%; border: 0; display: block; background: #f9fafb; }
+
+      /* ── Resize handles ── */
+      .handle {
+        position: absolute; top: 0; bottom: 0; width: 22px; cursor: ew-resize; touch-action: none;
+        display: grid; place-items: center; outline: none;
+      }
+      .handle.left { left: -22px; }
+      .handle.right { right: -22px; }
+      .handle::before {
+        content: ""; width: 6px; height: 64px; border-radius: 3px; background: rgba(255,255,255,.55);
+        box-shadow: 0 1px 4px rgba(0,0,0,.3); transition: background .15s, height .15s;
+      }
+      .handle:hover::before, .handle:focus-visible::before, body.dragging .handle::before { background: #fff; height: 96px; }
+      .handle:focus-visible::before { box-shadow: 0 0 0 3px var(--brand); }
+
+      body.dragging, body.dragging * { cursor: ew-resize !important; user-select: none; }
+      body.dragging iframe { pointer-events: none; }
+    </style>
+  </head>
+  <body>
+    <header class="toolbar">
+      <div class="brand">
+        <div class="brand-mark">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+        </div>
+        <div>
+          <div class="brand-name">CycleHQ</div>
+          <div class="brand-sub">Interactive prototype</div>
+        </div>
+      </div>
+      <div class="controls">
+        <div class="segmented" role="group" aria-label="Preview size">
+          <button type="button" data-preset="desktop" aria-pressed="true">Desktop</button>
+          <button type="button" data-preset="tablet" aria-pressed="false">Tablet</button>
+          <button type="button" data-preset="phone" aria-pressed="false">Phone</button>
+        </div>
+        <span class="readout" id="readout">1464px</span>
+        <span class="hint">Drag the window edges to resize</span>
+        <a class="open-link" href="./" target="_blank" rel="noopener">Open full app ↗</a>
+      </div>
+    </header>
+
+    <main class="stage-wrap" id="stageWrap">
+      <div class="stage" id="stage">
+        <div class="device" id="device">
+          <div class="lid">
+            <div class="notch"></div>
+            <div class="screen" id="screen">
+              <div class="menubar">
+                <div class="left"><b>CycleHQ</b><span>File</span><span>Edit</span><span>View</span><span>Window</span><span>Help</span></div>
+                <div class="right"><span id="clock"></span></div>
+              </div>
+              <div class="window" id="window">
+                <div class="window-inner">
+                  <div class="titlebar">
+                    <div class="lights"><span></span><span></span><span></span></div>
+                    <div class="url">
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+                      cyclehq.app
+                    </div>
+                    <span class="size-chip" id="sizeChip">Desktop · 1464px</span>
+                  </div>
+                  <iframe src="./" title="CycleHQ app"></iframe>
+                </div>
+                <div class="handle left" data-side="left" tabindex="0" role="separator" aria-orientation="vertical" aria-label="Resize window from left edge"></div>
+                <div class="handle right" data-side="right" tabindex="0" role="separator" aria-orientation="vertical" aria-label="Resize window from right edge"></div>
+              </div>
+            </div>
+          </div>
+          <div class="base"></div>
+        </div>
+      </div>
+    </main>
+
+    <script>
+      const DEVICE_W = 1760, DEVICE_H = 1000
+      const MIN_W = 360
+      const MAX_W = 1512 - 48
+      // Same breakpoints the app uses (Tailwind md = 768, lg = 1024)
+      const PRESETS = { desktop: MAX_W, tablet: 834, phone: 390 }
+      const labelFor = w => w >= 1024 ? "Desktop" : w >= 768 ? "Tablet" : "Phone"
+
+      const win = document.getElementById("window")
+      const stage = document.getElementById("stage")
+      const device = document.getElementById("device")
+      const stageWrap = document.getElementById("stageWrap")
+      const readout = document.getElementById("readout")
+      const sizeChip = document.getElementById("sizeChip")
+      const presetButtons = document.querySelectorAll("[data-preset]")
+
+      let scale = 1
+      let width = MAX_W
+
+      function setWidth(w, animate = false) {
+        width = Math.round(Math.min(MAX_W, Math.max(MIN_W, w)))
+        win.classList.toggle("animate", animate)
+        win.style.width = width + "px"
+        const label = labelFor(width)
+        readout.textContent = width + "px"
+        sizeChip.textContent = `${label} · ${width}px`
+        presetButtons.forEach(b => b.setAttribute("aria-pressed", String(b.dataset.preset === label.toLowerCase())))
+        document.querySelectorAll(".handle").forEach(h => {
+          h.setAttribute("aria-valuenow", width); h.setAttribute("aria-valuemin", MIN_W); h.setAttribute("aria-valuemax", MAX_W)
+        })
+      }
+
+      function fit() {
+        const r = stageWrap.getBoundingClientRect()
+        const availW = r.width - 48, availH = r.height - 32
+        scale = Math.max(0.1, Math.min(availW / DEVICE_W, availH / DEVICE_H, 1))
+        device.style.transform = `scale(${scale})`
+        stage.style.width = DEVICE_W * scale + "px"
+        stage.style.height = DEVICE_H * scale + "px"
+      }
+
+      // Drag either edge; the window stays centred, so it grows by twice the pointer movement
+      document.querySelectorAll(".handle").forEach(handle => {
+        const dir = handle.dataset.side === "right" ? 1 : -1
+        handle.addEventListener("pointerdown", e => {
+          e.preventDefault()
+          handle.setPointerCapture(e.pointerId)
+          document.body.classList.add("dragging")
+          const startX = e.clientX, startW = width
+          const move = ev => setWidth(startW + dir * 2 * (ev.clientX - startX) / scale)
+          const up = () => {
+            document.body.classList.remove("dragging")
+            handle.removeEventListener("pointermove", move)
+            handle.removeEventListener("pointerup", up)
+            handle.removeEventListener("pointercancel", up)
+          }
+          handle.addEventListener("pointermove", move)
+          handle.addEventListener("pointerup", up)
+          handle.addEventListener("pointercancel", up)
+        })
+        handle.addEventListener("dblclick", () => setWidth(MAX_W, true))
+        handle.addEventListener("keydown", e => {
+          const step = e.shiftKey ? 50 : 10
+          if (e.key === "ArrowRight") { setWidth(width + dir * step); e.preventDefault() }
+          if (e.key === "ArrowLeft")  { setWidth(width - dir * step); e.preventDefault() }
+        })
+      })
+
+      presetButtons.forEach(b => b.addEventListener("click", () => setWidth(PRESETS[b.dataset.preset], true)))
+      win.addEventListener("transitionend", () => win.classList.remove("animate"))
+
+      const clock = document.getElementById("clock")
+      const tick = () => { clock.textContent = new Date().toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" }) }
+      tick(); setInterval(tick, 30000)
+
+      window.addEventListener("resize", fit)
+      fit()
+      setWidth(MAX_W)
+    </script>
+  </body>
+</html>

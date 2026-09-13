@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react"
+import { createPortal } from "react-dom"
 import {
   ArrowLeft, Play, Pause, SkipForward, RotateCcw, Search, Star, Music, Heart,
   Gauge, Zap, Activity, Radio, Bell, Award, Trophy, Target, Flame, TrendingUp,
@@ -1325,19 +1326,886 @@ const INSTRUCTOR_PERF = [
   { name: "Alex Papaya",  att: 79, ret: 74, rating: 4.7, repeat: 50, classes: 16, growth: 22 },
 ]
 
-// ── OVERVIEW ──
-export function OwnerOverviewPage({ darkMode, onToggleDarkMode, onNavigate, changeRequests = [], onResolveChange }) {
+// ─── STUDIO OPS: timetable, task overlays, slot scheduling & the studio calendar ───
+const OWNER_TODAY = "2026-02-26"
+const EMPTY_OPS = { done: {}, events: [], logDraft: {} }
+const opPad = n => String(n).padStart(2, "0")
+const opIso = d => `${d.getFullYear()}-${opPad(d.getMonth() + 1)}-${opPad(d.getDate())}`
+const opAddDays = (iso, n) => { const d = new Date(iso + "T00:00:00"); d.setDate(d.getDate() + n); return opIso(d) }
+const opDow = iso => (new Date(iso + "T00:00:00").getDay() + 6) % 7
+const OP_DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+const OP_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+const opFmtDay = iso => { const d = new Date(iso + "T00:00:00"); return `${OP_DOW[opDow(iso)]} ${d.getDate()} ${OP_MONTHS[d.getMonth()].slice(0, 3)}` }
+const opFmtMin = m => `${opPad(Math.floor(m / 60))}:${opPad(m % 60)}`
+
+// Weekly class timetable per studio (demo), Monday first
+const STUDIO_TIMETABLE = {
+  "Studio 1": [
+    ["06:30 Sunrise Power", "12:30 Midday Burn", "18:00 Evening Flow", "19:30 HIIT Blast"],
+    ["07:00 Cadence Control", "12:30 Lunch Sprint", "18:30 Threshold Push"],
+    ["06:30 Sunrise Power", "18:00 Power Tempo", "19:30 Climb Intervals"],
+    ["06:15 Sunrise Power", "10:00 Recovery Ride", "16:30 Power Tempo", "18:00 Evening Flow"],
+    ["07:00 Threshold Push", "12:30 Midday Burn", "18:30 Power Zone Ride"],
+    ["09:00 Rhythm Ride", "10:30 Saturday HIIT"],
+    ["10:00 Easy Endurance"],
+  ],
+  "Studio 2": [
+    ["07:00 Cadence Control", "12:00 Lunch Sprint", "19:00 Rhythm Ride"],
+    ["06:30 Endurance Builder", "18:30 Climb Intervals", "20:00 Night Ride"],
+    ["07:00 Cadence Control", "12:30 Cadence Control", "19:00 HIIT Blast"],
+    ["12:00 Lunch Sprint", "18:00 Evening Flow"],
+    ["07:30 Tempo Foundation", "17:30 Rhythm Ride"],
+    ["08:30 Easy Endurance", "11:30 Endurance Builder"],
+    ["11:00 Recovery Ride"],
+  ],
+}
+const OP_STUDIOS = Object.keys(STUDIO_TIMETABLE)
+function classesOn(iso, studio) {
+  return (STUDIO_TIMETABLE[studio]?.[opDow(iso)] || []).map(entry => {
+    const [time, ...name] = entry.split(" ")
+    const [h, m] = time.split(":").map(Number)
+    return { type: "class", date: iso, start: h * 60 + m, end: h * 60 + m + 45, title: name.join(" "), studio }
+  })
+}
+
+// Which overlay each seeded task opens
+const TASK_KINDS = { a1: "cover", a10: "repair", a5: "class-request", a4: "log", a2: "reengage", a3: "promote", a7: "service", a9: "licence", a8: "order", a11: "plan" }
+
+const opsBtn = (kind, d) => `px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+  kind === "primary" ? "bg-[#00aa13] hover:bg-[#008a0f] text-white"
+  : kind === "danger" ? "bg-red-500 hover:bg-red-600 text-white"
+  : d ? "border border-gray-700 text-gray-300 hover:bg-gray-800" : "border border-gray-200 text-gray-600 hover:bg-gray-50"}`
+
+function OpsModal({ darkMode, title, sub, Icon, color = GREEN, done, wide, onClose, footer, children }) {
   const t = tk(darkMode)
-  const [tasks, setTasks] = useState(() => OWNER_TASKS_SEED.map(a => ({ ...a, doneLabel: null })))
-  const [tab, setTab]     = useState("all")
-  const [range, setRange] = useState(7)
-  const resolve = (id, label) => setTasks(s => s.map(a => a.id === id ? { ...a, doneLabel: label } : a))
+  return createPortal(
+    <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center sm:p-4" role="dialog" aria-modal="true" aria-label={title}
+      onKeyDown={e => { if (e.key === "Escape") onClose() }}>
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" onClick={onClose} />
+      <div className={`relative w-full ${wide ? "sm:max-w-5xl" : "sm:max-w-xl"} max-h-[92vh] flex flex-col rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden ${darkMode ? "bg-gray-900 border border-gray-800" : "bg-white"}`}>
+        <div className={`flex items-start gap-3 px-5 pt-5 pb-4 border-b ${t.border}`}>
+          {Icon && <span className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: color + "1a", color }}><Icon size={18} /></span>}
+          <div className="flex-1 min-w-0">
+            <h2 className={`text-lg font-bold leading-tight ${t.heading}`}>{title}</h2>
+            {sub && <p className={`text-xs mt-0.5 ${t.muted}`}>{sub}</p>}
+          </div>
+          <button onClick={onClose} aria-label="Close" className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${darkMode ? "hover:bg-gray-800 text-gray-400" : "hover:bg-gray-100 text-gray-500"}`}>✕</button>
+        </div>
+        <div className="flex-1 overflow-y-auto overscroll-contain p-5">
+          {done && <div className="mb-4 rounded-xl px-3 py-2.5 text-xs font-semibold" style={{ background: "#00aa131a", color: GREEN }}>✓ {done}</div>}
+          {children}
+        </div>
+        {footer && <div className={`px-5 py-4 border-t ${t.border} flex flex-wrap items-center justify-end gap-2`}>{footer}</div>}
+      </div>
+    </div>,
+    document.body
+  )
+}
+
+// ── Scheduling a technician visit: rank the manufacturer's slots by disruption ──
+const TECH_WINDOWS = [[7 * 60, "Early morning"], [10 * 60, "Late morning"], [13 * 60, "Early afternoon"], [15 * 60 + 30, "Late afternoon"], [20 * 60, "Evening"]]
+function scheduleOptions({ studio, hours, bikes, broken }) {
+  const opts = []
+  for (let i = 1; i <= 7; i++) {
+    const iso = opAddDays(OWNER_TODAY, i), weekend = opDow(iso) >= 5
+    TECH_WINDOWS.forEach(([start, label], wi) => {
+      const end = start + hours * 60
+      const taken = (i * 3 + wi * 2) % 5 === 0 || (weekend && (wi === 0 || wi === 4))   // manufacturer already booked
+      const day = classesOn(iso, studio)
+      const disrupted = day.filter(c => c.start < end && c.end > start)
+      const backFor = day.filter(c => c.start >= end).length
+      // Broken bikes can't be ridden in any class until the repair is finished
+      let waiting = 0
+      if (broken) for (let j = 1; j <= i; j++) waiting += classesOn(opAddDays(OWNER_TODAY, j), studio).filter(c => j < i || c.start < end).length
+      const ridesLost = Math.round(waiting * bikes.length * 0.8)   // bikes are usually ~80% booked
+      const impact = disrupted.length * 90 + ridesLost * 12        // £ per disrupted class + £ per lost ride
+      opts.push({ id: `${iso}-${start}`, iso, start, end, label, taken, disrupted, backFor, ridesLost, impact })
+    })
+  }
+  const ranked = opts.filter(o => !o.taken).sort((a, b) => a.impact - b.impact || a.iso.localeCompare(b.iso) || a.start - b.start)
+  ranked.forEach((o, rank) => { o.tier = rank < ranked.length / 3 ? "good" : rank < ranked.length * 2 / 3 ? "ok" : "poor" })
+  return { opts, best: ranked[0] }
+}
+const TIER_COLOR = { good: GREEN, ok: "#f59e0b", poor: "#ef4444" }
+
+function SlotScheduler({ task, darkMode, onFinish, onClose, studio, hours, bikes, broken, title, what }) {
+  const t = tk(darkMode)
+  const { opts, best } = scheduleOptions({ studio, hours, bikes, broken })
+  const [pick, setPick] = useState(best?.id)
+  const sel = opts.find(o => o.id === pick) || best
+  const days = [...new Set(opts.map(o => o.iso))]
+  const reasons = o => [
+    o.disrupted.length ? `Disrupts ${o.disrupted.length} class${o.disrupted.length > 1 ? "es" : ""}` : "No classes during the visit",
+    broken && `${o.ridesLost} rides lost while broken`,
+    o.backFor > 0 && `Bikes back for ${o.backFor} later class${o.backFor > 1 ? "es" : ""} that day`,
+    `Est. impact £${o.impact}`,
+  ].filter(Boolean)
+  const compareRows = [
+    ["Classes disrupted", o => o.disrupted.length],
+    ...(broken ? [["Rides lost while broken", o => o.ridesLost]] : []),
+    ["Later classes with bikes back", o => o.backFor],
+    ["Estimated impact", o => `£${o.impact}`],
+  ]
+  const slotLabel = o => `${opFmtDay(o.iso)} · ${opFmtMin(o.start)}–${opFmtMin(o.end)}`
+
+  return (
+    <OpsModal wide darkMode={darkMode} Icon={Wrench} color="#0ea5e9" title={title} sub={`${what} · ${studio} · ${hours}h technician visit`} done={task.doneLabel} onClose={onClose}
+      footer={<>
+        <span className={`text-xs mr-auto ${t.muted}`}>{sel ? slotLabel(sel) : "Pick a slot"}</span>
+        <button onClick={onClose} className={opsBtn("secondary", darkMode)}>Cancel</button>
+        <button disabled={!sel} onClick={() => onFinish(`Booked · ${opFmtDay(sel.iso)} ${opFmtMin(sel.start)}`, { event: { id: `ev-${task.id}`, date: sel.iso, start: sel.start, end: sel.end, title: what, studio, type: "maintenance" } })}
+          className={opsBtn("primary", darkMode)}>Book {sel ? `${opFmtDay(sel.iso)} ${opFmtMin(sel.start)}` : "slot"}</button>
+      </>}>
+      <p className={`text-sm mb-4 ${t.muted}`}>
+        Available slots from the manufacturer's service team for the next 7 days. Each slot is scored against your {studio} timetable:
+        disrupting fewer classes is better{broken ? ", and fixing broken bikes sooner (e.g. early morning) means they earn for the rest of the day" : ""}.
+      </p>
+
+      {best && (
+        <div className="rounded-xl p-4 mb-4 border" style={{ borderColor: GREEN + "55", background: GREEN + "10" }}>
+          <p className="text-xs font-bold uppercase tracking-wider" style={{ color: GREEN }}>★ Suggested slot</p>
+          <p className={`text-base font-bold mt-0.5 ${t.heading}`}>{slotLabel(best)}</p>
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            {reasons(best).map(r => <span key={r} className={`text-[11px] font-semibold px-2 py-1 rounded-full ${t.chip}`}>{r}</span>)}
+          </div>
+          {sel && sel.id !== best.id && <button onClick={() => setPick(best.id)} className="text-xs font-semibold mt-2" style={{ color: GREEN }}>Use suggested slot</button>}
+        </div>
+      )}
+
+      <div className="overflow-x-auto -mx-1 px-1">
+        <table className="w-full min-w-[640px] border-separate" style={{ borderSpacing: 4 }}>
+          <thead>
+            <tr>
+              <th />
+              {days.map(iso => <th key={iso} className={`text-[11px] font-semibold ${t.muted}`}>{opFmtDay(iso)}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {TECH_WINDOWS.map(([start, label]) => (
+              <tr key={start}>
+                <td className={`text-[11px] pr-1 whitespace-nowrap ${t.muted}`}><span className={`font-semibold ${t.heading}`}>{opFmtMin(start)}</span><br />{label}</td>
+                {days.map(iso => {
+                  const o = opts.find(x => x.iso === iso && x.start === start)
+                  const on = sel && o.id === sel.id
+                  return (
+                    <td key={iso}>
+                      <button disabled={o.taken} onClick={() => setPick(o.id)} aria-pressed={on}
+                        aria-label={o.taken ? `${slotLabel(o)} taken` : `${slotLabel(o)}, ${reasons(o).join(", ")}`}
+                        className={`w-full rounded-lg px-2 py-2 text-left border-2 transition-all ${o.taken ? "cursor-not-allowed" : "hover:-translate-y-0.5"} ${on ? "ring-2 ring-offset-1 ring-[#0ea5e9]" : ""}`}
+                        style={o.taken ? { borderColor: "transparent", background: darkMode ? "#1f2937" : "#f3f4f6" } : { borderColor: TIER_COLOR[o.tier] + "66", background: TIER_COLOR[o.tier] + "14" }}>
+                        {o.taken ? <span className={`text-[11px] ${t.faint}`}>Taken</span> : <>
+                          <p className="text-xs font-bold" style={{ color: TIER_COLOR[o.tier] }}>£{o.impact}{best && o.id === best.id ? " ★" : ""}</p>
+                          <p className={`text-[10px] ${t.muted}`}>{o.disrupted.length ? `${o.disrupted.length} class${o.disrupted.length > 1 ? "es" : ""}` : "No classes"}</p>
+                        </>}
+                      </button>
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className={`flex flex-wrap gap-3 text-[11px] mt-2 ${t.muted}`}>
+        {[["good", "Lowest disruption"], ["ok", "Some disruption"], ["poor", "Most disruption"]].map(([k, l]) => <span key={k} className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: TIER_COLOR[k] }} />{l}</span>)}
+      </div>
+
+      {sel && best && (
+        <div className="grid sm:grid-cols-2 gap-3 mt-4">
+          <div className={`rounded-xl p-4 ${t.subtle}`}>
+            <p className={`text-xs font-bold uppercase tracking-wider mb-2 ${t.muted}`}>Compare</p>
+            <div className={`grid grid-cols-3 gap-y-1.5 text-xs ${t.muted}`}>
+              <span />
+              <span className="font-semibold text-right" style={{ color: "#0ea5e9" }}>Selected</span>
+              <span className="font-semibold text-right" style={{ color: GREEN }}>Suggested</span>
+              {compareRows.map(([label, fn]) => (
+                <React.Fragment key={label}>
+                  <span>{label}</span>
+                  <span className={`text-right font-bold tabular-nums ${t.heading}`}>{fn(sel)}</span>
+                  <span className={`text-right font-bold tabular-nums ${t.heading}`}>{fn(best)}</span>
+                </React.Fragment>
+              ))}
+            </div>
+          </div>
+          <div className={`rounded-xl p-4 ${t.subtle}`}>
+            <p className={`text-xs font-bold uppercase tracking-wider mb-2 ${t.muted}`}>Classes affected · {slotLabel(sel)}</p>
+            {sel.disrupted.length === 0
+              ? <p className="text-sm font-semibold" style={{ color: GREEN }}>No classes during this visit ✓</p>
+              : sel.disrupted.map(c => <p key={c.start} className={`text-sm ${t.heading}`}>{opFmtMin(c.start)} · {c.title}</p>)}
+          </div>
+        </div>
+      )}
+    </OpsModal>
+  )
+}
+
+// ── Service log: spreadsheet-style sheet per studio, saved as a draft until submitted ──
+const LOG_STUDIOS = [["Studio 1", 24], ["Studio 2", 20]]
+const LOG_CONDITIONS = ["Good", "Needs attention", "Out of service"]
+function logRows(studio, count) {
+  return Array.from({ length: count }, (_, i) => {
+    const bike = i + 1, s1 = studio === "Studio 1"
+    const days = s1 && bike === 12 ? 92 : ((bike * 37 + (s1 ? 3 : 11)) % 70) + 12
+    return { bike, days, flag: s1 && (bike === 4 || bike === 10) ? "Reported broken" : days > 85 ? "Overdue" : null }
+  })
+}
+const logRowComplete = r => !!(r && r.condition && r.brakes && r.drive)
+function logProgress(draft, only) {
+  let done = 0, total = 0
+  LOG_STUDIOS.filter(([s]) => !only || s === only).forEach(([s, n]) => { total += n; for (let b = 1; b <= n; b++) if (logRowComplete(draft?.[s]?.[b])) done++ })
+  return { done, total }
+}
+function logActionLabel(draft) {
+  const { done, total } = logProgress(draft)
+  return done === total ? "Submit log" : draft && Object.keys(draft).length ? "Continue log" : "Start log"
+}
+
+function ServiceLogSheet({ task, darkMode, onFinish, onClose, draft, setDraft }) {
+  const t = tk(darkMode)
+  const [studio, setStudio] = useState("Studio 1")
+  const rows = logRows(studio, LOG_STUDIOS.find(([s]) => s === studio)[1])
+  const { done, total } = logProgress(draft)
+  const set = (bike, patch) => setDraft(d => ({ ...d, [studio]: { ...(d[studio] || {}), [bike]: { ...(d[studio]?.[bike] || {}), ...patch } } }))
+  const fillGood = () => setDraft(d => {
+    const next = { ...(d[studio] || {}) }
+    rows.forEach(r => {
+      const cur = next[r.bike] || {}
+      if (!logRowComplete(cur)) next[r.bike] = { ...cur, condition: cur.condition || (r.flag === "Reported broken" ? "Out of service" : "Good"), brakes: true, drive: true }
+    })
+    return { ...d, [studio]: next }
+  })
+  const line = darkMode ? "border-gray-800" : "border-gray-200"
+  const cell = `px-2 py-1.5 border-r border-b ${line}`
+
+  return (
+    <OpsModal wide darkMode={darkMode} Icon={Wrench} color="#0ea5e9" title="Service log" done={task.doneLabel} onClose={onClose}
+      sub="Check each bike and fill in its row. Close any time — progress is kept as a draft until you submit."
+      footer={<>
+        <div className="mr-auto flex items-center gap-2 min-w-[11rem]">
+          <div className={`h-2 w-28 rounded-full overflow-hidden ${darkMode ? "bg-gray-800" : "bg-gray-100"}`}><div className="h-full rounded-full" style={{ width: `${done / total * 100}%`, background: GREEN }} /></div>
+          <span className={`text-xs font-semibold tabular-nums ${t.muted}`}>{done}/{total} bikes</span>
+        </div>
+        <button onClick={fillGood} className={opsBtn("secondary", darkMode)}>Fill rest of {studio} as Good</button>
+        <button onClick={onClose} className={opsBtn("secondary", darkMode)}>Close · keep draft</button>
+        <button disabled={done < total} onClick={() => onFinish("Service log submitted", { clearLog: true })} className={opsBtn("primary", darkMode)}>Submit log</button>
+      </>}>
+      <div className={`rounded-xl border overflow-hidden ${line}`}>
+        <div className="overflow-auto max-h-[52vh]">
+          <table className="w-full min-w-[760px] text-xs border-separate" style={{ borderSpacing: 0 }}>
+            <thead className="sticky top-0 z-10">
+              <tr className={darkMode ? "bg-gray-800" : "bg-gray-100"}>
+                {["", "A · Bike", "B · Last serviced", "C · Condition", "D · Brakes checked", "E · Belt & drive", "F · Notes", "G · Status"].map(h => (
+                  <th key={h} className={`${cell} text-left font-semibold whitespace-nowrap ${t.muted}`}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => {
+                const v = draft?.[studio]?.[r.bike] || {}
+                const complete = logRowComplete(v)
+                return (
+                  <tr key={r.bike} className={i % 2 ? (darkMode ? "bg-gray-900" : "bg-gray-50/70") : ""}>
+                    <td className={`${cell} w-8 text-center tabular-nums ${t.faint}`}>{i + 2}</td>
+                    <td className={`${cell} font-semibold whitespace-nowrap ${t.heading}`}>Bike {r.bike}{r.flag && <span className="ml-1.5 text-[10px] font-bold text-red-500">{r.flag}</span>}</td>
+                    <td className={`${cell} whitespace-nowrap ${r.days > 85 ? "text-red-500 font-semibold" : t.muted}`}>{r.days} days ago</td>
+                    <td className={cell}>
+                      <select value={v.condition || ""} onChange={e => set(r.bike, { condition: e.target.value })} aria-label={`Bike ${r.bike} condition`}
+                        className={`w-full bg-transparent focus:outline-none ${v.condition === "Out of service" ? "text-red-500 font-semibold" : v.condition === "Needs attention" ? "text-amber-500 font-semibold" : t.heading}`}>
+                        <option value="">—</option>
+                        {LOG_CONDITIONS.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </td>
+                    <td className={`${cell} text-center`}><input type="checkbox" checked={!!v.brakes} onChange={e => set(r.bike, { brakes: e.target.checked })} aria-label={`Bike ${r.bike} brakes checked`} className="w-4 h-4 accent-[#00aa13]" /></td>
+                    <td className={`${cell} text-center`}><input type="checkbox" checked={!!v.drive} onChange={e => set(r.bike, { drive: e.target.checked })} aria-label={`Bike ${r.bike} belt and drive checked`} className="w-4 h-4 accent-[#00aa13]" /></td>
+                    <td className={cell}><input value={v.notes || ""} onChange={e => set(r.bike, { notes: e.target.value })} placeholder="Add a note" aria-label={`Bike ${r.bike} notes`} className={`w-full min-w-[9rem] bg-transparent focus:outline-none ${t.heading}`} /></td>
+                    <td className={`${cell} whitespace-nowrap`}>{complete ? <span className="font-semibold" style={{ color: GREEN }}>✓ Done</span> : <span className={t.faint}>To do</span>}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+        {/* Sheet tabs, spreadsheet style */}
+        <div role="tablist" aria-label="Studio sheets" className={`flex gap-0.5 px-2 pt-1 border-t ${darkMode ? "bg-gray-800 border-gray-700" : "bg-gray-100 border-gray-200"}`}>
+          {LOG_STUDIOS.map(([s]) => {
+            const p = logProgress(draft, s)
+            return (
+              <button key={s} role="tab" aria-selected={studio === s} onClick={() => setStudio(s)}
+                className={`px-4 py-1.5 text-xs font-semibold rounded-t-md ${studio === s ? (darkMode ? "bg-gray-900 text-white" : "bg-white text-gray-900 shadow-sm") : t.muted}`}>
+                {s} <span className={t.faint}>{p.done}/{p.total}</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    </OpsModal>
+  )
+}
+
+// ── Other task overlays ──
+const COVER_INSTRUCTORS = [
+  { name: "Max Lime",    rating: 4.7, note: "Free Friday evening · has taught Power Zone Ride 12×", fee: "£75" },
+  { name: "Zen Kiwi",    rating: 4.9, note: "Free after 6pm · 2 miles from Hampstead", fee: "£75" },
+  { name: "Rio Banana",  rating: 4.6, note: "Teaching 17:30 in Shoreditch — tight turnaround", fee: "£80" },
+  { name: "Alex Papaya", rating: 4.7, note: "Usual instructor · marked unavailable", fee: "—", unavailable: true },
+]
+function CoverOverlay({ task, darkMode, onFinish, onClose }) {
+  const t = tk(darkMode)
+  const [asked, setAsked] = useState([])
+  return (
+    <OpsModal darkMode={darkMode} Icon={AlertTriangle} color="#ef4444" title="Find cover" sub="Power Zone Ride · Fri 27 Feb · 18:30 · Hampstead · 18 booked" done={task.doneLabel} onClose={onClose}
+      footer={<>
+        <button onClick={onClose} className={opsBtn("secondary", darkMode)}>Close</button>
+        <button disabled={!asked.length} onClick={() => onFinish(`Cover requested (${asked.length})`)} className={opsBtn("primary", darkMode)}>
+          Send {asked.length || ""} request{asked.length === 1 ? "" : "s"}
+        </button>
+      </>}>
+      <p className={`text-sm mb-3 ${t.muted}`}>Instructors who can teach this class, best match first. Requests go out together — the first to accept gets the class.</p>
+      <div className="flex flex-col gap-2">
+        {COVER_INSTRUCTORS.map(p => {
+          const on = asked.includes(p.name)
+          return (
+            <div key={p.name} className={`flex items-center gap-3 rounded-xl p-3 ${t.subtle} ${p.unavailable ? "opacity-50" : ""}`}>
+              <Avatar name={p.name} size={36} />
+              <div className="flex-1 min-w-0">
+                <p className={`text-sm font-semibold ${t.heading}`}>{p.name} <span className="text-xs text-amber-500">★ {p.rating}</span></p>
+                <p className={`text-xs ${t.muted}`}>{p.note}</p>
+              </div>
+              <span className={`text-xs font-semibold ${t.muted}`}>{p.fee}</span>
+              <button disabled={p.unavailable} onClick={() => setAsked(a => on ? a.filter(n => n !== p.name) : [...a, p.name])}
+                className={`text-xs font-semibold px-3 py-1.5 rounded-lg disabled:cursor-not-allowed ${on ? "bg-[#00aa13] text-white" : darkMode ? "bg-gray-700 text-gray-200" : "bg-white border border-gray-200 text-gray-700"}`}>
+                {on ? "✓ Selected" : "Select"}
+              </button>
+            </div>
+          )
+        })}
+      </div>
+    </OpsModal>
+  )
+}
+
+const LAPSED_MEMBERS = ["Priya S.", "Tom W.", "Grace L.", "Omar H.", "Ella M.", "Sam K.", "Nina R.", "Leo B.", "Maya T.", "Jack D.", "Zara P.", "Ben C.", "Isla F.", "Noah G.", "Ava J.", "Luca V.", "Chloe N.", "Finn O."]
+  .map((name, i) => ({ name, days: 14 + (i * 5) % 30, rides: 3 + (i * 7) % 20 }))
+function ReengageOverlay({ task, darkMode, onFinish, onClose }) {
+  const t = tk(darkMode)
+  const [picked, setPicked] = useState(LAPSED_MEMBERS.map(m => m.name))
+  const [offer, setOffer] = useState("A free class on us")
+  const [message, setMessage] = useState("Hey {first name} 👋 We've missed you at CycleHQ! Book any ride this week and it's on us — come keep your streak alive.")
+  const toggle = n => setPicked(p => p.includes(n) ? p.filter(x => x !== n) : [...p, n])
+  return (
+    <OpsModal darkMode={darkMode} Icon={Users} color="#f59e0b" title="Re-engage lapsed members" sub="18 members haven't ridden in 14+ days" done={task.doneLabel} onClose={onClose}
+      footer={<>
+        <button onClick={onClose} className={opsBtn("secondary", darkMode)}>Close</button>
+        <button disabled={!picked.length} onClick={() => onFinish(`Re-engaged ${picked.length}`)} className={opsBtn("primary", darkMode)}>Send to {picked.length} member{picked.length === 1 ? "" : "s"}</button>
+      </>}>
+      <div className="flex items-center justify-between mb-2">
+        <p className={`text-xs font-bold uppercase tracking-wider ${t.muted}`}>Members · {picked.length} selected</p>
+        <button onClick={() => setPicked(picked.length === LAPSED_MEMBERS.length ? [] : LAPSED_MEMBERS.map(m => m.name))} className="text-xs font-semibold" style={{ color: GREEN }}>
+          {picked.length === LAPSED_MEMBERS.length ? "Select none" : "Select all"}
+        </button>
+      </div>
+      <div className="grid sm:grid-cols-2 gap-1.5 mb-4">
+        {LAPSED_MEMBERS.map(m => (
+          <label key={m.name} className={`flex items-center gap-2.5 rounded-lg px-3 py-2 cursor-pointer ${t.subtle}`}>
+            <input type="checkbox" checked={picked.includes(m.name)} onChange={() => toggle(m.name)} className="w-4 h-4 accent-[#00aa13]" />
+            <span className={`text-sm flex-1 ${t.heading}`}>{m.name}</span>
+            <span className={`text-[11px] ${t.muted}`}>{m.days}d away · {m.rides} rides</span>
+          </label>
+        ))}
+      </div>
+      <p className={`text-xs font-bold uppercase tracking-wider mb-2 ${t.muted}`}>Offer</p>
+      <div className="flex flex-wrap gap-1.5 mb-4">
+        {["A free class on us", "20% off a class pack", "Bring a friend free"].map(o => (
+          <button key={o} onClick={() => setOffer(o)} className={`text-xs font-semibold px-3 py-1.5 rounded-full ${offer === o ? "bg-[#00aa13] text-white" : t.chip}`}>{o}</button>
+        ))}
+      </div>
+      <p className={`text-xs font-bold uppercase tracking-wider mb-2 ${t.muted}`}>Message</p>
+      <textarea value={message} onChange={e => setMessage(e.target.value)} rows={3}
+        className={`w-full rounded-xl border px-3 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#00aa13] ${darkMode ? "bg-gray-800 border-gray-700 text-white" : "bg-white border-gray-200 text-gray-900"}`} />
+      <p className={`text-[11px] mt-1 ${t.faint}`}>Offer included: {offer}</p>
+    </OpsModal>
+  )
+}
+
+const PROMO_CHANNELS = [["email", "Email 212 lapsed lunchtime riders", 18], ["push", "Push notification to 96 riders within a mile", 12], ["guest", "2-for-1 guest pass for members", 15], ["social", "Instagram story from the studio account", 6]]
+function PromoteOverlay({ task, darkMode, onFinish, onClose }) {
+  const t = tk(darkMode)
+  const [on, setOn] = useState(["email", "push"])
+  const base = 42
+  const projected = Math.min(100, base + PROMO_CHANNELS.filter(([k]) => on.includes(k)).reduce((s, [, , up]) => s + up, 0))
+  return (
+    <OpsModal darkMode={darkMode} Icon={TrendingDown} color="#f59e0b" title="Promote an under-filled class" sub="Cadence Control · Wed 4 Mar · 12:30 · Shoreditch · 10/24 booked" done={task.doneLabel} onClose={onClose}
+      footer={<>
+        <button onClick={onClose} className={opsBtn("secondary", darkMode)}>Close</button>
+        <button disabled={!on.length} onClick={() => onFinish(`Promoting · ${on.length} channel${on.length === 1 ? "" : "s"}`)} className={opsBtn("primary", darkMode)}>Launch promotion</button>
+      </>}>
+      <div className={`rounded-xl p-4 mb-4 ${t.subtle}`}>
+        <div className={`flex justify-between text-xs mb-1.5 ${t.muted}`}><span>Current fill</span><span className="font-bold">{base}%</span></div>
+        <div className={`h-2.5 rounded-full overflow-hidden ${darkMode ? "bg-gray-900" : "bg-white"}`}><div className="h-full rounded-full bg-amber-500" style={{ width: `${base}%` }} /></div>
+        <div className={`flex justify-between text-xs mt-3 mb-1.5 ${t.muted}`}><span>Projected with promotion</span><span className="font-bold" style={{ color: GREEN }}>{projected}%</span></div>
+        <div className={`h-2.5 rounded-full overflow-hidden ${darkMode ? "bg-gray-900" : "bg-white"}`}><div className="h-full rounded-full transition-all" style={{ width: `${projected}%`, background: GREEN }} /></div>
+      </div>
+      <p className={`text-xs font-bold uppercase tracking-wider mb-2 ${t.muted}`}>Channels</p>
+      <div className="flex flex-col gap-1.5">
+        {PROMO_CHANNELS.map(([k, label, up]) => (
+          <label key={k} className={`flex items-center gap-2.5 rounded-lg px-3 py-2.5 cursor-pointer ${t.subtle}`}>
+            <input type="checkbox" checked={on.includes(k)} onChange={() => setOn(s => s.includes(k) ? s.filter(x => x !== k) : [...s, k])} className="w-4 h-4 accent-[#00aa13]" />
+            <span className={`text-sm flex-1 ${t.heading}`}>{label}</span>
+            <span className="text-xs font-semibold" style={{ color: GREEN }}>+{up}%</span>
+          </label>
+        ))}
+      </div>
+    </OpsModal>
+  )
+}
+
+function ClassRequestOverlay({ task, darkMode, onFinish, onClose }) {
+  const t = tk(darkMode)
+  const [message, setMessage] = useState("")
+  const date = "2026-02-28", start = 10 * 60, studio = "Studio 2"
+  const day = classesOn(date, studio)
+  const clash = day.find(c => c.start < start + 45 && c.end > start)
+  const before = [...day].reverse().find(c => c.end <= start), after = day.find(c => c.start >= start + 45)
+  const facts = [
+    ["Class", "Rhythm Ride · social ride (random seating)"],
+    ["When", `${opFmtDay(date)} · ${opFmtMin(start)}–${opFmtMin(start + 45)} · weekly`],
+    ["Where", "Shoreditch · Studio 2 · 20 bikes"],
+    ["Requested by", "Zen Kiwi · ★ 4.9 · 18 classes this month"],
+    ["Demand", "Similar Saturday rides run 91% full with a waitlist most weeks"],
+  ]
+  return (
+    <OpsModal darkMode={darkMode} Icon={Calendar} color="#8b5cf6" title="Confirm class request" sub="New weekly class requested by an instructor" done={task.doneLabel} onClose={onClose}
+      footer={<>
+        <button onClick={() => onFinish("Declined")} className={`${opsBtn("secondary", darkMode)} mr-auto text-red-500`}>Decline</button>
+        <button onClick={onClose} className={opsBtn("secondary", darkMode)}>Close</button>
+        <button onClick={() => onFinish("Confirmed", { event: { id: `ev-${task.id}`, date, start, end: start + 45, title: "Rhythm Ride (new)", studio, type: "class" } })} className={opsBtn("primary", darkMode)}>Confirm class</button>
+      </>}>
+      <div className={`rounded-xl divide-y ${darkMode ? "divide-gray-700" : "divide-gray-200"} ${t.subtle}`}>
+        {facts.map(([k, v]) => (
+          <div key={k} className="flex gap-3 px-4 py-2.5">
+            <span className={`w-28 flex-shrink-0 text-xs ${t.muted}`}>{k}</span>
+            <span className={`text-sm ${t.heading}`}>{v}</span>
+          </div>
+        ))}
+      </div>
+      <div className="rounded-xl p-3 mt-3 text-sm font-semibold" style={clash ? { background: "#ef44441a", color: "#ef4444" } : { background: "#00aa131a", color: GREEN }}>
+        {clash ? `Clashes with ${clash.title} at ${opFmtMin(clash.start)}` : "No clash with the Studio 2 timetable ✓"}
+        <p className={`text-xs font-normal mt-0.5 ${t.muted}`}>
+          {before ? `Before: ${opFmtMin(before.start)} ${before.title} (ends ${opFmtMin(before.end)})` : "Nothing before"} · {after ? `After: ${opFmtMin(after.start)} ${after.title}` : "Nothing after"}
+        </p>
+      </div>
+      <p className={`text-xs font-bold uppercase tracking-wider mt-4 mb-2 ${t.muted}`}>Message to Zen Kiwi (optional)</p>
+      <textarea value={message} onChange={e => setMessage(e.target.value)} rows={2} placeholder="e.g. Love it — let's launch it with a guest-pass weekend."
+        className={`w-full rounded-xl border px-3 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#00aa13] ${darkMode ? "bg-gray-800 border-gray-700 text-white placeholder-gray-500" : "bg-white border-gray-200 text-gray-900 placeholder-gray-400"}`} />
+    </OpsModal>
+  )
+}
+
+function OpsBlocksChart({ blocks = [], compare }) {
+  return (
+    <div className="flex items-end gap-0.5 h-20">
+      {blocks.map((b, i) => (
+        <div key={i} className="relative h-full" style={{ flexGrow: b.mins, flexBasis: 0 }} title={`${b.name} · ${b.mins} min · Z${b.zone}`}>
+          <div className="absolute bottom-0 inset-x-0 rounded-t" style={{ height: `${b.zone / 6 * 100}%`, background: ZONE_COLORS[b.zone - 1], boxShadow: compare?.[i] && compare[i].zone !== b.zone ? "inset 0 0 0 2px #8b5cf6" : undefined }} />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function ChangeRequestOverlay({ task, darkMode, onClose, onResolveChange }) {
+  const t = tk(darkMode)
+  const r = task.request, ch = r.changes || {}
+  const orig = ch.originalBlocks || [], next = ch.blocks || []
+  const decide = status => { onResolveChange?.(r.id, status); onClose() }
+  return (
+    <OpsModal wide darkMode={darkMode} Icon={Sparkles} color="#8b5cf6" title={`${r.instructor} wants to change ${r.className}`} sub={`${r.when} · ${r.studio} · ${ch.scope === "future" ? "All future classes" : "This class only"}`} done={task.doneLabel} onClose={onClose}
+      footer={<>
+        <button onClick={() => decide("declined")} className={`${opsBtn("secondary", darkMode)} mr-auto text-red-500`}>Decline</button>
+        <button onClick={onClose} className={opsBtn("secondary", darkMode)}>Close</button>
+        <button onClick={() => decide("approved")} className={opsBtn("primary", darkMode)}>Approve changes</button>
+      </>}>
+      {r.note && <div className={`rounded-xl p-3 mb-4 text-sm italic ${t.subtle} ${t.heading}`}>“{r.note}”</div>}
+      {next.length > 0 && (
+        <div className="grid sm:grid-cols-2 gap-3 mb-4">
+          {[["Before", orig, ch.originalDifficulty, null], ["After", next, ch.difficulty, orig]].map(([label, blocks, diff, compare]) => (
+            <div key={label} className={`rounded-xl p-4 ${t.subtle}`}>
+              <div className="flex justify-between mb-2">
+                <p className={`text-xs font-bold uppercase tracking-wider ${t.muted}`}>{label}</p>
+                <p className={`text-xs font-semibold ${t.heading}`}>{diff} · {blocks.reduce((s, b) => s + b.mins, 0)} min</p>
+              </div>
+              <OpsBlocksChart blocks={blocks} compare={compare} />
+            </div>
+          ))}
+        </div>
+      )}
+      {next.length > 0 && (
+        <div className={`rounded-xl overflow-hidden border mb-4 ${t.border}`}>
+          <table className="w-full text-sm">
+            <thead className={darkMode ? "bg-gray-800" : "bg-gray-50"}>
+              <tr className={`text-xs ${t.muted}`}><th className="text-left px-3 py-2 font-semibold">Block</th><th className="text-right px-3 py-2 font-semibold">Minutes</th><th className="text-right px-3 py-2 font-semibold">Zone</th></tr>
+            </thead>
+            <tbody>
+              {next.map((b, i) => {
+                const o = orig[i]
+                const minsChanged = !o || o.mins !== b.mins, zoneChanged = !o || o.zone !== b.zone
+                return (
+                  <tr key={i} className={`border-t ${t.border}`}>
+                    <td className={`px-3 py-2 ${t.heading}`}>{b.name}{!o && <span className="ml-1.5 text-[10px] font-bold" style={{ color: GREEN }}>NEW</span>}</td>
+                    <td className={`px-3 py-2 text-right tabular-nums ${minsChanged ? "font-bold text-[#8b5cf6]" : t.muted}`}>{o && minsChanged ? `${o.mins} → ` : ""}{b.mins}</td>
+                    <td className={`px-3 py-2 text-right tabular-nums ${zoneChanged ? "font-bold text-[#8b5cf6]" : t.muted}`}>{o && zoneChanged ? `Z${o.zone} → ` : ""}Z{b.zone}</td>
+                  </tr>
+                )
+              })}
+              {orig.slice(next.length).map((b, i) => (
+                <tr key={`gone-${i}`} className={`border-t ${t.border} line-through text-red-500`}><td className="px-3 py-2">{b.name}</td><td className="px-3 py-2 text-right">{b.mins}</td><td className="px-3 py-2 text-right">Z{b.zone}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {(ch.removed?.length > 0 || ch.added?.length > 0) && (
+        <div className={`rounded-xl p-4 ${t.subtle}`}>
+          <p className={`text-xs font-bold uppercase tracking-wider mb-2 ${t.muted}`}>Playlist</p>
+          {ch.removed?.map(s => <p key={s} className="text-sm text-red-500 line-through">− {s}</p>)}
+          {ch.added?.map(s => <p key={s} className="text-sm font-semibold" style={{ color: GREEN }}>+ {s}</p>)}
+        </div>
+      )}
+      {!next.length && <p className={`text-sm ${t.muted}`}>{r.summary}</p>}
+    </OpsModal>
+  )
+}
+
+function LicenceOverlay({ task, darkMode, onFinish, onClose }) {
+  const t = tk(darkMode)
+  const [auto, setAuto] = useState(true)
+  const rows = [["Licence", "Music licence for group exercise classes"], ["Covers", "Hampstead & Shoreditch · all class playlists"], ["Expires", "Tue 10 Mar 2026"], ["Annual fee", "£1,284 (+2.4% on last year)"]]
+  return (
+    <OpsModal darkMode={darkMode} Icon={Clock} color="#f59e0b" title="Renew music licence" sub="Classes can't play music without it" done={task.doneLabel} onClose={onClose}
+      footer={<>
+        <button onClick={onClose} className={opsBtn("secondary", darkMode)}>Close</button>
+        <button onClick={() => onFinish(auto ? "Renewed · auto-renew on" : "Renewed to Mar 2027")} className={opsBtn("primary", darkMode)}>Renew for 12 months</button>
+      </>}>
+      <div className={`rounded-xl divide-y ${darkMode ? "divide-gray-700" : "divide-gray-200"} ${t.subtle}`}>
+        {rows.map(([k, v]) => <div key={k} className="flex gap-3 px-4 py-2.5"><span className={`w-24 flex-shrink-0 text-xs ${t.muted}`}>{k}</span><span className={`text-sm ${t.heading}`}>{v}</span></div>)}
+      </div>
+      <label className={`flex items-center gap-3 rounded-xl px-4 py-3 mt-3 cursor-pointer ${t.subtle}`}>
+        <input type="checkbox" checked={auto} onChange={e => setAuto(e.target.checked)} className="w-4 h-4 accent-[#00aa13]" />
+        <span className={`text-sm ${t.heading}`}>Turn on auto-renew so this doesn't lapse next year</span>
+      </label>
+    </OpsModal>
+  )
+}
+
+function OrderOverlay({ task, darkMode, onFinish, onClose }) {
+  const t = tk(darkMode)
+  const [qty, setQty] = useState(6)
+  const unit = 14.5
+  return (
+    <OpsModal darkMode={darkMode} Icon={Wrench} color="#0ea5e9" title="Order pedal straps" sub="Studio 1 · flagged worn on bikes 3, 7, 9, 15, 18 and 22" done={task.doneLabel} onClose={onClose}
+      footer={<>
+        <button onClick={onClose} className={opsBtn("secondary", darkMode)}>Close</button>
+        <button onClick={() => onFinish(`Ordered ${qty} pairs`, { event: { id: `ev-${task.id}`, date: "2026-03-03", start: 9 * 60, end: 10 * 60, title: `Delivery · ${qty} pairs of pedal straps`, studio: "Studio 1", type: "operations" } })} className={opsBtn("primary", darkMode)}>Place order · £{(qty * unit).toFixed(2)}</button>
+      </>}>
+      <div className={`rounded-xl p-4 ${t.subtle}`}>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className={`text-sm font-semibold ${t.heading}`}>Pedal straps (pair)</p>
+            <p className={`text-xs ${t.muted}`}>Studio cycle parts supplier · £{unit.toFixed(2)} each · arrives Tue 3 Mar</p>
+          </div>
+          <div className={`flex items-center rounded-lg border ${darkMode ? "border-gray-700" : "border-gray-200"}`}>
+            <button onClick={() => setQty(q => Math.max(1, q - 1))} aria-label="Fewer" className={`w-8 h-9 ${t.muted}`}>−</button>
+            <span className={`w-8 text-center text-sm font-bold tabular-nums ${t.heading}`}>{qty}</span>
+            <button onClick={() => setQty(q => q + 1)} aria-label="More" className={`w-8 h-9 ${t.muted}`}>+</button>
+          </div>
+        </div>
+      </div>
+      <p className={`text-xs mt-3 ${t.muted}`}>The delivery is added to the studio calendar so someone's in to receive it.</p>
+    </OpsModal>
+  )
+}
+
+const PLAN_STEPS = ["Review summer demand in Class performance", "Collect instructor availability (Jun–Aug)", "Draft the timetable for both studios", "Share the draft with instructors for slot picks"]
+function PlanOverlay({ task, darkMode, onFinish, onClose, onNavigate }) {
+  const t = tk(darkMode)
+  const [ticked, setTicked] = useState([])
+  return (
+    <OpsModal darkMode={darkMode} Icon={Sparkles} color="#8b5cf6" title="Plan the summer timetable" sub="Due in 45 days" done={task.doneLabel} onClose={onClose}
+      footer={<>
+        <button onClick={() => { onClose(); onNavigate?.("Classes") }} className={`${opsBtn("secondary", darkMode)} mr-auto`}>Open class performance</button>
+        <button onClick={onClose} className={opsBtn("secondary", darkMode)}>Close</button>
+        <button disabled={!ticked.length} onClick={() => onFinish(ticked.length === PLAN_STEPS.length ? "Plan ready" : `Started · ${ticked.length}/${PLAN_STEPS.length} steps`)} className={opsBtn("primary", darkMode)}>Save progress</button>
+      </>}>
+      <div className="flex flex-col gap-1.5">
+        {PLAN_STEPS.map((s, i) => (
+          <label key={s} className={`flex items-center gap-3 rounded-xl px-4 py-3 cursor-pointer ${t.subtle}`}>
+            <input type="checkbox" checked={ticked.includes(i)} onChange={() => setTicked(x => x.includes(i) ? x.filter(n => n !== i) : [...x, i])} className="w-4 h-4 accent-[#00aa13]" />
+            <span className={`text-sm ${t.heading} ${ticked.includes(i) ? "line-through opacity-60" : ""}`}>{s}</span>
+          </label>
+        ))}
+      </div>
+    </OpsModal>
+  )
+}
+
+function TaskOverlay({ task, darkMode, ops, setOps, onFinish, onResolveChange, onNavigate, onClose }) {
+  const common = { task, darkMode, onFinish, onClose }
+  switch (task.kind) {
+    case "repair":  return <SlotScheduler {...common} studio="Studio 1" hours={2} bikes={[4, 10]} broken title="Book repair" what="Repair · Bikes 4 & 10" />
+    case "service": return <SlotScheduler {...common} studio="Studio 2" hours={3} bikes={[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]} title="Schedule quarterly service" what="Service · Studio 2 bikes 1–10" />
+    case "log":     return <ServiceLogSheet {...common} draft={ops.logDraft} setDraft={fn => setOps?.(o => ({ ...o, logDraft: fn(o.logDraft || {}) }))} />
+    case "cover":   return <CoverOverlay {...common} />
+    case "reengage": return <ReengageOverlay {...common} />
+    case "promote": return <PromoteOverlay {...common} />
+    case "class-request": return <ClassRequestOverlay {...common} />
+    case "change-request": return <ChangeRequestOverlay {...common} onResolveChange={onResolveChange} />
+    case "licence": return <LicenceOverlay {...common} />
+    case "order":   return <OrderOverlay {...common} />
+    default:        return <PlanOverlay {...common} onNavigate={onNavigate} />
+  }
+}
+
+// ── Studio calendar: classes, booked maintenance/operations and deadlines, colour-coded ──
+const CAL_TYPES = [
+  ["class", "Classes", GREEN],
+  ["maintenance", "Maintenance booked", "#0ea5e9"],
+  ["operations", "Operations", "#f59e0b"],
+  ["deadline", "Deadlines & logs due", "#fb7512"],
+  ["approval", "Approvals", "#8b5cf6"],
+  ["urgent", "Urgent", "#ef4444"],
+]
+const CAL_COLOR = Object.fromEntries(CAL_TYPES.map(([k, , c]) => [k, c]))
+const CAL_LABEL = Object.fromEntries(CAL_TYPES.map(([k, l]) => [k, l]))
+const SEED_EVENTS = [
+  { id: "se1", date: "2026-03-02", start: 14 * 60, end: 15 * 60, title: "Instructor team meeting", studio: "Studio 1", type: "operations" },
+  { id: "se2", date: "2026-03-01", start: 16 * 60, end: 18 * 60, title: "Deep clean", studio: "Studio 2", type: "operations" },
+  { id: "se3", date: "2026-03-05", start: 21 * 60, end: 22 * 60, title: "Fire safety check", studio: "Studio 1", type: "maintenance" },
+  { id: "se4", date: "2026-02-27", start: 14 * 60, end: 15 * 60, title: "Sound system tune-up", studio: "Studio 2", type: "maintenance" },
+]
+function calendarItems(days, ops, changeRequests) {
+  const inView = new Set(days)
+  const items = []
+  days.forEach(iso => OP_STUDIOS.forEach(s => items.push(...classesOn(iso, s))))
+  for (const e of [...SEED_EVENTS, ...(ops.events || [])]) if (inView.has(e.date)) items.push(e)
+  for (const task of OWNER_TASKS_SEED) {
+    if (ops.done?.[task.id]) continue
+    const date = task.due < 0 ? OWNER_TODAY : opAddDays(OWNER_TODAY, task.due)
+    if (!inView.has(date)) continue
+    const type = task.priority === "urgent" || task.due < 0 ? "urgent" : task.category === "approvals" ? "approval" : "deadline"
+    items.push({ id: "task-" + task.id, date, allDay: true, type, title: task.title, sub: task.sub, studio: (task.sub.match(/Studio \d/) || [])[0] })
+  }
+  for (const r of changeRequests) {
+    const date = opAddDays(OWNER_TODAY, 2)
+    if (r.status === "pending" && inView.has(date)) items.push({ id: "req-" + r.id, date, allDay: true, type: "approval", title: `Review ${r.instructor}'s changes to ${r.className}`, sub: r.summary, studio: r.studio })
+  }
+  return items.map((it, i) => ({ id: it.id || `${it.type}-${it.date}-${it.start}-${it.studio}-${i}`, ...it }))
+}
+function layoutDay(list) {
+  const laneEnds = []
+  const placed = list.filter(i => !i.allDay).sort((a, b) => a.start - b.start || b.end - a.end).map(it => {
+    let lane = laneEnds.findIndex(end => end <= it.start)
+    if (lane < 0) { lane = laneEnds.length; laneEnds.push(it.end) } else laneEnds[lane] = it.end
+    return { ...it, lane }
+  })
+  return { placed, lanes: Math.max(1, laneEnds.length) }
+}
+
+export function OwnerCalendarPage({ darkMode, onToggleDarkMode, onNavigate, ops = EMPTY_OPS, changeRequests = [] }) {
+  const t = tk(darkMode)
+  const [view, setView]     = useState("week")
+  const [anchor, setAnchor] = useState(OWNER_TODAY)
+  const [studio, setStudio] = useState("all")
+  const [hidden, setHidden] = useState([])
+  const [picked, setPicked] = useState(null)   // { item } or { day }
+
+  const a = new Date(anchor + "T00:00:00")
+  const weekStart  = opAddDays(anchor, -opDow(anchor))
+  const monthFirst = opIso(new Date(a.getFullYear(), a.getMonth(), 1))
+  const gridStart  = opAddDays(monthFirst, -opDow(monthFirst))
+  const days = view === "week" ? Array.from({ length: 7 }, (_, i) => opAddDays(weekStart, i)) : Array.from({ length: 42 }, (_, i) => opAddDays(gridStart, i))
+  const allItems = calendarItems(days, ops, changeRequests).filter(it => studio === "all" || !it.studio || it.studio === studio)
+  const items = allItems.filter(it => !hidden.includes(it.type))
+  const byDay = {}
+  items.forEach(it => { (byDay[it.date] ||= []).push(it) })
+  const shift = dir => { setPicked(null); setAnchor(view === "week" ? opAddDays(anchor, dir * 7) : opIso(new Date(a.getFullYear(), a.getMonth() + dir, 1))) }
+  const heading = view === "week" ? `${opFmtDay(weekStart)} – ${opFmtDay(opAddDays(weekStart, 6))}` : `${OP_MONTHS[a.getMonth()]} ${a.getFullYear()}`
+  const HOUR_H = 44, DAY_START = 6 * 60, DAY_END = 22 * 60
+  const hours = Array.from({ length: 16 }, (_, i) => 6 + i)
+  const gridH = (DAY_END - DAY_START) / 60 * HOUR_H
+  const timeOf = it => it.allDay ? "Due" : `${opFmtMin(it.start)}–${opFmtMin(it.end)}`
+  const sortItems = list => [...list].sort((x, y) => (x.allDay ? -1 : 1) - (y.allDay ? -1 : 1) || (x.start || 0) - (y.start || 0))
+
+  const renderPill = it => (
+    <button key={it.id} onClick={e => { e.stopPropagation(); setPicked({ item: it }) }} title={it.title}
+      className="w-full text-left text-[10px] font-semibold px-1.5 py-0.5 rounded text-white truncate hover:brightness-110" style={{ background: CAL_COLOR[it.type] }}>
+      {it.title}
+    </button>
+  )
+
+  return (
+    <Shell max="max-w-7xl">
+      <PageHead darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} onBack={() => onNavigate("Overview")} backLabel="Overview"
+        title="Studio calendar" sub="Classes, maintenance, operations and deadlines at a glance" Icon={Calendar} gradient="linear-gradient(135deg,#00aa13,#0ea5e9)" />
+
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <div className={`inline-flex rounded-xl p-0.5 ${darkMode ? "bg-gray-800" : "bg-gray-100"}`}>
+          {[["week", "Week"], ["month", "Month"]].map(([k, l]) => (
+            <button key={k} onClick={() => { setView(k); setPicked(null) }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${view === k ? (darkMode ? "bg-gray-700 text-white shadow-sm" : "bg-white text-gray-900 shadow-sm") : t.muted}`}>{l}</button>
+          ))}
+        </div>
+        <button onClick={() => shift(-1)} aria-label="Previous" className={`w-8 h-8 rounded-lg ${t.chip}`}>‹</button>
+        <button onClick={() => { setAnchor(OWNER_TODAY); setPicked(null) }} className={`px-3 h-8 rounded-lg text-xs font-semibold ${t.chip}`}>Today</button>
+        <button onClick={() => shift(1)} aria-label="Next" className={`w-8 h-8 rounded-lg ${t.chip}`}>›</button>
+        <p className={`text-sm font-semibold ml-1 ${t.heading}`}>{heading}</p>
+        <select value={studio} onChange={e => setStudio(e.target.value)} aria-label="Studio"
+          className={`ml-auto text-xs font-semibold rounded-lg px-2.5 py-1.5 border ${darkMode ? "bg-gray-800 border-gray-700 text-gray-200" : "bg-white border-gray-200 text-gray-700"}`}>
+          <option value="all">All studios</option>
+          {OP_STUDIOS.map(s => <option key={s} value={s}>{s} · {s === "Studio 1" ? "Hampstead" : "Shoreditch"}</option>)}
+        </select>
+      </div>
+
+      <div className="flex flex-wrap gap-1.5 mb-4" aria-label="Show on calendar">
+        {CAL_TYPES.map(([k, label, c]) => {
+          const off = hidden.includes(k), n = allItems.filter(it => it.type === k).length
+          return (
+            <button key={k} aria-pressed={!off} onClick={() => setHidden(h => off ? h.filter(x => x !== k) : [...h, k])}
+              className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-full border transition-opacity ${off ? "opacity-45" : ""} ${darkMode ? "border-gray-700 text-gray-200" : "border-gray-200 text-gray-700"}`}>
+              <span className="w-2.5 h-2.5 rounded-full" style={{ background: c }} />{label}<span className={t.faint}>{n}</span>
+            </button>
+          )
+        })}
+      </div>
+
+      {view === "week" ? (
+        <div className={`${t.card} overflow-x-auto`}>
+          <div className="min-w-[780px] grid" style={{ gridTemplateColumns: "3.25rem repeat(7, minmax(0, 1fr))" }}>
+            <div />
+            {days.map(iso => (
+              <button key={iso} onClick={() => setPicked({ day: iso })} className={`px-2 py-2.5 text-center border-l ${t.border} ${iso === OWNER_TODAY ? "text-[#00aa13]" : t.heading}`}>
+                <p className="text-[11px] font-semibold uppercase">{OP_DOW[opDow(iso)]}</p>
+                <p className="text-lg font-bold leading-tight">{Number(iso.slice(8))}</p>
+              </button>
+            ))}
+            <div className={`text-[10px] px-1 py-2 border-t ${t.border} ${t.faint}`}>Due</div>
+            {days.map(iso => (
+              <div key={iso} className={`border-l border-t ${t.border} p-1 flex flex-col gap-1 min-h-[2.5rem]`}>
+                {(byDay[iso] || []).filter(i => i.allDay).map(renderPill)}
+              </div>
+            ))}
+            <div className={`relative border-t ${t.border}`} style={{ height: gridH }}>
+              {hours.map(h => <span key={h} className={`absolute right-1.5 text-[10px] tabular-nums ${t.faint}`} style={{ top: (h * 60 - DAY_START) / 60 * HOUR_H + 2 }}>{opPad(h)}:00</span>)}
+            </div>
+            {days.map(iso => {
+              const { placed, lanes } = layoutDay(byDay[iso] || [])
+              return (
+                <div key={iso} className={`relative border-l border-t ${t.border}`} style={{ height: gridH, background: iso === OWNER_TODAY ? (darkMode ? "rgba(0,170,19,0.06)" : "rgba(0,170,19,0.03)") : undefined }}>
+                  {hours.map(h => <div key={h} className={`absolute inset-x-0 border-t ${darkMode ? "border-gray-800/70" : "border-gray-100"}`} style={{ top: (h * 60 - DAY_START) / 60 * HOUR_H }} />)}
+                  {placed.map(it => (
+                    <button key={it.id} onClick={() => setPicked({ item: it })} title={`${opFmtMin(it.start)} ${it.title}${it.studio ? ` · ${it.studio}` : ""}`}
+                      className={`absolute rounded-md px-1 py-0.5 text-left overflow-hidden text-white shadow-sm hover:brightness-110 ${picked?.item?.id === it.id ? "ring-2 ring-offset-1 ring-gray-900" : ""}`}
+                      style={{
+                        top: (Math.max(it.start, DAY_START) - DAY_START) / 60 * HOUR_H + 1,
+                        height: Math.max(18, (Math.min(it.end, DAY_END) - Math.max(it.start, DAY_START)) / 60 * HOUR_H - 2),
+                        left: `calc(${it.lane / lanes * 100}% + 1px)`, width: `calc(${100 / lanes}% - 2px)`, background: CAL_COLOR[it.type],
+                      }}>
+                      <p className="text-[9px] font-bold leading-tight truncate">{opFmtMin(it.start)} {it.title}</p>
+                      {lanes === 1 && it.studio && <p className="text-[9px] leading-tight truncate opacity-85">{it.studio}</p>}
+                    </button>
+                  ))}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      ) : (
+        <div className={`${t.card} p-2 sm:p-3`}>
+          <div className="grid grid-cols-7 mb-1">
+            {OP_DOW.map(d => <p key={d} className={`text-[11px] font-semibold text-center py-1 ${t.muted}`}>{d}</p>)}
+          </div>
+          <div className="grid grid-cols-7 gap-1">
+            {days.map(iso => {
+              const list = byDay[iso] || []
+              const classes = list.filter(i => i.type === "class"), others = sortItems(list.filter(i => i.type !== "class"))
+              const inMonth = iso.slice(0, 7) === monthFirst.slice(0, 7)
+              return (
+                <div key={iso} role="button" tabIndex={0} onClick={() => setPicked({ day: iso })} onKeyDown={e => { if (e.key === "Enter") setPicked({ day: iso }) }}
+                  className={`min-h-[96px] rounded-lg p-1.5 text-left border cursor-pointer transition-colors ${picked?.day === iso ? "border-[#00aa13]" : iso === OWNER_TODAY ? "border-[#00aa13]/60" : t.border} ${inMonth ? "" : "opacity-45"} ${darkMode ? "hover:bg-gray-800" : "hover:bg-gray-50"}`}>
+                  <p className={`text-xs font-semibold mb-1 ${iso === OWNER_TODAY ? "text-[#00aa13]" : t.heading}`}>{Number(iso.slice(8))}</p>
+                  <div className="flex flex-col gap-0.5">
+                    {classes.length > 0 && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded text-white truncate" style={{ background: CAL_COLOR.class }}>{classes.length} classes</span>}
+                    {others.slice(0, 2).map(renderPill)}
+                    {others.length > 2 && <span className={`text-[10px] ${t.muted}`}>+{others.length - 2} more</span>}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {picked && (
+        <div className={`${t.card} p-4 mt-4`}>
+          {picked.item ? (
+            <div className="flex items-start gap-3">
+              <span className="w-3 h-3 rounded-full mt-1.5 flex-shrink-0" style={{ background: CAL_COLOR[picked.item.type] }} />
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] font-bold uppercase tracking-wider" style={{ color: CAL_COLOR[picked.item.type] }}>{CAL_LABEL[picked.item.type]}</p>
+                <p className={`text-base font-bold ${t.heading}`}>{picked.item.title}</p>
+                <p className={`text-sm ${t.muted}`}>{opFmtDay(picked.item.date)} · {timeOf(picked.item)}{picked.item.studio ? ` · ${picked.item.studio}` : ""}</p>
+                {picked.item.sub && <p className={`text-xs mt-1 ${t.muted}`}>{picked.item.sub}</p>}
+              </div>
+              {(picked.item.id.startsWith("task-") || picked.item.id.startsWith("req-")) && (
+                <button onClick={() => onNavigate("Overview")} className="text-xs font-semibold px-3 py-1.5 rounded-lg text-white" style={{ background: CAL_COLOR[picked.item.type] }}>Open in tasks</button>
+              )}
+              <button onClick={() => setPicked(null)} aria-label="Close" className={`w-7 h-7 rounded-lg ${t.muted}`}>✕</button>
+            </div>
+          ) : (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <p className={`text-sm font-semibold ${t.heading}`}>{opFmtDay(picked.day)}</p>
+                <button onClick={() => setPicked(null)} aria-label="Close" className={`w-7 h-7 rounded-lg ${t.muted}`}>✕</button>
+              </div>
+              {(byDay[picked.day] || []).length === 0 ? <p className={`text-sm ${t.muted}`}>Nothing on this day.</p> : (
+                <div className="flex flex-col gap-1">
+                  {sortItems(byDay[picked.day]).map(it => (
+                    <button key={it.id} onClick={() => setPicked({ item: it })} className={`flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left ${darkMode ? "hover:bg-gray-800" : "hover:bg-gray-50"}`}>
+                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: CAL_COLOR[it.type] }} />
+                      <span className={`text-xs w-20 flex-shrink-0 tabular-nums ${t.muted}`}>{timeOf(it)}</span>
+                      <span className={`text-sm flex-1 truncate ${t.heading}`}>{it.title}</span>
+                      {it.studio && <span className={`text-xs ${t.faint}`}>{it.studio}</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </Shell>
+  )
+}
+
+// ── OVERVIEW ──
+export function OwnerOverviewPage({ darkMode, onToggleDarkMode, onNavigate, changeRequests = [], onResolveChange, ops = EMPTY_OPS, setOps }) {
+  const t = tk(darkMode)
+  const [tab, setTab]           = useState("all")
+  const [range, setRange]       = useState(7)
+  const [openTask, setOpenTask] = useState(null)   // task whose detail overlay is open
+  // Task progress lives in App (ops), so it survives page changes and feeds the studio calendar
+  const tasks = OWNER_TASKS_SEED.map(a => ({ ...a, kind: TASK_KINDS[a.id], doneLabel: ops.done[a.id] || null }))
+  const finish = (id, label, extra = {}) => setOps?.(o => ({
+    ...o,
+    done: { ...o.done, [id]: label },
+    events: extra.event ? [...o.events.filter(e => e.id !== extra.event.id), extra.event] : o.events,
+    logDraft: extra.clearLog ? {} : o.logDraft,
+  }))
 
   // Instructor class edits arrive as approvals
   const requestTasks = changeRequests.map(r => ({
-    id: r.id, Icon: Sparkles, c: "#8b5cf6", category: "approvals", priority: "normal", due: 2, isRequest: true,
+    id: r.id, Icon: Sparkles, c: "#8b5cf6", category: "approvals", priority: "normal", due: 2, kind: "change-request", request: r,
     title: `${r.instructor} wants to change ${r.className}`, sub: `${r.when} · ${r.studio} · ${r.summary}`, note: r.note,
-    actions: [{ label: "Approve", doneLabel: "Approved", status: "approved", c: GREEN }, { label: "Decline", doneLabel: "Declined", status: "declined", c: "#6b7280" }],
+    actions: [{ label: "Review", c: "#8b5cf6" }],
     doneLabel: r.status === "approved" ? "Approved" : r.status === "declined" ? "Declined" : null,
   }))
   const isUrgent = a => a.priority === "urgent" || a.due < 0
@@ -1349,7 +2217,8 @@ export function OwnerOverviewPage({ darkMode, onToggleDarkMode, onNavigate, chan
   const shown = inRange.filter(a => matches(a, tab))
     .sort((a, b) => (a.doneLabel ? 1 : 0) - (b.doneLabel ? 1 : 0) || Number(isUrgent(b)) - Number(isUrgent(a)) || a.due - b.due)
   const dueLabel = d => d < 0 ? `Overdue by ${-d} day${d === -1 ? "" : "s"}` : d === 0 ? "Due today" : d === 1 ? "Due tomorrow" : `Due in ${d} days`
-  const act = (a, action) => a.isRequest ? onResolveChange?.(a.id, action.status) : resolve(a.id, action.doneLabel)
+  const buttonLabel = a => a.kind === "log" ? logActionLabel(ops.logDraft) : a.kind === "class-request" ? "Review" : a.actions[0].label
+  const activeTask = [...requestTasks, ...tasks].find(a => a.id === openTask)
   const rangeLabel = TASK_RANGES.find(([v]) => v === range)[1].toLowerCase()
   const links = [
     { key: "Revenue", label: "Revenue", sub: "Trends & breakdown", Icon: Wallet, c: GREEN },
@@ -1407,7 +2276,7 @@ export function OwnerOverviewPage({ darkMode, onToggleDarkMode, onNavigate, chan
                 <span className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: (a.doneLabel ? "#00aa13" : a.c) + "1a", color: a.doneLabel ? GREEN : a.c }}>
                   {a.doneLabel ? <Check size={16} /> : <a.Icon size={16} />}
                 </span>
-                <div className="flex-1 min-w-0">
+                <button onClick={() => setOpenTask(a.id)} className="flex-1 min-w-0 text-left">
                   <p className={`text-sm font-semibold ${t.heading} ${a.doneLabel ? "line-through" : ""}`}>{a.title}</p>
                   <p className={`text-xs ${t.muted} ${a.doneLabel ? "line-through" : ""}`}>{a.sub}</p>
                   {a.note && <p className={`text-xs italic mt-1 ${t.muted}`}>“{a.note}”</p>}
@@ -1416,16 +2285,14 @@ export function OwnerOverviewPage({ darkMode, onToggleDarkMode, onNavigate, chan
                       {dueLabel(a.due)}{a.priority === "urgent" ? " · Urgent" : ""}
                     </p>
                   )}
-                </div>
+                </button>
                 {a.doneLabel
                   ? <span className="flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg flex-shrink-0" style={{ background: "#00aa131a", color: GREEN }}><Check size={13} /> {a.doneLabel}</span>
                   : (
-                    <div className="flex flex-col sm:flex-row gap-1.5 flex-shrink-0">
-                      {a.actions.map(ac => (
-                        <button key={ac.label} onClick={() => act(a, ac)}
-                          className="text-xs font-semibold px-3 py-1.5 rounded-lg text-white transition-colors hover:opacity-90" style={{ background: ac.c }}>{ac.label}</button>
-                      ))}
-                    </div>
+                    <button onClick={() => setOpenTask(a.id)}
+                      className="text-xs font-semibold px-3 py-1.5 rounded-lg text-white flex-shrink-0 transition-colors hover:opacity-90" style={{ background: a.actions[0].c }}>
+                      {buttonLabel(a)}
+                    </button>
                   )}
               </div>
             ))}
@@ -1454,6 +2321,11 @@ export function OwnerOverviewPage({ darkMode, onToggleDarkMode, onNavigate, chan
           </div>
         </div>
       </div>
+      {activeTask && (
+        <TaskOverlay task={activeTask} darkMode={darkMode} ops={ops} setOps={setOps} onNavigate={onNavigate}
+          onFinish={(label, extra) => { finish(activeTask.id, label, extra); setOpenTask(null) }}
+          onResolveChange={onResolveChange} onClose={() => setOpenTask(null)} />
+      )}
     </Shell>
   )
 }

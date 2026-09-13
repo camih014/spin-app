@@ -5,7 +5,7 @@ import { Home, Calendar, BookOpen, Bike, Trophy, User, Settings, LogOut,
 import {
   LiveModePage, RidersCRMPage, FeedbackPage, SubsMarketplacePage,
   GrowthDashboardPage, AIBuilderPanel, AreaTrend,
-  OwnerOverviewPage, OwnerRevenuePage, OwnerClassesPage, OwnerInstructorsPage,
+  OwnerOverviewPage, OwnerRevenuePage, OwnerClassesPage, OwnerInstructorsPage, OwnerCalendarPage,
 } from "./instructorPlatform"
 
 // ─── DATA ───────────────────────────────────────────────────────────────────
@@ -1022,6 +1022,7 @@ const INSTRUCTOR_NAV = [
 // Studio Owner workspace — the operating dashboard for the cycling business
 const OWNER_NAV = [
   { label: "Overview",    icon: LayoutDashboard },
+  { label: "Studio Calendar", icon: Calendar    },
   { label: "Revenue",     icon: Wallet          },
   { label: "Classes",     icon: Activity        },
   { label: "Instructors", icon: Award           },
@@ -1123,6 +1124,9 @@ export default function App() {
   const [builderRide, setBuilderRide]   = useState(null)                      // ride pre-loaded into Class Builder
   // Instructor edits to a class, sent to the studio owner to approve or decline
   const [changeRequests, setChangeRequests] = useState([])
+  const [bookingsDate, setBookingsDate] = useState(null)   // date Bookings opens on (Calendar → "Find a class")
+  // Studio owner task progress: finished tasks, booked visits/deliveries, and the service-log draft
+  const [ownerOps, setOwnerOps] = useState({ done: {}, events: [], logDraft: {} })
   const submitChange  = req => setChangeRequests(rs => [{ ...req, id: "cr" + Date.now(), status: "pending" }, ...rs.filter(r => r.classKey !== req.classKey)])
   const resolveChange = (id, status) => setChangeRequests(rs => rs.map(r => r.id === id ? { ...r, status } : r))
 
@@ -1158,7 +1162,7 @@ export default function App() {
   function navTo(page) {
     // A page from a role this person doesn't hold falls back to their first workspace
     const ws = workspaceOf(page)
-    setRosterClass(null); setBuilderRide(null); setActivePage(ws && !roleKeys.includes(ws) ? roles[0].home : page)
+    setBookingsDate(null); setRosterClass(null); setBuilderRide(null); setActivePage(ws && !roleKeys.includes(ws) ? roles[0].home : page)
   }
   function switchWorkspace(key) {
     const r = roles.find(x => x.key === key); if (!r) return
@@ -1215,20 +1219,21 @@ export default function App() {
       <main className="flex-1 overflow-y-auto pb-24 md:pb-0">
         {/* Rider */}
         {activePage === "Home"         && <HomePage         darkMode={darkMode} onToggleDarkMode={dm} />}
-        {activePage === "Bookings"     && <BookingsPage     darkMode={darkMode} onToggleDarkMode={dm} navExpanded={navExpanded} onCollapseNav={() => setNavExpanded(false)} />}
-        {activePage === "Calendar"     && <CalendarPage     darkMode={darkMode} onToggleDarkMode={dm} />}
+        {activePage === "Bookings"     && <BookingsPage     key={bookingsDate || "today"} initialDate={bookingsDate} darkMode={darkMode} onToggleDarkMode={dm} navExpanded={navExpanded} onCollapseNav={() => setNavExpanded(false)} />}
+        {activePage === "Calendar"     && <CalendarPage     darkMode={darkMode} onToggleDarkMode={dm} onFindClass={ds => { setBookingsDate(ds); setActivePage("Bookings") }} />}
         {activePage === "Rides"        && <RidesPage        darkMode={darkMode} onToggleDarkMode={dm} navExpanded={navExpanded} onCollapseNav={() => setNavExpanded(false)} />}
         {activePage === "Achievements" && <AchievementsPage darkMode={darkMode} onToggleDarkMode={dm} onNavigate={setActivePage} />}
         {/* Instructor */}
         {activePage === "Studio Home"   && <InstructorHomePage    darkMode={darkMode} onToggleDarkMode={dm} onOpenRoster={openRoster} onNavigate={navTo} templates={templates} onOpenBuilder={openInBuilder} />}
-        {activePage === "My Classes"    && <InstructorClassesPage key={rosterClass ? rosterClass.name + rosterClass.time : "all"} darkMode={darkMode} onToggleDarkMode={dm} initialClass={rosterClass} />}
+        {activePage === "My Classes"    && <InstructorClassesPage key={rosterClass ? rosterClass.name + rosterClass.time : "all"} darkMode={darkMode} onToggleDarkMode={dm} initialClass={rosterClass} navExpanded={navExpanded} onCollapseNav={() => setNavExpanded(false)} />}
         {activePage === "Class Builder" && <ClassBuilderPage      key={builderRide ? builderRide.key : "blank"} darkMode={darkMode} onToggleDarkMode={dm} onPublish={publishClass} initialRide={builderRide} onSaveTemplate={saveTemplate} />}
         {activePage === "Live Mode"     && <LiveModePage          darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
         {activePage === "Schedule"      && <InstructorSchedulePage darkMode={darkMode} onToggleDarkMode={dm} builtClasses={builtClasses} />}
         {activePage === "Insights"      && <InstructorStatsPage   darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
         {activePage === "Subs"          && <SubsMarketplacePage   darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
         {/* Studio Owner */}
-        {activePage === "Overview"      && <OwnerOverviewPage     darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} changeRequests={changeRequests} onResolveChange={resolveChange} />}
+        {activePage === "Overview"      && <OwnerOverviewPage     darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} changeRequests={changeRequests} onResolveChange={resolveChange} ops={ownerOps} setOps={setOwnerOps} />}
+        {activePage === "Studio Calendar" && <OwnerCalendarPage   darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} changeRequests={changeRequests} ops={ownerOps} />}
         {activePage === "Revenue"       && <OwnerRevenuePage      darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
         {activePage === "Classes"       && <OwnerClassesPage      darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
         {activePage === "Instructors"   && <OwnerInstructorsPage  darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
@@ -1590,7 +1595,7 @@ function SessionPlanModal({ session, darkMode, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6">
+    <div className="fixed inset-0 z-[85] flex items-end sm:items-center justify-center p-0 sm:p-6">
       {/* Backdrop */}
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
@@ -2667,15 +2672,15 @@ function SessionBookingPanel({ session, isPast, booked, selectedBike, onPickBike
   )
 }
 
-function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onCollapseNav }) {
+function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onCollapseNav, initialDate }) {
   const [selectedSession, setSelectedSession] = useState(null)
   const [selectedBike, setSelectedBike]       = useState(null)
   const bookingDrag = useDragToDismiss(() => { setSelectedSession(null); setShowPlan(false) })
   const [bookedSessions, setBookedSessions]   = useState([])
   const [toast, setToast]                     = useState(null)
   const [showPlan, setShowPlan]               = useState(false)
-  const [weekOffset, setWeekOffset]           = useState(0)
-  const [selectedDate, setSelectedDate]       = useState(BOOKING_TODAY)
+  const [weekOffset, setWeekOffset]           = useState(() => initialDate ? weekOffsetForDate(initialDate) : 0)
+  const [selectedDate, setSelectedDate]       = useState(initialDate || BOOKING_TODAY)
   const [viewMode, setViewMode]               = useState("week")
   const [monthView, setMonthView]             = useState({ year: 2026, month: 2 })
   useListFirstOnTablet(navExpanded, !!selectedSession, () => { setSelectedSession(null); setShowPlan(false) }, onCollapseNav)
@@ -2693,6 +2698,7 @@ function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onColla
   const isPast      = selectedDate < BOOKING_TODAY
 
   const [celebration, setCelebration]         = useState(null)
+  const [flourishNode, playFlourish]          = useFlourish(darkMode)
 
   // After each booking step, bring the Confirm button (and its "Booked" result) into view
   function revealConfirm() {
@@ -2730,6 +2736,7 @@ function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onColla
     const position = (session.count || 0) + 1
     setOverrides(o => ({ ...o, [session.time + session.name]: { state: "waiting", position } }))
     flashToast(`You're #${position} on the waitlist for ${session.name}`)
+    playFlourish("peek")
     revealConfirm()
   }
 
@@ -2740,6 +2747,7 @@ function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onColla
     setOverrides(o => ({ ...o, [key]: { ...o[key], state: "booked", bike, freed: [...(o[key]?.freed || []), ...(old && old !== bike ? [old] : [])] } }))
     setSelectedBike(null)
     flashToast(`Moved to bike ${bike}`)
+    playFlourish("swap", { from: old, to: bike })
     revealConfirm()
   }
 
@@ -3187,6 +3195,7 @@ function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onColla
       )}
 
       {celebration && <BookingCelebration key={celebration.id} pieces={celebration.pieces} darkMode={darkMode} />}
+      {flourishNode}
 
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] bg-[#00aa13] text-white text-sm px-5 py-3 rounded-xl shadow-lg">
@@ -3199,6 +3208,233 @@ function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onColla
 
 // ─── MY SCHEDULE DATA ────────────────────────────────────────────────────────
 // Personal schedule: only sessions the user has committed to (attended / booked / waitlist / cancelled).
+
+// ─── Little animations: waitlist peek, seat swap, streak collect ─────────────
+const FLOURISH_MS = { peek: 3200, swap: 3300, streak: 3000 }
+const FLOURISH_CSS = `
+  @media (prefers-reduced-motion: reduce) { .flourish { display: none } }
+  .fl-wheel { transform-box: fill-box; transform-origin: center; animation: fl-spin .4s linear infinite }
+  @keyframes fl-spin { to { transform: rotate(360deg) } }
+  @keyframes fl-rise { 0% { transform: translate(-50%, 110%) } 16% { transform: translate(-50%, 6%) } 22%, 82% { transform: translate(-50%, 14%) } 100% { transform: translate(-50%, 115%) } }
+  @keyframes fl-look { 0%, 24% { transform: translateX(0) } 34%, 50% { transform: translateX(-5px) } 60%, 76% { transform: translateX(5px) } 86%, 100% { transform: translateX(0) } }
+  @keyframes fl-blink { 0%, 53%, 58%, 100% { transform: scaleY(1) } 55% { transform: scaleY(.1) } }
+  @keyframes fl-bubble { 0%, 22% { opacity: 0; transform: translateY(8px) scale(.9) } 30%, 76% { opacity: 1; transform: none } 86%, 100% { opacity: 0 } }
+  @keyframes fl-dot { 0%, 100% { opacity: .25 } 50% { opacity: 1 } }
+  @keyframes fl-bike-l { 0% { transform: translateX(-60vw) } 34%, 84% { transform: translateX(-80px) } 100% { transform: translateX(-80px); opacity: 0 } }
+  @keyframes fl-bike-r { 0% { transform: translateX(60vw) scaleX(-1) } 34%, 84% { transform: translateX(80px) scaleX(-1) } 100% { transform: translateX(80px) scaleX(-1); opacity: 0 } }
+  @keyframes fl-rider-l { 0% { transform: translate(-60vw, 0) } 34%, 42% { transform: translate(-80px, 0) } 54% { transform: translate(0, -120px) rotate(180deg) } 66%, 84% { transform: translate(80px, 0) rotate(360deg) } 100% { transform: translate(80px, 0) rotate(360deg); opacity: 0 } }
+  @keyframes fl-rider-r { 0% { transform: translate(60vw, 0) } 34%, 42% { transform: translate(80px, 0) } 54% { transform: translate(0, -80px) rotate(-180deg) } 66%, 84% { transform: translate(-80px, 0) rotate(-360deg) } 100% { transform: translate(-80px, 0) rotate(-360deg); opacity: 0 } }
+  @keyframes fl-label { 0%, 62% { opacity: 0; transform: translate(-50%, 10px) } 70%, 90% { opacity: 1; transform: translate(-50%, 0) } 100% { opacity: 0; transform: translate(-50%, 0) } }
+  @keyframes fl-streak-ride { from { transform: translateX(-200px) } to { transform: translateX(calc(100vw + 200px)) } }
+  @keyframes fl-float { 0%, 100% { transform: translateY(0) } 50% { transform: translateY(-6px) } }
+  @keyframes fl-gem { 0% { transform: scale(1); opacity: 1 } 40% { transform: scale(1.7); opacity: 1 } 100% { transform: scale(0); opacity: 0 } }
+  @keyframes fl-spark { 0% { opacity: 0; transform: rotate(var(--a)) translateY(0) } 15% { opacity: 1 } 100% { opacity: 0; transform: rotate(var(--a)) translateY(-46px) } }
+  @keyframes fl-trail { 0%, 100% { opacity: .15; transform: scale(.6) } 50% { opacity: 1; transform: scale(1) } }
+  @keyframes fl-count { 0%, 72% { opacity: 0; transform: translate(-50%, 12px) scale(.9) } 80%, 94% { opacity: 1; transform: translate(-50%, 0) scale(1) } 100% { opacity: 0; transform: translate(-50%, 0) } }
+`
+
+function useFlourish(darkMode) {
+  const [flourish, setFlourish] = useState(null)
+  const timer = useRef(null)
+  useEffect(() => () => clearTimeout(timer.current), [])
+  function play(kind, data = {}) {
+    clearTimeout(timer.current)
+    setFlourish({ kind, data, id: Date.now() })
+    timer.current = setTimeout(() => setFlourish(null), FLOURISH_MS[kind])
+  }
+  const node = flourish ? createPortal(<Flourish key={flourish.id} kind={flourish.kind} data={flourish.data} darkMode={darkMode} />, document.body) : null
+  return [node, play]
+}
+
+function Flourish({ kind, data, darkMode }) {
+  const ink = darkMode ? "#e5e7eb" : "#1b2333"
+  return (
+    <div className="flourish fixed inset-0 z-[75] pointer-events-none overflow-hidden" aria-hidden="true">
+      <style>{FLOURISH_CSS}</style>
+      {kind === "peek" && <WaitlistPeek ink={ink} darkMode={darkMode} />}
+      {kind === "swap" && <SeatSwap ink={ink} from={data.from} to={data.to} darkMode={darkMode} />}
+      {kind === "streak" && <StreakRide ink={ink} />}
+    </div>
+  )
+}
+
+// A helmeted cyclist pops up from the bottom and looks around, curious — waiting for a spot
+function WaitlistPeek({ ink, darkMode }) {
+  return (
+    <div className="absolute bottom-0" style={{ left: "max(125px, 30%)", animation: "fl-rise 3.2s cubic-bezier(.3,.7,.3,1) forwards" }}>
+      <div className={`absolute bottom-[182px] left-[118px] whitespace-nowrap rounded-2xl rounded-bl-sm px-3 py-2 text-sm font-semibold shadow-lg ${darkMode ? "bg-gray-800 text-white" : "bg-white text-gray-900"}`}
+        style={{ animation: "fl-bubble 3.2s ease forwards" }}>
+        Waiting for a spot
+        {[0, 1, 2].map(i => <span key={i} style={{ animation: `fl-dot 1s ease-in-out ${i * 0.2}s infinite` }}>.</span>)}
+      </div>
+      <svg width="230" height="196" viewBox="0 0 200 170">
+        <path d="M45 172 Q50 118 100 112 Q150 118 155 172 Z" fill="#00aa13" />
+        <path d="M78 116 L100 140 L122 116" fill="none" stroke="#fff" strokeWidth="4" opacity=".6" />
+        <circle cx="100" cy="76" r="42" fill="#f6c9a0" />
+        <circle cx="72" cy="94" r="7" fill="#f28b82" opacity=".35" />
+        <circle cx="128" cy="94" r="7" fill="#f28b82" opacity=".35" />
+        <path d="M52 72 Q54 22 100 18 Q146 22 148 72 Q124 58 100 58 Q76 58 52 72 Z" fill="#00aa13" />
+        <path d="M84 26 L88 50 M100 22 V50 M116 26 L112 50" stroke="#008a0f" strokeWidth="4" strokeLinecap="round" />
+        <path d="M50 72 Q100 56 150 72" fill="none" stroke="#008a0f" strokeWidth="5" strokeLinecap="round" />
+        <path d="M56 74 Q60 104 78 112 M144 74 Q140 104 122 112" fill="none" stroke={ink} strokeWidth="2" opacity=".45" />
+        <path d="M70 70 Q80 61 91 67 M109 67 Q120 61 130 70" fill="none" stroke={ink} strokeWidth="3" strokeLinecap="round" />
+        <g style={{ transformBox: "fill-box", transformOrigin: "center", animation: "fl-blink 3.2s linear forwards" }}>
+          <ellipse cx="84" cy="85" rx="12" ry="14" fill="#fff" stroke={ink} strokeWidth="1.5" />
+          <ellipse cx="116" cy="85" rx="12" ry="14" fill="#fff" stroke={ink} strokeWidth="1.5" />
+          <g style={{ animation: "fl-look 3.2s ease-in-out forwards" }}>
+            <circle cx="85" cy="87" r="6" fill={ink} />
+            <circle cx="117" cy="87" r="6" fill={ink} />
+            <circle cx="87" cy="85" r="2" fill="#fff" />
+            <circle cx="119" cy="85" r="2" fill="#fff" />
+          </g>
+        </g>
+        <ellipse cx="100" cy="106" rx="5" ry="6" fill="#7c2d12" />
+        <path d="M14 158 Q100 140 186 158" fill="none" stroke={ink} strokeWidth="8" strokeLinecap="round" />
+        <circle cx="40" cy="152" r="11" fill="#f6c9a0" stroke={ink} strokeWidth="2" />
+        <circle cx="160" cy="152" r="11" fill="#f6c9a0" stroke={ink} strokeWidth="2" />
+      </svg>
+    </div>
+  )
+}
+
+function BikeFrame({ ink, color = "#00aa13", gold = false }) {
+  const wheel = gold ? "#f5b301" : ink
+  return (
+    <svg width="112" height="70" viewBox="0 0 112 70" fill="none" strokeLinecap="round" strokeLinejoin="round">
+      {[24, 88].map(cx => (
+        <g key={cx} className="fl-wheel">
+          <circle cx={cx} cy="52" r="16" stroke={wheel} strokeWidth={gold ? 4 : 3} />
+          <path d={`M${cx} 37v30M${cx - 15} 52h30M${cx - 10} 41l20 22M${cx + 10} 41l-20 22`} stroke={wheel} strokeWidth="1.3" opacity={gold ? 0.9 : 0.5} />
+        </g>
+      ))}
+      <path d="M24 52h24l20-22H40z M68 30l20 22 M40 30l-2-8 M32 22h12 M68 30l2-8h8" stroke={color} strokeWidth="3.5" />
+    </svg>
+  )
+}
+function Rider({ color }) {
+  return (
+    <svg width="48" height="60" viewBox="0 0 48 60">
+      <rect x="14" y="22" width="20" height="26" rx="9" fill={color} />
+      <circle cx="24" cy="13" r="9" fill="#f6c9a0" />
+      <path d="M14 12 Q15 2 24 2 Q33 2 34 12 Z" fill={color} />
+      <circle cx="21" cy="14" r="1.6" fill="#1b2333" />
+      <circle cx="27" cy="14" r="1.6" fill="#1b2333" />
+      <path d="M17 48 L14 58 M31 48 L34 58" stroke={color} strokeWidth="5" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+// Two bikes ride in from either side; the riders leap across and swap
+function SeatSwap({ ink, from, to, darkMode }) {
+  return (
+    <div className="absolute left-1/2 top-[42%]">
+      <div className="absolute" style={{ left: -56, top: -10, animation: "fl-bike-l 3.3s ease-in-out forwards" }}><BikeFrame ink={ink} /></div>
+      <div className="absolute" style={{ left: -56, top: -10, animation: "fl-bike-r 3.3s ease-in-out forwards" }}><BikeFrame ink={ink} color="#0ea5e9" /></div>
+      <div className="absolute" style={{ left: -24, top: -58, animation: "fl-rider-l 3.3s ease-in-out forwards" }}><Rider color="#00aa13" /></div>
+      <div className="absolute" style={{ left: -24, top: -58, animation: "fl-rider-r 3.3s ease-in-out forwards" }}><Rider color="#0ea5e9" /></div>
+      <div className={`absolute left-0 top-[78px] whitespace-nowrap rounded-full px-4 py-2 text-sm font-bold shadow-lg ${darkMode ? "bg-gray-800 text-white" : "bg-white text-gray-900"}`}
+        style={{ animation: "fl-label 3.3s ease forwards" }}>
+        {from ? `Bike ${from}` : "Old bike"} <span className="text-[#00aa13]">→</span> Bike {to} ✨
+      </div>
+    </div>
+  )
+}
+
+// A bike with golden wheels rides through wheel-shaped gems that burst into gold sparks
+function StreakRide({ ink }) {
+  const width = typeof window === "undefined" ? 1200 : window.innerWidth
+  const gems = [0.14, 0.31, 0.48, 0.65, 0.82]
+  const RIDE = 2.4
+  return (
+    <div className="absolute inset-x-0 top-[40%]">
+      {gems.map((p, i) => {
+        const d = RIDE * (p * width - 40 + 200) / (width + 400)
+        return (
+          <div key={i} className="absolute" style={{ left: `${p * 100}%`, top: 8, marginLeft: -20 }}>
+            <div style={{ animation: "fl-float 1.2s ease-in-out infinite", animationDelay: `${i * 0.15}s` }}>
+              <div style={{ animation: `fl-gem .5s ease-out ${d}s forwards` }}>
+                <svg width="40" height="40" viewBox="0 0 40 40">
+                  <circle cx="20" cy="20" r="16" fill="#fff4c2" stroke="#f5b301" strokeWidth="4" />
+                  <path d="M20 5v30M5 20h30M9 9l22 22M31 9L9 31" stroke="#f5b301" strokeWidth="1.6" />
+                  <circle cx="20" cy="20" r="4" fill="#f5b301" />
+                </svg>
+              </div>
+            </div>
+            {Array.from({ length: 8 }).map((_, k) => (
+              <span key={k} className="absolute left-[19px] top-[14px] w-[3px] h-[10px] rounded-full"
+                style={{ background: k % 2 ? "#ffd54a" : "#f5b301", "--a": `${k * 45}deg`, opacity: 0, transformOrigin: "50% 16px", animation: `fl-spark .6s ease-out ${d}s forwards` }} />
+            ))}
+          </div>
+        )
+      })}
+      <div className="absolute left-0 top-[-16px]" style={{ animation: `fl-streak-ride ${RIDE}s linear forwards` }}>
+        <div className="relative">
+          <div className="absolute" style={{ left: 32, top: -44 }}><Rider color="#00aa13" /></div>
+          <BikeFrame ink={ink} gold />
+          {[0, 1, 2, 3, 4].map(k => (
+            <span key={k} className="absolute rounded-full" style={{ left: -6 - k * 12, top: 46 + (k % 2) * 8, width: 6, height: 6, background: k % 2 ? "#ffd54a" : "#f5b301", animation: `fl-trail .5s ease-in-out ${k * 0.08}s infinite` }} />
+          ))}
+        </div>
+      </div>
+      <div className="absolute left-1/2 top-[84px] whitespace-nowrap rounded-full px-4 py-2 text-sm font-bold text-white shadow-lg"
+        style={{ background: "linear-gradient(135deg,#f5b301,#fb7512)", animation: "fl-count 3s ease forwards" }}>
+        🔥 +1 streak collected
+      </div>
+    </div>
+  )
+}
+
+// Calendar → a booked / waitlisted class, with the same seat and booking tools as the Bookings page
+function ManageSessionOverlay({ session, dateIso, darkMode, selectedBike, onPickBike, onChangeSeat, onCancelBooking, onLeaveWaitlist, onViewPlan, onClose }) {
+  const heading = darkMode ? "text-white" : "text-gray-900"
+  const muted   = darkMode ? "text-gray-400" : "text-gray-500"
+  const subtle  = darkMode ? "bg-gray-800" : "bg-gray-50"
+  const booked  = session.state === "booked"
+  const bookingSession = session.state === "waitlist" ? { ...session, state: "waiting", position: (session.count || 0) + 1 } : session
+  const plan = SESSION_PLANS[session.name] || SESSION_PLANS._default
+  const dateLabel = new Date(dateIso + "T00:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })
+  return createPortal(
+    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center sm:p-6" role="dialog" aria-modal="true" aria-labelledby="manage-session-title"
+      onKeyDown={e => { if (e.key === "Escape") onClose() }}>
+      <style>{`@keyframes manageIn { from { opacity: 0; transform: translateY(24px) scale(.97) } to { opacity: 1; transform: none } } @media (prefers-reduced-motion: reduce) { .manage-in { animation: none !important } }`}</style>
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className={`manage-in relative w-full sm:max-w-md max-h-[92vh] overflow-y-auto overscroll-contain rounded-t-3xl sm:rounded-3xl shadow-2xl ${darkMode ? "bg-gray-900" : "bg-white"}`}
+        style={{ animation: "manageIn .28s cubic-bezier(.2,.8,.2,1)" }}>
+        <div className={`sticky top-0 z-10 flex items-start justify-between gap-3 px-5 pt-5 pb-3 ${darkMode ? "bg-gray-900" : "bg-white"}`}>
+          <div className="min-w-0">
+            <span className={`text-[11px] font-bold uppercase tracking-wider ${booked ? "text-[#00aa13]" : "text-amber-500"}`}>{booked ? "● Booked" : "● On waitlist"}</span>
+            <h2 id="manage-session-title" className={`text-xl font-bold leading-tight ${heading}`}>{session.name}</h2>
+            <p className={`text-xs mt-0.5 ${muted}`}>{dateLabel} · {session.time} · {session.studio} · 45 mins</p>
+          </div>
+          <button onClick={onClose} aria-label="Close" className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${darkMode ? "bg-gray-800 text-gray-400" : "bg-gray-100 text-gray-500"}`}>✕</button>
+        </div>
+        <div className="px-5 flex flex-col gap-3">
+          <div className={`flex items-center gap-3 rounded-xl p-3 ${subtle}`}>
+            <Avatar name={session.instructor} size={36} />
+            <div className="min-w-0">
+              <p className={`text-sm font-medium ${heading}`}>{session.instructor}</p>
+              <p className={`text-xs italic ${muted}`}>"{getInstructorQuote(session.instructor, session.name)}"</p>
+            </div>
+          </div>
+          <p className={`text-xs leading-relaxed ${muted}`}>{plan.overview}</p>
+          <div>
+            <div className="flex items-end gap-0.5 h-12">
+              {getIntensity(session.name).map((v, i) => {
+                const zone = getFTPZone(v)
+                return <div key={i} className="flex-1 rounded-sm" style={{ height: `${zone.height}%`, backgroundColor: zone.color }} />
+              })}
+            </div>
+            <button onClick={onViewPlan} className="mt-2 w-full py-2.5 rounded-xl text-xs font-semibold border border-[#00aa13] text-[#00aa13] hover:bg-[#e6f9e8] transition-colors">View full session plan →</button>
+          </div>
+        </div>
+        <SessionBookingPanel key={session.time + session.name + (session.bike || "")} session={bookingSession} isPast={false} booked={booked}
+          selectedBike={selectedBike} onPickBike={onPickBike} onBook={() => {}} onChangeSeat={onChangeSeat} onCancelBooking={onCancelBooking}
+          onJoinWaitlist={() => {}} onLeaveWaitlist={onLeaveWaitlist} darkMode={darkMode} className="px-5 pt-4 pb-6" />
+      </div>
+    </div>,
+    document.body
+  )
+}
 
 const mySchedule = {
   "2026-02-16": [
@@ -3265,13 +3501,17 @@ const mySchedule = {
 
 // ─── CALENDAR PAGE ──────────────────────────────────────────────────────────
 
-function CalendarPage({ darkMode, onToggleDarkMode }) {
+function CalendarPage({ darkMode, onToggleDarkMode, onFindClass }) {
   const [calView, setCalView]           = useState("month")
   const [selectedDate, setSelectedDate] = useState(BOOKING_TODAY)
   const [calMonth, setCalMonth]         = useState({ year: 2026, month: 2 })
   const [calWeekOff, setCalWeekOff]     = useState(0)
   const [widgetIdx, setWidgetIdx]       = useState(0)
   const [showCalPlan, setShowCalPlan]   = useState(false)
+  const [overrides, setOverrides]       = useState({})     // seat moves, cancellations, left waitlists — keyed date+time+name
+  const [manageKey, setManageKey]       = useState(null)   // session open in the manage overlay
+  const [calBike, setCalBike]           = useState(null)   // bike picked while changing seat
+  const [flourishNode, playFlourish]    = useFlourish(darkMode)
 
   const card    = `rounded-2xl border transition-colors ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`
   const heading = darkMode ? "text-white"      : "text-gray-900"
@@ -3281,12 +3521,17 @@ function CalendarPage({ darkMode, onToggleDarkMode }) {
 
   const monthCells   = getMonthGrid(calMonth.year, calMonth.month)
   const weekDates    = getWeekDates(calWeekOff)
-  const mySessions   = mySchedule[selectedDate] || []
+  // Your schedule, including changes made here (seat moves, cancellations, leaving a waitlist)
+  const sessionsOn   = ds => (mySchedule[ds] || []).map(s => ({ ...s, ...overrides[ds + s.time + s.name] })).filter(s => !s.removed)
+  const keyOf        = s => selectedDate + s.time + s.name
+  const mySessions   = sessionsOn(selectedDate)
   const widgetCount  = mySessions.length
   const clampedIdx   = Math.min(widgetIdx, Math.max(0, widgetCount - 1))
   const widgetSession = mySessions[clampedIdx] || null
   const isToday      = selectedDate === BOOKING_TODAY
   const isPast       = selectedDate < BOOKING_TODAY
+  const canManage    = s => !isPast && (s.state === "booked" || s.state === "waiting" || s.state === "waitlist")
+  const manageSession = manageKey ? mySessions.find(s => keyOf(s) === manageKey && canManage(s)) : null
 
   function selectDate(ds) {
     setSelectedDate(ds)
@@ -3294,9 +3539,17 @@ function CalendarPage({ darkMode, onToggleDarkMode }) {
     if (calView === "week") setCalWeekOff(weekOffsetForDate(ds))
   }
 
-  function dayDotCount(dateStr) {
-    return (mySchedule[dateStr] || []).length
+  // Dot colour per session: booked green, waitlist orange, cancelled red, attended grey
+  const dotColor = st => st === "booked" ? "bg-[#00aa13]" : st === "waiting" || st === "waitlist" ? "bg-amber-500" : st === "cancelled" ? "bg-red-400" : darkMode ? "bg-gray-500" : "bg-gray-400"
+
+  function calChangeSeat(s, bike) {
+    const key = keyOf(s), old = seatPlan(s).mine
+    setOverrides(o => ({ ...o, [key]: { ...o[key], bike, freed: [...(o[key]?.freed || []), ...(old && old !== bike ? [old] : [])] } }))
+    setCalBike(null)
+    playFlourish("swap", { from: old, to: bike })
   }
+  function calCancel(s)  { setOverrides(o => ({ ...o, [keyOf(s)]: { state: "cancelled" } })); setManageKey(null) }
+  function calLeave(s)   { setOverrides(o => ({ ...o, [keyOf(s)]: { removed: true } })); setManageKey(null); setWidgetIdx(0) }
 
   function sessionBadge(s) {
     if (s.state === "attended")  return <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${darkMode ? "text-gray-400" : "text-gray-500"}`}><span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${darkMode ? "bg-gray-500" : "bg-gray-400"}`} />Attended</span>
@@ -3309,10 +3562,32 @@ function CalendarPage({ darkMode, onToggleDarkMode }) {
 
   function renderWidget() {
     if (!widgetSession) {
+      // Past: nothing to come back for. Today / future: a nudge to go and book something.
+      if (isPast) {
+        return (
+          <div className="flex flex-col items-center justify-center py-8 text-center gap-1.5">
+            <span className="text-2xl">🌙</span>
+            <p className={`text-sm font-semibold ${heading}`}>No classes this day</p>
+            <p className={`text-xs ${muted}`}>You didn't have a ride on this date.</p>
+          </div>
+        )
+      }
+      const lines = [
+        "Nothing booked yet — the perfect gap for a ride.",
+        "A free day is a blank page. Fill it with a ride?",
+        "Future you will thank you for booking this one.",
+        "Momentum loves company — grab a class and keep it rolling.",
+      ]
       return (
-        <div className="flex flex-col items-center justify-center py-8 text-center gap-2">
-          <span className="text-2xl">📭</span>
-          <p className={`text-xs ${muted}`}>No sessions this day</p>
+        <div className="flex flex-col items-center justify-center py-6 text-center gap-2">
+          <style>{`@keyframes freeBounce { 0%, 100% { transform: translateY(0) } 50% { transform: translateY(-6px) } } @media (prefers-reduced-motion: reduce) { .free-bounce { animation: none !important } }`}</style>
+          <span className="free-bounce text-4xl" style={{ animation: "freeBounce 2.4s ease-in-out infinite" }}>🚴</span>
+          <p className={`text-base font-bold ${heading}`}>{isToday ? "You're free today!" : "You're free!"}</p>
+          <p className={`text-xs max-w-[16rem] ${muted}`}>{lines[Number(selectedDate.slice(8)) % lines.length]}</p>
+          <button onClick={() => onFindClass?.(selectedDate)}
+            className="mt-2 px-4 py-2.5 rounded-xl bg-[#00aa13] hover:bg-[#008a0f] text-white text-sm font-semibold transition-colors">
+            Find a class on this day →
+          </button>
         </div>
       )
     }
@@ -3343,9 +3618,17 @@ function CalendarPage({ darkMode, onToggleDarkMode }) {
               <span className="text-xs font-medium text-amber-600">On waitlist</span>
             )}
           </div>
-          {widgetCount > 1 && (
-            <span className={`text-xs tabular-nums ${muted}`}>{clampedIdx + 1} / {widgetCount}</span>
-          )}
+          <div className="flex items-center gap-1.5">
+            {widgetCount > 1 && (
+              <span className={`text-xs tabular-nums ${muted}`}>{clampedIdx + 1} / {widgetCount}</span>
+            )}
+            {canManage(s) && (
+              <button onClick={() => setManageKey(keyOf(s))} aria-label="Open class details" title="Open details"
+                className={`w-7 h-7 rounded-lg flex items-center justify-center ${darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-200 text-gray-500"}`}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Session name */}
@@ -3438,6 +3721,14 @@ function CalendarPage({ darkMode, onToggleDarkMode }) {
           </button>
         )}
 
+        {/* Manage — opens the booking-style overlay (change seat, cancel, leave waitlist) */}
+        {canManage(s) && (
+          <button onClick={() => setManageKey(keyOf(s))}
+            className={`w-full py-2.5 rounded-xl text-xs font-semibold text-white transition-colors ${s.state === "booked" ? "bg-[#00aa13] hover:bg-[#008a0f]" : "bg-amber-500 hover:bg-amber-600"}`}>
+            {s.state === "booked" ? "Manage booking · change seat or cancel" : "Manage waitlist spot"}
+          </button>
+        )}
+
         {/* Waitlist info */}
         {s.state === "waitlist" && s.count != null && (
           <p className={`text-xs ${muted}`}>{s.count} {s.count === 1 ? "person" : "people"} ahead of you on the waitlist.</p>
@@ -3472,45 +3763,37 @@ function CalendarPage({ darkMode, onToggleDarkMode }) {
 
   function renderDayPanel() {
     return (
-      <div className={`border-t ${divider} p-4 md:p-5 flex flex-col sm:flex-row gap-4 md:gap-5`} style={{ minHeight: "160px" }}>
+      <div className={`border-t ${divider} p-4 md:p-5 flex flex-col sm:flex-row gap-4`} style={{ minHeight: "160px" }}>
 
-        {/* Session list */}
-        <div className="flex-1 min-w-0 overflow-y-auto">
-          <h3 className={`font-semibold mb-3 ${heading}`}>
-            {isToday ? "Today's Sessions" : isPast ? "Session History" : "Upcoming Sessions"}
+        {/* Session list — compact, so the details get the room */}
+        <div className="sm:w-56 md:w-64 sm:flex-shrink-0 min-w-0 overflow-y-auto">
+          <h3 className={`text-sm font-semibold mb-2 ${heading}`}>
+            {isToday ? "Today" : isPast ? "Session history" : "Upcoming"}
           </h3>
           {mySessions.length > 0 ? (
-            <div className={`flex flex-col divide-y ${darkMode ? "divide-gray-800" : "divide-gray-100"}`}>
+            <div className="flex flex-col gap-0.5">
               {mySessions.map((s, i) => (
-                <button key={i}
-                  onClick={() => setWidgetIdx(i)}
-                  className={`flex items-center justify-between py-2.5 w-full text-left transition-colors rounded-xl px-3
-                    ${i === clampedIdx ? darkMode ? "bg-gray-800" : "bg-[#f0fdf4]" : ""}`}
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className={`text-xs w-10 flex-shrink-0 font-medium tabular-nums ${muted}`}>{s.time}</span>
-                    <div className="min-w-0">
-                      <p className={`text-sm font-medium truncate ${i === clampedIdx ? "text-[#00aa13]" : heading}`}>{s.name}</p>
-                      <p className={`text-xs ${muted}`}>{s.instructor}</p>
-                    </div>
-                  </div>
-                  <div className="flex-shrink-0 ml-3">{sessionBadge(s)}</div>
+                <button key={i} onClick={() => setWidgetIdx(i)}
+                  className={`flex items-center gap-2 py-1.5 px-2.5 w-full text-left rounded-lg transition-colors
+                    ${i === clampedIdx ? darkMode ? "bg-gray-800" : "bg-[#f0fdf4]" : darkMode ? "hover:bg-gray-800/60" : "hover:bg-gray-50"}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${dotColor(s.state)}`} />
+                  <span className={`text-[11px] w-9 flex-shrink-0 font-medium tabular-nums ${muted}`}>{s.time}</span>
+                  <span className={`text-xs font-medium truncate ${i === clampedIdx ? "text-[#00aa13]" : heading}`}>{s.name}</span>
                 </button>
               ))}
             </div>
           ) : (
-            <div className="flex items-center gap-3 py-2">
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0 ${darkMode ? "bg-gray-800" : "bg-gray-50"}`}>🌿</div>
-              <div>
-                <p className={`text-sm font-semibold ${heading}`}>No classes this day</p>
-                <p className={`text-xs ${muted}`}>Check back soon — classes haven't been added yet.</p>
-              </div>
-            </div>
+            <p className={`text-xs ${muted}`}>{isPast ? "No classes this day." : "Nothing booked yet."}</p>
           )}
+          <div className={`flex flex-wrap gap-x-3 gap-y-1 mt-3 text-[10px] ${muted}`}>
+            {[["booked", "Booked"], ["waiting", "Waitlist"], ["attended", "Attended"], ["cancelled", "Cancelled"]].map(([st, l]) => (
+              <span key={st} className="flex items-center gap-1"><span className={`w-1.5 h-1.5 rounded-full ${dotColor(st)}`} />{l}</span>
+            ))}
+          </div>
         </div>
 
-        {/* Session widget — wider, with full details */}
-        <div className={`w-full sm:w-72 md:w-80 sm:flex-shrink-0 rounded-2xl p-4 ${subtle}`}>
+        {/* Session details — the roomy part */}
+        <div className={`flex-1 min-w-0 rounded-2xl p-4 ${subtle}`}>
           {renderWidget()}
         </div>
 
@@ -3580,7 +3863,7 @@ function CalendarPage({ darkMode, onToggleDarkMode }) {
               const ds      = `${calMonth.year}-${String(calMonth.month).padStart(2,"0")}-${String(day).padStart(2,"0")}`
               const isTdy   = ds === BOOKING_TODAY
               const isSel   = ds === selectedDate
-              const count   = dayDotCount(ds)
+              const daySessions = sessionsOn(ds)
               return (
                 <button key={i} onClick={() => selectDate(ds)}
                   className={`m-0.5 border rounded-xl p-2 flex flex-col items-center transition-all min-h-[52px]
@@ -3591,10 +3874,10 @@ function CalendarPage({ darkMode, onToggleDarkMode }) {
                         : darkMode ? "border-gray-800 hover:border-gray-600 hover:bg-gray-800" : "border-gray-100 hover:border-gray-200 hover:bg-gray-50"}`}
                 >
                   <span className={`text-xs font-semibold ${isSel || isTdy ? "text-[#00aa13]" : heading}`}>{day}</span>
-                  {count > 0 ? (
+                  {daySessions.length > 0 ? (
                     <div className="flex gap-0.5 mt-1">
-                      {Array.from({ length: Math.min(count, 3) }).map((_, j) => (
-                        <div key={j} className="w-1.5 h-1.5 rounded-full bg-[#00aa13]" />
+                      {daySessions.slice(0, 3).map((s, j) => (
+                        <div key={j} className={`w-1.5 h-1.5 rounded-full ${dotColor(s.state)}`} title={`${s.time} ${s.name} · ${s.state}`} />
                       ))}
                     </div>
                   ) : <div className="h-2.5" />}
@@ -3652,7 +3935,7 @@ function CalendarPage({ darkMode, onToggleDarkMode }) {
             {/* Session columns — from personal schedule only */}
             <div className={`grid grid-cols-7 flex-1 overflow-y-auto divide-x min-w-[560px] ${darkMode ? "divide-gray-800" : "divide-gray-100"}`}>
               {weekDates.map(({ dateStr }) => {
-                const sessions = mySchedule[dateStr] || []
+                const sessions = sessionsOn(dateStr)
                 const isSel    = dateStr === selectedDate
                 return (
                   <div key={dateStr} onClick={() => selectDate(dateStr)}
@@ -3699,6 +3982,16 @@ function CalendarPage({ darkMode, onToggleDarkMode }) {
           </div>
         </div>
       )}
+      {manageSession && (
+        <ManageSessionOverlay session={manageSession} dateIso={selectedDate} darkMode={darkMode}
+          selectedBike={calBike} onPickBike={setCalBike}
+          onChangeSeat={bike => calChangeSeat(manageSession, bike)}
+          onCancelBooking={() => calCancel(manageSession)}
+          onLeaveWaitlist={() => calLeave(manageSession)}
+          onViewPlan={() => setShowCalPlan(true)}
+          onClose={() => { setManageKey(null); setCalBike(null) }} />
+      )}
+      {flourishNode}
       {showCalPlan && widgetSession && (
         <SessionPlanModal
           session={{ ...widgetSession, time: widgetSession.time, studio: widgetSession.studio || "Studio 1" }}
@@ -3940,6 +4233,7 @@ function RideVsClass({ ride, darkMode }) {
 function RidesPage({ darkMode, onToggleDarkMode, navExpanded = false, onCollapseNav }) {
   const [selectedRide, setSelectedRide]       = useState(ridesData[0])
   const [collectedStreaks, setCollectedStreaks] = useState(new Set())
+  const [flourishNode, playFlourish] = useFlourish(darkMode)
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false)
   const [chartModalOpen, setChartModalOpen]   = useState(false)
   const ridesDrag = useDragToDismiss(() => setMobileSheetOpen(false))
@@ -3947,6 +4241,7 @@ function RidesPage({ darkMode, onToggleDarkMode, navExpanded = false, onCollapse
 
   function collectStreak(ride) {
     setCollectedStreaks(prev => new Set([...prev, ride.date + ride.name]))
+    playFlourish("streak")
   }
 
   const card    = `rounded-2xl border transition-colors ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`
@@ -4219,6 +4514,8 @@ function RidesPage({ darkMode, onToggleDarkMode, navExpanded = false, onCollapse
         ) : null /* closed: the ride list takes the full width */}
 
       </div>
+
+      {flourishNode}
 
       {/* ── Mobile bottom sheet — ride detail ── */}
       {mobileSheetOpen && selectedRide && (
@@ -5553,38 +5850,67 @@ function InstructorHomePage({ darkMode, onToggleDarkMode, onOpenRoster, onNaviga
 }
 
 // ─── Instructor: edit a class (sent to the studio owner for approval) ─────────
-const DIFFICULTY_LEVELS = ["Easy", "Moderate", "Hard", "Very hard"]
-const INTENSITY_SHIFTS  = [["lighter", "Make it lighter"], ["same", "Keep as planned"], ["harder", "Make it harder"]]
 // Demo playlist for a class — stable per class
 function classPlaylist(cls) {
   return Array.from({ length: 6 }, (_, i) => YT_CATALOG[((cls.seed || 1) * 7 + i * 5) % YT_CATALOG.length])
 }
-function difficultyOf(cls) {
-  const peak = Math.max(...getIntensity(cls.name))
-  return peak >= 9 ? "Very hard" : peak >= 7 ? "Hard" : peak >= 5 ? "Moderate" : "Easy"
+// Editable class structure: the plan's phases as blocks { name, mins, zone 1–6, cadence }
+const zoneNum = z => Math.max(...(String(z).match(/\d+/g) || ["2"]).map(Number))
+function planBlocks(cls) {
+  return (SESSION_PLANS[cls.name] || SESSION_PLANS._default).phases.map(ph => ({ name: ph.name, mins: ph.mins, zone: Math.min(6, zoneNum(ph.zone)), cadence: ph.cadence }))
+}
+function difficultyOfBlocks(blocks) {
+  const peak = Math.max(...blocks.map(b => b.zone))
+  const hardMins = blocks.filter(b => b.zone >= 4).reduce((s, b) => s + b.mins, 0)
+  return peak >= 6 || hardMins >= 20 ? "Very hard" : peak >= 5 || hardMins >= 10 ? "Hard" : peak >= 4 ? "Moderate" : "Easy"
+}
+// Suggested edits move the working blocks a zone down (lighter) or up (harder); warm-ups, recoveries and cool-downs stay put
+const isEasyBlock = b => /warm|cool|recover/i.test(b.name)
+const shiftBlocks = (blocks, dir) => blocks.map(b => isEasyBlock(b) ? b : { ...b, zone: Math.max(1, Math.min(6, b.zone + dir)) })
+function BlocksChart({ blocks, original, height = 96 }) {
+  return (
+    <div className="flex items-end gap-0.5" style={{ height }}>
+      {blocks.map((b, i) => {
+        const o = original?.[i]
+        return (
+          <div key={i} className="relative h-full" style={{ flexGrow: b.mins, flexBasis: 0 }} title={`${b.name} · ${b.mins} min · Z${b.zone}`}>
+            <div className="absolute bottom-0 inset-x-0 rounded-t-md transition-all duration-300" style={{ height: `${b.zone / 6 * 100}%`, background: ZONE_COLORS[b.zone - 1] }} />
+            {o && o.zone !== b.zone && <div className="absolute bottom-0 inset-x-0 rounded-t-md border-2 border-dashed border-gray-500/70" style={{ height: `${o.zone / 6 * 100}%` }} />}
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 function ClassEditModal({ cls, darkMode, existing, onClose, onSubmit }) {
   const heading = darkMode ? "text-white" : "text-gray-900"
   const muted   = darkMode ? "text-gray-400" : "text-gray-500"
   const subtle  = darkMode ? "bg-gray-800" : "bg-gray-50"
-  const past    = cls.status === "done"
   const original = classPlaylist(cls)
-  const originalDifficulty = difficultyOf(cls)
+  const originalBlocks = planBlocks(cls)
+  const originalDifficulty = difficultyOfBlocks(originalBlocks)
+  const originalTotal = originalBlocks.reduce((s, b) => s + b.mins, 0)
 
-  const [difficulty, setDifficulty] = useState(existing?.changes.difficulty ?? originalDifficulty)
-  const [intensity, setIntensity]   = useState(existing?.changes.intensity ?? "same")
-  const [songs, setSongs]           = useState(existing?.changes.songs ?? original.map(s => s.title))
-  const [scope, setScope]           = useState(existing?.changes.scope ?? (past ? "future" : "this"))
-  const [note, setNote]             = useState(existing?.note ?? "")
-  const [adding, setAdding]         = useState("")
+  const [blocks, setBlocks] = useState(existing?.changes.blocks ?? originalBlocks)
+  const [songs, setSongs]   = useState(existing?.changes.songs ?? original.map(s => s.title))
+  const [scope, setScope]   = useState(existing?.changes.scope ?? "this")
+  const [note, setNote]     = useState(existing?.note ?? "")
+  const [adding, setAdding] = useState("")
+
+  const difficulty    = difficultyOfBlocks(blocks)
+  const totalMins     = blocks.reduce((s, b) => s + b.mins, 0)
+  const updateBlock   = (i, patch) => setBlocks(bs => bs.map((b, j) => j === i ? { ...b, ...patch } : b))
+  const blocksChanged = JSON.stringify(blocks) !== JSON.stringify(originalBlocks)
+  const zoneMoves     = blocks.filter((b, i) => originalBlocks[i] && b.zone !== originalBlocks[i].zone).length
 
   const removed = original.filter(s => !songs.includes(s.title)).map(s => s.title)
   const added   = songs.filter(title => !original.some(s => s.title === title))
   const plural  = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`
   const summary = [
     difficulty !== originalDifficulty && `Difficulty ${originalDifficulty} → ${difficulty}`,
-    intensity !== "same" && (intensity === "lighter" ? "Lighter intervals" : "Harder intervals"),
+    blocksChanged && (zoneMoves ? plural(zoneMoves, "zone change") : "Structure edited"),
+    totalMins !== originalTotal && `${originalTotal} → ${totalMins} min`,
     removed.length > 0 && `−${plural(removed.length, "song")}`,
     added.length > 0 && `+${plural(added.length, "song")}`,
   ].filter(Boolean)
@@ -5594,10 +5920,19 @@ function ClassEditModal({ cls, darkMode, existing, onClose, onSubmit }) {
     onSubmit({
       classKey: cls.dateIso + cls.time + cls.name, className: cls.name, when: `${cls.dateLabel} · ${cls.time}`, studio: cls.studio, instructor: "JIM",
       note: note.trim(), summary: [...summary, scope === "future" ? "Future classes" : "This class only"].join(" · "),
-      changes: { difficulty, intensity, songs, scope, removed, added },
+      changes: { blocks, originalBlocks, difficulty, originalDifficulty, songs, scope, removed, added },
     })
     onClose()
   }
+
+  // − value + control for minutes and zones
+  const stepper = (label, value, onDec, onInc, decOff, incOff) => (
+    <div className={`flex items-center rounded-lg border flex-shrink-0 ${darkMode ? "border-gray-700" : "border-gray-200"}`} role="group" aria-label={label}>
+      <button onClick={onDec} disabled={decOff} aria-label={`${label} down`} className={`w-7 h-8 text-sm disabled:opacity-30 ${muted}`}>−</button>
+      <span className={`w-9 text-center text-xs font-bold tabular-nums ${heading}`}>{value}</span>
+      <button onClick={onInc} disabled={incOff} aria-label={`${label} up`} className={`w-7 h-8 text-sm disabled:opacity-30 ${muted}`}>+</button>
+    </div>
+  )
 
   const chip = on => `px-3 py-2 rounded-xl text-xs font-semibold border transition-colors ${on
     ? "bg-[#00aa13] border-[#00aa13] text-white"
@@ -5608,33 +5943,59 @@ function ClassEditModal({ cls, darkMode, existing, onClose, onSubmit }) {
     <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="edit-class-title"
       onKeyDown={e => { if (e.key === "Escape") onClose() }}>
       <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" onClick={onClose} />
-      <div className={`relative w-full sm:max-w-lg max-h-[90vh] overflow-y-auto overscroll-contain rounded-t-3xl sm:rounded-2xl shadow-2xl ${darkMode ? "bg-gray-900 border border-gray-800" : "bg-white"}`}>
+      <div className={`relative w-full sm:max-w-2xl max-h-[90vh] overflow-y-auto overscroll-contain rounded-t-3xl sm:rounded-2xl shadow-2xl ${darkMode ? "bg-gray-900 border border-gray-800" : "bg-white"}`}>
         <div className={`sticky top-0 z-10 flex items-start justify-between gap-3 px-5 pt-5 pb-3 ${darkMode ? "bg-gray-900" : "bg-white"}`}>
           <div>
             <p className="text-xs font-bold uppercase tracking-widest text-[#00aa13]">Edit class</p>
             <h2 id="edit-class-title" className={`text-lg font-bold ${heading}`}>{cls.name}</h2>
-            <p className={`text-xs ${muted}`}>{cls.dateLabel} · {cls.time} · {cls.studio}{past ? " · completed" : ""}</p>
+            <p className={`text-xs ${muted}`}>{cls.dateLabel} · {cls.time} · {cls.studio}</p>
           </div>
           <button onClick={onClose} aria-label="Close" className={`w-8 h-8 rounded-lg flex items-center justify-center ${darkMode ? "hover:bg-gray-800 text-gray-400" : "hover:bg-gray-100 text-gray-500"}`}>✕</button>
         </div>
 
         <div className="px-5 pb-5 flex flex-col gap-5">
-          <p className={`text-xs rounded-xl p-3 ${subtle} ${muted}`}>
-            {past ? "This class has finished — your changes will apply to future runs once the studio owner approves them."
-                  : "Changes are sent to the studio owner to approve before riders see them."}
-          </p>
+          <p className={`text-xs rounded-xl p-3 ${subtle} ${muted}`}>Edit the class like you would in the Class Builder. Changes go to the studio owner to approve before riders see them.</p>
 
           <div>
-            {label("Difficulty")}
-            <div className="flex flex-wrap gap-2">
-              {DIFFICULTY_LEVELS.map(d => <button key={d} onClick={() => setDifficulty(d)} className={chip(difficulty === d)}>{d}{d === originalDifficulty ? " · current" : ""}</button>)}
+            <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+              {label("Class structure")}
+              <div className="flex flex-wrap gap-1.5 -mt-2">
+                <button onClick={() => setBlocks(bs => shiftBlocks(bs, -1))} className={chip(false)}>↓ Suggest lighter</button>
+                <button onClick={() => setBlocks(bs => shiftBlocks(bs, 1))} className={chip(false)}>↑ Suggest harder</button>
+                {blocksChanged && <button onClick={() => setBlocks(originalBlocks)} className={chip(false)}>↺ Reset</button>}
+              </div>
             </div>
-          </div>
-
-          <div>
-            {label("Intervals")}
-            <div className="flex flex-wrap gap-2">
-              {INTENSITY_SHIFTS.map(([k, l]) => <button key={k} onClick={() => setIntensity(k)} className={chip(intensity === k)}>{l}</button>)}
+            <div className={`rounded-xl p-3 ${subtle}`}>
+              <BlocksChart blocks={blocks} original={originalBlocks} />
+              <div className={`flex items-center justify-between gap-2 text-[11px] mt-2 ${muted}`}>
+                <span>
+                  Difficulty: {difficulty !== originalDifficulty
+                    ? <><span className="line-through">{originalDifficulty}</span> → <span className="font-semibold text-[#00aa13]">{difficulty}</span></>
+                    : <span className="font-semibold">{difficulty}</span>}
+                </span>
+                <span className={totalMins !== originalTotal ? "text-amber-500 font-semibold" : ""}>{totalMins} / {originalTotal} min</span>
+              </div>
+              {blocksChanged && <p className={`text-[11px] mt-1 ${muted}`}>Dashed outlines show the original zones.</p>}
+            </div>
+            <div className="flex flex-col gap-1.5 mt-2">
+              {blocks.map((b, i) => (
+                <div key={i} className={`flex items-center gap-2 rounded-xl px-3 py-2 ${subtle}`}>
+                  <span className="w-2 h-8 rounded-full flex-shrink-0 transition-colors" style={{ background: ZONE_COLORS[b.zone - 1] }} />
+                  <div className="flex-1 min-w-0">
+                    <input value={b.name} onChange={e => updateBlock(i, { name: e.target.value })} aria-label={`Block ${i + 1} name`}
+                      className={`w-full bg-transparent text-sm font-medium focus:outline-none ${heading}`} />
+                    <p className={`text-[11px] truncate ${muted}`}>{b.cadence}</p>
+                  </div>
+                  {stepper(`${b.name} minutes`, `${b.mins}m`, () => updateBlock(i, { mins: b.mins - 1 }), () => updateBlock(i, { mins: b.mins + 1 }), b.mins <= 1, false)}
+                  {stepper(`${b.name} zone`, `Z${b.zone}`, () => updateBlock(i, { zone: b.zone - 1 }), () => updateBlock(i, { zone: b.zone + 1 }), b.zone <= 1, b.zone >= 6)}
+                  <button onClick={() => setBlocks(bs => bs.filter((_, j) => j !== i))} disabled={blocks.length <= 1} aria-label={`Remove ${b.name}`}
+                    className={`w-7 h-7 rounded-lg flex items-center justify-center text-sm flex-shrink-0 disabled:opacity-30 ${darkMode ? "text-gray-400 hover:bg-gray-700" : "text-gray-400 hover:bg-gray-200"}`}>✕</button>
+                </div>
+              ))}
+              <button onClick={() => setBlocks(bs => [...bs.slice(0, -1), { name: "Recovery", mins: 3, zone: 1, cadence: "80–85 rpm" }, ...bs.slice(-1)])}
+                className={`py-2 rounded-xl border-2 border-dashed text-xs font-semibold ${darkMode ? "border-gray-700 text-gray-400 hover:bg-gray-800" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}>
+                + Add a recovery block
+              </button>
             </div>
           </div>
 
@@ -5670,7 +6031,7 @@ function ClassEditModal({ cls, darkMode, existing, onClose, onSubmit }) {
           <div>
             {label("Apply to")}
             <div className="flex flex-wrap gap-2">
-              <button disabled={past} onClick={() => setScope("this")} className={`${chip(scope === "this")} ${past ? "opacity-40 cursor-not-allowed" : ""}`}>This class only</button>
+              <button onClick={() => setScope("this")} className={chip(scope === "this")}>This class only</button>
               <button onClick={() => setScope("future")} className={chip(scope === "future")}>All future classes</button>
             </div>
           </div>
@@ -5745,10 +6106,12 @@ function ClassRoster({ cls, darkMode }) {
           {past
             ? <span className="text-xs font-semibold text-amber-500">{cls.rating} ★</span>
             : <span className={`text-xs font-semibold ${cls.booked >= cls.capacity ? "text-orange-500" : "text-[#00aa13]"}`}>{cls.booked >= cls.capacity ? "Full" : `${cls.capacity - cls.booked} spaces`}</span>}
-          <button onClick={() => setEditing(true)}
-            className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-colors ${darkMode ? "border-gray-700 text-gray-300 hover:bg-gray-800" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}>
-            ✎ Edit
-          </button>
+          {!past && (
+            <button onClick={() => setEditing(true)}
+              className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-colors ${darkMode ? "border-gray-700 text-gray-300 hover:bg-gray-800" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}>
+              ✎ Edit
+            </button>
+          )}
         </div>
       </div>
       <div className="flex items-center justify-between mt-3 mb-1.5">
@@ -5908,20 +6271,25 @@ function ClassRoster({ cls, darkMode }) {
   )
 }
 
-function InstructorClassesPage({ darkMode, onToggleDarkMode, initialClass }) {
+function InstructorClassesPage({ darkMode, onToggleDarkMode, initialClass, navExpanded = false, onCollapseNav }) {
   const heading = darkMode ? "text-white"    : "text-gray-900"
   const muted   = darkMode ? "text-gray-400" : "text-gray-500"
   const card    = `rounded-2xl border transition-colors ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`
 
   const [view, setView]         = useState("list")
-  const [selected, setSelected] = useState(initialClass || instructorClasses.find(c => c.status === "upcoming"))
+  const [selected, setSelected] = useState(initialClass || null)   // details stay closed until a class is picked
+  const [listTab, setListTab]   = useState(initialClass?.status === "done" ? "past" : "upcoming")
   const [mobileDetail, setMobileDetail] = useState(!!initialClass)   // drives the mobile roster bottom-sheet
   const rosterDrag = useDragToDismiss(() => setMobileDetail(false))
+  const changes = React.useContext(ChangeRequestsContext)
+  useListFirstOnTablet(navExpanded, !!selected, () => setSelected(null), onCollapseNav)
   const [calMonth, setCalMonth] = useState({ year: 2026, month: 2 })   // calendar month being viewed
   const [weekStart, setWeekStart] = useState(() => mondayOf("2026-02-26")) // Monday of the week being viewed
 
-  const upcoming = instructorClasses.filter(c => c.status === "upcoming")
-  const pending  = instructorClasses.filter(c => c.status === "pending")
+  // A class with edits waiting on the studio owner sits in "Pending approval" until they decide
+  const changePending = c => changes.requests.some(r => r.classKey === c.dateIso + c.time + c.name && r.status === "pending")
+  const upcoming = instructorClasses.filter(c => c.status === "upcoming" && !changePending(c))
+  const pending  = instructorClasses.filter(c => c.status === "pending" || (c.status === "upcoming" && changePending(c)))
   const past     = instructorClasses.filter(c => c.status === "done")
   const TODAY_ISO = "2026-02-26"
 
@@ -5950,6 +6318,7 @@ function InstructorClassesPage({ darkMode, onToggleDarkMode, initialClass }) {
   function ClassRow({ c }) {
     const on = c === selected
     const done = c.status === "done", isPending = c.status === "pending"
+    const editPending = changePending(c)
     const full = c.booked >= c.capacity
     return (
       <button onClick={() => pick(c)}
@@ -5966,8 +6335,8 @@ function InstructorClassesPage({ darkMode, onToggleDarkMode, initialClass }) {
         </div>
         {done ? (
           <span className="text-sm font-semibold text-amber-500 flex-shrink-0">{c.rating} ★</span>
-        ) : isPending ? (
-          <span className="text-[10px] font-semibold text-amber-500 border border-amber-500/40 px-2 py-1 rounded-full flex-shrink-0 whitespace-nowrap">Awaiting OK</span>
+        ) : isPending || editPending ? (
+          <span className="text-[10px] font-semibold text-amber-500 border border-amber-500/40 px-2 py-1 rounded-full flex-shrink-0 whitespace-nowrap">{editPending ? "Changes pending" : "Awaiting OK"}</span>
         ) : (
           <div className="flex-shrink-0 w-16 text-right">
             <p className={`text-xs font-bold tabular-nums ${full ? "text-orange-500" : heading}`}>{c.booked}/{c.capacity}</p>
@@ -5985,7 +6354,7 @@ function InstructorClassesPage({ darkMode, onToggleDarkMode, initialClass }) {
 
   const ClassList = (
     <div className="flex flex-col gap-6">
-      {pending.length > 0 && (
+      {listTab === "upcoming" && pending.length > 0 && (
         <div>
           <SectionLabel accent="text-amber-500">⏳ Pending approval · {pending.length}</SectionLabel>
           <div className="flex flex-col gap-1.5">
@@ -5993,7 +6362,7 @@ function InstructorClassesPage({ darkMode, onToggleDarkMode, initialClass }) {
           </div>
         </div>
       )}
-      <div>
+      {listTab === "upcoming" && <div>
         <SectionLabel>Upcoming · {upcoming.length}</SectionLabel>
         <div className="flex flex-col gap-3">
           {groupByDay(upcoming).map(g => (
@@ -6008,8 +6377,8 @@ function InstructorClassesPage({ darkMode, onToggleDarkMode, initialClass }) {
             </div>
           ))}
         </div>
-      </div>
-      {past.length > 0 && (
+      </div>}
+      {listTab === "past" && past.length > 0 && (
         <div>
           <SectionLabel>Past · {past.length}</SectionLabel>
           <div className="flex flex-col gap-1.5">
@@ -6020,12 +6389,29 @@ function InstructorClassesPage({ darkMode, onToggleDarkMode, initialClass }) {
     </div>
   )
 
+  const closeRoster = (
+    <div className="flex justify-end mb-2">
+      <button onClick={() => setSelected(null)}
+        className={`text-xs font-semibold px-3 py-1.5 rounded-lg ${darkMode ? "text-gray-400 hover:bg-gray-800" : "text-gray-500 hover:bg-gray-100"}`}>✕ Close details</button>
+    </div>
+  )
+
   return (
     <div className="p-4 md:p-8 max-w-5xl mx-auto pb-16">
       <InstructorTopBar title="My Classes" sub="Classes you're teaching at CycleHQ" darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
 
-      {/* View toggle */}
-      <div className="flex items-center justify-end gap-3 mb-5">
+      {/* Upcoming / past sessions (list view) + view toggle */}
+      <div className="flex items-center justify-between gap-3 mb-5 flex-wrap">
+        {view === "list" ? (
+          <div role="tablist" aria-label="Sessions" className={`inline-flex rounded-xl p-0.5 ${darkMode ? "bg-gray-800" : "bg-gray-100"}`}>
+            {[["upcoming", `Upcoming · ${upcoming.length + pending.length}`], ["past", `Past sessions · ${past.length}`]].map(([k, l]) => (
+              <button key={k} role="tab" aria-selected={listTab === k} onClick={() => { setListTab(k); setSelected(null) }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${listTab === k
+                  ? darkMode ? "bg-gray-700 text-white shadow-sm" : "bg-white text-gray-900 shadow-sm"
+                  : muted}`}>{l}</button>
+            ))}
+          </div>
+        ) : <span />}
         <div className={`inline-flex rounded-xl p-0.5 ${darkMode ? "bg-gray-800" : "bg-gray-100"}`}>
           {[["list","List"],["week","Week"],["calendar","Calendar"]].map(([v, l]) => (
             <button key={v} onClick={() => setView(v)}
@@ -6087,10 +6473,7 @@ function InstructorClassesPage({ darkMode, onToggleDarkMode, initialClass }) {
             </div>
           </div>
           {/* Selected detail */}
-          <div className="hidden md:block">
-            {selected ? <ClassRoster cls={selected} darkMode={darkMode} />
-              : <div className={`${card} p-10 text-center`}><p className={`text-sm ${muted}`}>Tap a class in the calendar to view its roster</p></div>}
-          </div>
+          {selected && <div className="hidden md:block">{closeRoster}<ClassRoster cls={selected} darkMode={darkMode} /></div>}
         </div>
       ) : view === "week" ? (
         <div className="flex flex-col gap-6">
@@ -6140,21 +6523,20 @@ function InstructorClassesPage({ darkMode, onToggleDarkMode, initialClass }) {
             </div>
           </div>
           {/* Selected detail */}
-          <div className="hidden md:block">
-            {selected ? <ClassRoster cls={selected} darkMode={darkMode} />
-              : <div className={`${card} p-10 text-center`}><p className={`text-sm ${muted}`}>Tap a class in the week to view its roster</p></div>}
-          </div>
+          {selected && <div className="hidden md:block">{closeRoster}<ClassRoster cls={selected} darkMode={darkMode} /></div>}
         </div>
       ) : (
         /* List + detail — left list scrolls independently, right roster stays put */
         <div className="flex flex-col md:flex-row gap-6 md:items-start">
-          <div className={`md:w-[340px] md:flex-shrink-0 md:max-h-[calc(100vh-150px)] md:overflow-y-auto md:pr-1 block`}>
+          <div className={`${selected ? "md:w-[340px] md:flex-shrink-0" : "md:flex-1"} md:max-h-[calc(100vh-150px)] md:overflow-y-auto md:pr-1 block`}>
             {ClassList}
           </div>
-          <div className="flex-1 min-w-0 md:sticky md:top-6 hidden md:block">
-            {selected ? <ClassRoster cls={selected} darkMode={darkMode} />
-              : <div className={`${card} p-10 text-center`}><p className={`text-sm ${muted}`}>Select a class to view its roster</p></div>}
-          </div>
+          {selected && (
+            <div className="flex-1 min-w-0 md:sticky md:top-6 hidden md:block">
+              {closeRoster}
+              <ClassRoster cls={selected} darkMode={darkMode} />
+            </div>
+          )}
         </div>
       )}
 

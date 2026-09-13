@@ -1451,6 +1451,14 @@ function Avatar({ name, size = 32, square = false }) {
 function useDragToDismiss(onDismiss) {
   const [dragY, setDragY] = useState(0)
   const startY = useRef(null)
+  const dragging = useRef(false)
+  // True when the touch started inside content that's scrolled down — then the finger should scroll it, not drag the sheet
+  function contentScrolled(e) {
+    for (let el = e.target; el && el !== e.currentTarget; el = el.parentElement) {
+      if (el.scrollTop > 0 && /(auto|scroll)/.test(getComputedStyle(el).overflowY)) return true
+    }
+    return false
+  }
   return {
     dragY,
     sheetStyle: {
@@ -1459,11 +1467,73 @@ function useDragToDismiss(onDismiss) {
       maxHeight: "88vh",
     },
     handlers: {
-      onTouchStart: e => { startY.current = e.touches[0].clientY },
-      onTouchMove:  e => { setDragY(Math.max(0, e.touches[0].clientY - startY.current)) },
-      onTouchEnd:   ()  => { if (dragY > 72) { setDragY(0); onDismiss() } else setDragY(0) },
+      onTouchStart: e => { startY.current = e.touches[0].clientY; dragging.current = !contentScrolled(e) },
+      onTouchMove:  e => {
+        if (!dragging.current) return
+        const dy = e.touches[0].clientY - startY.current
+        // Swiping up means scrolling the content, so stop treating this gesture as a drag
+        if (dy < 0) { dragging.current = false; setDragY(0); return }
+        setDragY(dy)
+      },
+      onTouchEnd:   ()  => { dragging.current = false; if (dragY > 72) { setDragY(0); onDismiss() } else setDragY(0) },
     },
   }
+}
+
+// Celebratory cyclist that rides across the screen trailing confetti after a booking
+const CONFETTI_COLORS = ["#00aa13", "#15c15f", "#fde53d", "#fb7512", "#36aee2", "#e91236", "#b050f8"]
+function makeConfetti(count = 70) {
+  return Array.from({ length: count }, (_, i) => {
+    const x = Math.random() * 100
+    return {
+      x, delay: 0.1 + (x / 100) * 1.9 + Math.random() * 0.15,
+      dx: (Math.random() - 0.5) * 140, dy: 180 + Math.random() * 260, rot: Math.random() * 720 - 360,
+      color: CONFETTI_COLORS[i % CONFETTI_COLORS.length], size: 6 + Math.random() * 5, round: Math.random() < 0.3,
+    }
+  })
+}
+function BookingCelebration({ pieces, darkMode }) {
+  const ink = darkMode ? "#e5e7eb" : "#1b2333"
+  return (
+    <div className="booking-celebration fixed inset-0 z-[70] pointer-events-none overflow-hidden" aria-hidden="true">
+      <style>{`
+        @keyframes bc-ride { from { transform: translateX(-160px) } to { transform: translateX(calc(100vw + 160px)) } }
+        @keyframes bc-bob { 0%, 100% { transform: translateY(0) } 50% { transform: translateY(-3px) } }
+        @keyframes bc-spin { to { transform: rotate(360deg) } }
+        @keyframes bc-confetti {
+          0%   { opacity: 0; transform: translate(0, 0) rotate(0deg) scale(.6) }
+          10%  { opacity: 1 }
+          30%  { transform: translate(calc(var(--dx) * .4), -60px) rotate(calc(var(--rot) * .3)) scale(1) }
+          100% { opacity: 0; transform: translate(var(--dx), var(--dy)) rotate(var(--rot)) scale(1) }
+        }
+        .bc-wheel { transform-box: fill-box; transform-origin: center; animation: bc-spin .45s linear infinite }
+        @media (prefers-reduced-motion: reduce) { .booking-celebration { display: none } }
+      `}</style>
+      {pieces.map((p, i) => (
+        <span key={i} className="absolute" style={{
+          left: `${p.x}%`, top: "calc(40% + 40px)", width: p.size, height: p.round ? p.size : p.size * 0.45,
+          borderRadius: p.round ? "50%" : 2, background: p.color, opacity: 0,
+          "--dx": `${p.dx}px`, "--dy": `${p.dy}px`, "--rot": `${p.rot}deg`,
+          animation: `bc-confetti 1.4s ease-out ${p.delay}s forwards`,
+        }} />
+      ))}
+      <div className="absolute left-0" style={{ top: "40%", animation: "bc-ride 2.3s cubic-bezier(.3,.1,.7,.9) forwards" }}>
+        <div style={{ animation: "bc-bob .35s ease-in-out infinite" }}>
+          <svg width="120" height="80" viewBox="0 0 96 64" fill="none" strokeLinecap="round" strokeLinejoin="round">
+            {[22, 74].map(cx => (
+              <g key={cx} className="bc-wheel">
+                <circle cx={cx} cy="46" r="15" stroke={ink} strokeWidth="3" />
+                <path d={`M${cx} 32v28M${cx - 14} 46h28M${cx - 10} 36l20 20M${cx + 10} 36l-20 20`} stroke={ink} strokeWidth="1.2" opacity=".5" />
+              </g>
+            ))}
+            <path d="M22 46h20l18-20H34z M60 26l14 20 M34 26l-2-6 M27 20h10 M60 26l2-8h6" stroke="#00aa13" strokeWidth="3.5" />
+            <path d="M33 19l21-10 M54 9l12 9 M33 19l13 13-4 14" stroke={ink} strokeWidth="4" />
+            <circle cx="59" cy="6" r="5" fill="#00aa13" />
+          </svg>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function SessionPlanModal({ session, darkMode, onClose }) {
@@ -1505,9 +1575,10 @@ function SessionPlanModal({ session, darkMode, onClose }) {
         style={{ boxShadow: "0 32px 80px rgba(0,0,0,0.4)" }}
       >
 
-        {/* Header */}
-        <div className="px-7 pt-7 pb-0 flex-shrink-0">
-          <div className="flex items-start justify-between mb-4">
+        {/* One scroll area for the whole plan, so it scrolls properly on short phone screens */}
+        <div className="overflow-y-auto overscroll-contain flex-1 min-h-0">
+          {/* Title row — pinned to the top of the scroll area so ✕ is always reachable */}
+          <div className={`sticky top-0 z-10 ${bg} px-5 sm:px-7 pt-6 sm:pt-7 pb-3 mb-1 flex items-start justify-between`}>
             <div className="min-w-0 pr-4">
               <p className="text-xs font-bold uppercase tracking-widest text-[#00aa13] mb-1.5">Session Plan</p>
               <h2 className={`text-2xl font-bold leading-tight ${heading}`}>{session.name}</h2>
@@ -1520,6 +1591,8 @@ function SessionPlanModal({ session, darkMode, onClose }) {
             </button>
           </div>
 
+        {/* Header */}
+        <div className="px-5 sm:px-7 pb-0">
           <p className={`text-sm leading-relaxed ${muted} mb-5`}>{plan.overview}</p>
 
           {/* Workout bar chart */}
@@ -1535,7 +1608,7 @@ function SessionPlanModal({ session, darkMode, onClose }) {
         </div>
 
         {/* Phase cards — scrollable */}
-        <div className="overflow-y-auto flex-1 px-7 pb-7 grid grid-cols-1 md:grid-cols-2 gap-4 content-start">
+        <div className="px-5 sm:px-7 pb-7 grid grid-cols-1 md:grid-cols-2 gap-4 content-start">
           {plan.phases.map((ph, i) => {
             const info = zoneInfo(ph.zone)
             return (
@@ -1580,6 +1653,7 @@ function SessionPlanModal({ session, darkMode, onClose }) {
               </div>
             )
           })}
+        </div>
         </div>
       </div>
     </div>
@@ -2309,12 +2383,27 @@ function BookingsPage({ darkMode, onToggleDarkMode }) {
   const monthCells  = getMonthGrid(monthView.year, monthView.month)
   const isPast      = selectedDate < BOOKING_TODAY
 
+  const [celebration, setCelebration]         = useState(null)
+
+  // After each booking step, bring the Confirm button (and its "Booked" result) into view
+  function revealConfirm() {
+    requestAnimationFrame(() => document.querySelectorAll("[data-confirm-booking]").forEach(el => el.scrollIntoView({ behavior: "smooth", block: "nearest" })))
+  }
+  function chooseBike(num) {
+    setSelectedBike(num)
+    revealConfirm()
+  }
+
   function handleBook(session) {
     const key = session.time + session.name
+    if (bookedSessions.includes(key)) return
     setBookedSessions(prev => [...prev, key])
     setToast(`Booked: ${session.name}`)
     setSelectedSession({ ...session, state: "booked" })
     setTimeout(() => setToast(null), 2500)
+    setCelebration({ id: Date.now(), pieces: makeConfetti() })
+    setTimeout(() => setCelebration(null), 3800)
+    revealConfirm()
   }
 
   function selectDay(dateStr) {
@@ -2687,7 +2776,7 @@ function BookingsPage({ darkMode, onToggleDarkMode }) {
                       <p className={`text-sm font-semibold ${heading}`}>Social ride · random seating</p>
                       <p className={`text-xs mt-1 ${muted}`}>Your bike is assigned when you arrive — a great way to mix the room and meet other riders.</p>
                     </div>
-                    <button onClick={() => handleBook(selectedSession)}
+                    <button data-confirm-booking onClick={() => handleBook(selectedSession)}
                       className="w-full mt-5 py-3 rounded-xl bg-[#00aa13] hover:bg-[#008a0f] text-white font-semibold text-sm transition-colors">
                       {bookedSessions.includes(selectedSession.time + selectedSession.name) ? "✓ Booked!" : "Confirm booking"}
                     </button>
@@ -2708,7 +2797,7 @@ function BookingsPage({ darkMode, onToggleDarkMode }) {
                       {(STUDIO_LAYOUTS[selectedSession.studio]?.rows || bikes).map((row, ri) => (
                         <div key={ri} className="flex gap-2 justify-center">
                           {row.map(num => (
-                            <button key={num} onClick={() => setSelectedBike(num)}
+                            <button key={num} onClick={() => chooseBike(num)}
                               className={`w-8 h-10 rounded-lg text-xs font-medium transition-all
                                 ${selectedBike === num ? "bg-[#00aa13] text-white" : darkMode ? "bg-gray-700 text-gray-300 hover:bg-gray-600" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>
                               {num}
@@ -2717,7 +2806,7 @@ function BookingsPage({ darkMode, onToggleDarkMode }) {
                         </div>
                       ))}
                     </div>
-                    <button onClick={() => handleBook(selectedSession)}
+                    <button data-confirm-booking onClick={() => handleBook(selectedSession)}
                       className="w-full mt-6 py-3 rounded-xl bg-[#00aa13] hover:bg-[#008a0f] text-white font-semibold text-sm transition-colors">
                       {bookedSessions.includes(selectedSession.time + selectedSession.name) ? "✓ Booked!" : "Confirm booking"}
                     </button>
@@ -2813,7 +2902,7 @@ function BookingsPage({ darkMode, onToggleDarkMode }) {
                     <p className={`text-sm font-semibold ${heading}`}>Social ride · random seating</p>
                     <p className={`text-xs mt-1 ${muted}`}>Your bike is assigned when you arrive — a great way to mix the room and meet other riders.</p>
                   </div>
-                  <button onClick={() => handleBook(selectedSession)}
+                  <button data-confirm-booking onClick={() => handleBook(selectedSession)}
                     className="w-full mt-5 py-3 rounded-xl bg-[#00aa13] hover:bg-[#008a0f] text-white font-semibold text-sm transition-colors">
                     {bookedSessions.includes(selectedSession.time + selectedSession.name) ? "✓ Booked!" : "Confirm booking"}
                   </button>
@@ -2831,7 +2920,7 @@ function BookingsPage({ darkMode, onToggleDarkMode }) {
                     {(STUDIO_LAYOUTS[selectedSession.studio]?.rows || bikes).map((row, ri) => (
                       <div key={ri} className="flex gap-2 justify-center">
                         {row.map(num => (
-                          <button key={num} onClick={() => setSelectedBike(num)}
+                          <button key={num} onClick={() => chooseBike(num)}
                             className={`w-8 h-10 rounded-lg text-xs font-medium transition-all
                               ${selectedBike === num ? "bg-[#00aa13] text-white" : darkMode ? "bg-gray-700 text-gray-300 hover:bg-gray-600" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>
                             {num}
@@ -2840,7 +2929,7 @@ function BookingsPage({ darkMode, onToggleDarkMode }) {
                       </div>
                     ))}
                   </div>
-                  <button onClick={() => handleBook(selectedSession)}
+                  <button data-confirm-booking onClick={() => handleBook(selectedSession)}
                     className="w-full mt-6 py-3 rounded-xl bg-[#00aa13] hover:bg-[#008a0f] text-white font-semibold text-sm transition-colors">
                     {bookedSessions.includes(selectedSession.time + selectedSession.name) ? "✓ Booked!" : "Confirm booking"}
                   </button>
@@ -2858,6 +2947,8 @@ function BookingsPage({ darkMode, onToggleDarkMode }) {
           onClose={() => setShowPlan(false)}
         />
       )}
+
+      {celebration && <BookingCelebration key={celebration.id} pieces={celebration.pieces} darkMode={darkMode} />}
 
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[#00aa13] text-white text-sm px-5 py-3 rounded-xl shadow-lg">

@@ -1167,22 +1167,21 @@ export default function App() {
       <aside className={`hidden md:flex ${navExpanded ? "w-48" : "w-16"} border-r flex-col py-6 px-3 flex-shrink-0 transition-all
         ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`}>
 
-        {/* Logo */}
-        <div className={`flex items-center ${navExpanded ? "justify-start px-3" : "justify-center"} mb-3 gap-2`}>
-          <div className="w-7 h-7 rounded-lg bg-[#00aa13] flex items-center justify-center flex-shrink-0">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+        {/* Logo, with a small expand / collapse toggle beside it (below it when collapsed) */}
+        <div className={`flex ${navExpanded ? "items-center justify-between pl-3 mb-6" : "flex-col items-center gap-2 mb-5"}`}>
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-[#00aa13] flex items-center justify-center flex-shrink-0">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+            </div>
+            {navExpanded && <p className={`font-bold text-base ${darkMode ? "text-white" : "text-gray-900"}`}>CycleHQ</p>}
           </div>
-          {navExpanded && <p className={`font-bold text-base ${darkMode ? "text-white" : "text-gray-900"}`}>CycleHQ</p>}
+          <button onClick={() => setNavExpanded(v => !v)}
+            title={navExpanded ? "Collapse sidebar" : "Expand sidebar"} aria-label={navExpanded ? "Collapse sidebar" : "Expand sidebar"} aria-expanded={navExpanded}
+            className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 transition-colors
+              ${darkMode ? "text-gray-600 hover:text-gray-300 hover:bg-gray-800" : "text-gray-300 hover:text-gray-500 hover:bg-gray-100"}`}>
+            {navExpanded ? <PanelLeftClose size={14} /> : <PanelLeftOpen size={14} />}
+          </button>
         </div>
-
-        {/* Expand / collapse toggle */}
-        <button onClick={() => setNavExpanded(v => !v)}
-          title={navExpanded ? "Collapse sidebar" : "Expand sidebar"} aria-label={navExpanded ? "Collapse sidebar" : "Expand sidebar"} aria-expanded={navExpanded}
-          className={`flex items-center gap-3 ${navExpanded ? "justify-start px-3" : "justify-center px-2"} py-2 mb-3 rounded-lg text-sm w-full transition-colors
-            ${darkMode ? "text-gray-400 hover:bg-gray-800" : "text-gray-400 hover:bg-gray-50"}`}>
-          {navExpanded ? <PanelLeftClose size={15} className="flex-shrink-0" /> : <PanelLeftOpen size={15} className="flex-shrink-0" />}
-          {navExpanded && <span>Collapse</span>}
-        </button>
 
         {/* Workspaces */}
         <div className="flex flex-col gap-2 flex-1 overflow-y-auto">
@@ -2725,15 +2724,7 @@ function BookingsPage({ darkMode, onToggleDarkMode }) {
                   </div>
                 )}
               </div>
-            ) : (
-              <div className={`hidden md:flex ${card} w-96 flex-shrink-0 items-center justify-center`}>
-                <div className="text-center px-8">
-                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-2xl mx-auto mb-3 ${darkMode ? "bg-gray-800" : "bg-gray-50"}`}>🚴</div>
-                  <p className={`text-sm font-semibold ${heading}`}>Select a session</p>
-                  <p className={`text-xs mt-1 ${muted}`}>Choose a class from the list to view details and book your spot.</p>
-                </div>
-              </div>
-            )}
+            ) : null /* closed: the session list takes the full width */}
 
           </div>
         </>
@@ -3895,15 +3886,7 @@ function RidesPage({ darkMode, onToggleDarkMode }) {
             </div>
 
           </div>
-        ) : (
-          <div className={`hidden md:flex ${card} w-[420px] flex-shrink-0 items-center justify-center`}>
-            <div className="text-center px-8">
-              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-2xl mx-auto mb-3 ${darkMode ? "bg-gray-800" : "bg-gray-50"}`}>🚴</div>
-              <p className={`text-sm font-semibold ${heading}`}>Select a ride</p>
-              <p className={`text-xs mt-1 ${muted}`}>Choose any session from the list to view your full performance analysis.</p>
-            </div>
-          </div>
-        )}
+        ) : null /* closed: the ride list takes the full width */}
 
       </div>
 

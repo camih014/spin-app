@@ -1108,6 +1108,8 @@ export default function App() {
     return () => window.removeEventListener("message", onMessage)
   }, [])
   const mainRef = useRef(null)   // the page scroll area (for scroll hints)
+  // Every page opens at the top — never carry the previous page's scroll position over
+  useEffect(() => { mainRef.current?.scrollTo(0, 0) }, [activePage])
   // Tapping your profile picture: an account sheet on phones, the Profile page on bigger screens
   const [accountOpen, setAccountOpen] = useState(false)
   useEffect(() => {
@@ -1183,7 +1185,7 @@ export default function App() {
   const dm = () => setDarkMode(!darkMode)
 
   return (
-    <div className={`flex h-screen font-sans transition-colors ${darkMode ? "bg-gray-950 text-white" : "bg-gray-50 text-gray-900"}`}>
+    <div className={`flex h-dvh font-sans transition-colors ${darkMode ? "bg-gray-950 text-white" : "bg-gray-50 text-gray-900"}`}>
 
       {/* ── Sidebar (hidden on mobile; expandable / collapsible on md+) ── */}
       <aside className={`hidden md:flex ${navExpanded ? "w-48" : "w-16"} border-r flex-col py-6 px-3 flex-shrink-0 transition-all
@@ -1493,7 +1495,8 @@ function RiderProfile({ darkMode }) {
 // slim always-visible scroll thumb (phones hide native scrollbars), and sticky headers lift once content
 // slides under them. Areas with a pinned header only fade at the bottom so the header stays crisp.
 const SCROLL_HINT_CSS = `
-  main { scrollbar-width: none }
+  html, body, #root { height: 100%; overflow: hidden; overscroll-behavior: none }
+  main { scrollbar-width: none; overscroll-behavior: contain }
   main::-webkit-scrollbar { display: none }
   * { scrollbar-width: thin; scrollbar-color: rgba(120,130,145,.45) transparent }
   *::-webkit-scrollbar { width: 6px; height: 6px }

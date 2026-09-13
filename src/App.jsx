@@ -3092,10 +3092,7 @@ function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onColla
 
       {/* Header */}
       <div className={`${stickyHeader(darkMode)} flex items-center justify-between mb-5`}>
-        <div>
-          <h1 className={`text-xl font-semibold ${heading}`}>Browse sessions</h1>
-          <p className={`text-sm ${muted}`}>Find a class that fits your week</p>
-        </div>
+        <h1 className={`text-lg md:text-xl font-semibold whitespace-nowrap mr-3 ${heading}`}>Browse sessions</h1>
         <div className="flex items-center gap-2 md:gap-3">
           <DarkModeToggle darkMode={darkMode} onToggle={onToggleDarkMode} />
           {/* Week / Month toggle */}
@@ -4187,10 +4184,7 @@ function CalendarPage({ darkMode, onToggleDarkMode, onFindClass, riderChanges = 
 
       {/* Header */}
       <div className={`${stickyHeader(darkMode)} flex items-center justify-between mb-5`}>
-        <div>
-          <h1 className={`text-xl font-semibold ${heading}`}>Calendar</h1>
-          <p className={`text-sm ${muted}`}>Your schedule at a glance</p>
-        </div>
+        <h1 className={`text-lg md:text-xl font-semibold whitespace-nowrap mr-3 ${heading}`}>Calendar</h1>
         <div className="flex items-center gap-2 md:gap-3">
           <DarkModeToggle darkMode={darkMode} onToggle={onToggleDarkMode} />
           <div className={`flex rounded-lg p-0.5 ${darkMode ? "bg-gray-800" : "bg-gray-100"}`}>

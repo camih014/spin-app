@@ -4841,7 +4841,12 @@ function RidesPage({ darkMode, onToggleDarkMode, navExpanded = false, onCollapse
         <div className={`${card} flex-1 overflow-y-auto`}>
           <div className={`flex items-center justify-between px-5 py-3 border-b ${divider}`}>
             <p className={`text-xs font-semibold uppercase tracking-widest ${muted}`}>Feb – Mar 2026</p>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap justify-end">
+              {collectedStreaks.size > 0 && (
+                <span data-streak-count className="text-xs font-semibold px-2.5 py-0.5 rounded-full whitespace-nowrap" style={{ background: "#06B6D41a", color: "#0891B2" }}>
+                  ✓ {collectedStreaks.size} streak{collectedStreaks.size === 1 ? "" : "s"} collected
+                </span>
+              )}
               <span className="text-xs font-semibold" style={{ color: "#00aa13" }}>
                 ⭐ Top 10%: {top10Count}×
               </span>
@@ -4854,13 +4859,25 @@ function RidesPage({ darkMode, onToggleDarkMode, navExpanded = false, onCollapse
           {ridesData.map((ride, i) => {
             const isSel = selectedRide === ride
             const tier  = positionTier(ride.position, ride.total)
+            const streakDone = collectedStreaks.has(ride.date + ride.name)
             return (
-              <div key={i} onClick={() => { setSelectedRide(ride); setMobileSheetOpen(true) }}
+              <div key={i} onClick={() => { setSelectedRide(ride); setMobileSheetOpen(true) }} data-streak-collected={streakDone ? "1" : undefined}
                 className={`px-5 py-4 border-b cursor-pointer transition-all ${divider}
-                  ${isSel ? "border-l-2 border-l-[#00aa13] bg-[#e6f9e8]" : darkMode ? "hover:bg-gray-800" : "hover:bg-gray-50"}`}
+                  ${isSel ? "border-l-2 border-l-[#00aa13] bg-[#e6f9e8]" : streakDone ? (darkMode ? "bg-cyan-500/[.07] hover:bg-cyan-500/10" : "bg-cyan-50/70 hover:bg-cyan-50") : darkMode ? "hover:bg-gray-800" : "hover:bg-gray-50"}`}
+                style={streakDone && !isSel ? { boxShadow: "inset 3px 0 0 #06B6D4" } : undefined}
               >
-                <div className="flex items-center justify-between mb-1.5">
-                  <p className={`text-sm font-semibold ${isSel ? "text-[#00aa13]" : heading}`}>{ride.name}</p>
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                    <p className={`text-sm font-semibold ${isSel ? "text-[#00aa13]" : heading}`}>{ride.name}</p>
+                    {/* Collected streaks are marked right in the list */}
+                    {streakDone && (
+                      <span className="inline-flex items-center gap-1 whitespace-nowrap text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full text-white"
+                        style={{ background: "linear-gradient(135deg,#06B6D4,#0891B2)", boxShadow: "0 2px 6px rgba(8,145,178,.35)" }}>
+                        <svg width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden><path d="M2.5 6.2l2.3 2.3L9.5 3.8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                        Streak collected
+                      </span>
+                    )}
+                  </div>
                   <div className="flex items-center gap-1.5 flex-wrap justify-end">
                     {ride.badges.map(b => {
                       const cfg = RIDE_BADGES[b]

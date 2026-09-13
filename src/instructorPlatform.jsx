@@ -32,6 +32,9 @@ function tk(d) {
   }
 }
 
+// Page headers stay pinned while scrolling; negative margins match Shell's padding
+const stickyHead = d => `app-sticky sticky top-0 z-30 -mx-4 md:-mx-8 px-4 md:px-8 -mt-4 md:-mt-8 pt-4 md:pt-8 pb-3 backdrop-blur-md ${d ? "bg-gray-950/85" : "bg-gray-50/85"}`
+
 // ── shared atoms ─────────────────────────────────────────────────────────────
 const AV_COLORS = ["#00aa13", "#0ea5e9", "#8b5cf6", "#f59e0b", "#ef4444", "#ec4899", "#14b8a6", "#6366f1"]
 const seedNum = s => [...s].reduce((a, c) => a + c.charCodeAt(0), 0)
@@ -57,7 +60,7 @@ function DarkToggle({ darkMode, onToggle }) {
 function PageHead({ darkMode, onToggleDarkMode, onBack, title, sub, Icon, gradient, backLabel = "Back" }) {
   const t = tk(darkMode)
   return (
-    <div className="mb-6">
+    <div className={`${stickyHead(darkMode)} mb-6`}>
       <button onClick={onBack} className={`flex items-center gap-1.5 mb-4 text-sm font-medium ${t.muted} hover:${t.heading} transition-colors`}>
         <ArrowLeft size={15} /> {backLabel}
       </button>
@@ -72,14 +75,18 @@ function PageHead({ darkMode, onToggleDarkMode, onBack, title, sub, Icon, gradie
             {sub && <p className={`text-sm mt-0.5 ${t.muted}`}>{sub}</p>}
           </div>
         </div>
-        <DarkToggle darkMode={darkMode} onToggle={onToggleDarkMode} />
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <DarkToggle darkMode={darkMode} onToggle={onToggleDarkMode} />
+          <AccountButton />
+        </div>
       </div>
     </div>
   )
 }
 
-function Shell({ children, max = "max-w-6xl" }) {
-  return <div className={`p-4 md:p-8 ${max} mx-auto pb-28 md:pb-16`}>{children}</div>
+// Every page uses the same full content width at each screen size (matches the rider and instructor pages)
+function Shell({ children }) {
+  return <div className="p-4 md:p-8 pb-28 md:pb-16">{children}</div>
 }
 // Renders standalone (own page padding + header) or bare when embedded inside another page (e.g. Insights tabs)
 function MaybeShell({ embedded, children, max }) {
@@ -328,7 +335,7 @@ export function InstructorPlatformPage({ darkMode, onToggleDarkMode, onNavigate,
 
   return (
     <Shell>
-      <div className="flex items-start justify-between gap-3 mb-6">
+      <div className={`${stickyHead(darkMode)} flex items-start justify-between gap-3 mb-6`}>
         <div className="flex items-center gap-3.5">
           <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg" style={{ background: `linear-gradient(135deg, ${GREEN}, #14b8a6)` }}>
             <Sparkles size={22} />
@@ -338,7 +345,10 @@ export function InstructorPlatformPage({ darkMode, onToggleDarkMode, onNavigate,
             <p className={`text-sm mt-0.5 ${t.muted}`}>Generate, teach and grow — your studio operating system.</p>
           </div>
         </div>
-        <DarkToggle darkMode={darkMode} onToggle={onToggleDarkMode} />
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <DarkToggle darkMode={darkMode} onToggle={onToggleDarkMode} />
+          <AccountButton />
+        </div>
       </div>
 
       {/* A · HERO — AI Ride Builder */}
@@ -1235,7 +1245,7 @@ export function AIBuilderPanel({ darkMode, onApply, onSaveTemplate }) {
 function OwnerHead({ darkMode, onToggleDarkMode, title, sub }) {
   const t = tk(darkMode)
   return (
-    <div className="flex items-start justify-between gap-3 mb-6">
+    <div className={`${stickyHead(darkMode)} flex items-start justify-between gap-3 mb-6`}>
       <div className="flex items-center gap-3.5">
         <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg" style={{ background: `linear-gradient(135deg, ${GREEN}, #14b8a6)` }}>
           <Building2 size={22} />
@@ -1245,8 +1255,21 @@ function OwnerHead({ darkMode, onToggleDarkMode, title, sub }) {
           <p className={`text-sm mt-0.5 ${t.muted}`}>{sub}</p>
         </div>
       </div>
-      <DarkToggle darkMode={darkMode} onToggle={onToggleDarkMode} />
+      <div className="flex items-center gap-2">
+        <DarkToggle darkMode={darkMode} onToggle={onToggleDarkMode} />
+        <AccountButton />
+      </div>
     </div>
+  )
+}
+
+// Your profile picture — opens the account menu (Profile, Settings, Log out) on phones
+function AccountButton() {
+  return (
+    <button type="button" onClick={() => window.dispatchEvent(new CustomEvent("cyclehq:account"))} aria-label="Account menu"
+      className="rounded-full flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00aa13] active:scale-95 transition-transform">
+      <Avatar name="eenie JIM" size={36} />
+    </button>
   )
 }
 
@@ -1313,9 +1336,18 @@ const CLASS_LOW = [
   { name: "Thursday 11am Flow", occ: 44, when: "Thu · 11:00am", riders: "11 / 24" },
 ]
 const CLASS_RECS = [
-  { Icon: Clock, title: "Move Monday 1pm → 5:30pm", detail: "Lunchtime demand is low; evening slots run 88% full.", uplift: "+22 riders / month" },
-  { Icon: Calendar, title: "Add a second Saturday HIIT", detail: "94% full with a waitlist most weeks — capture the overflow.", uplift: "+£640 / month" },
-  { Icon: Sparkles, title: "Promote the Wednesday lunch ride", detail: "Email lapsed members a free class pass to refill it.", uplift: "+15 riders / month" },
+  { id: "rec-move", Icon: Clock, title: "Move Monday 1pm → 5:30pm", detail: "Lunchtime demand is low; evening slots run 88% full.", uplift: "+22 riders / month",
+    action: "Move the class", doneLabel: "Moved to 5:30pm",
+    steps: ["Monday 1pm Express moves to 17:30 in Studio 1, from Mon 2 Mar", "The 9 booked riders are told and keep their bikes", "Alex Papaya has confirmed 17:30 works"],
+    event: { date: "2026-03-02", start: 17 * 60 + 30, end: 18 * 60 + 15, title: "Monday Express (moved)", studio: "Studio 1", type: "class" } },
+  { id: "rec-hiit", Icon: Calendar, title: "Add a second Saturday HIIT", detail: "94% full with a waitlist most weeks — capture the overflow.", uplift: "+£640 / month",
+    action: "Add the class", doneLabel: "Added Sat 12:00",
+    steps: ["New Saturday HIIT at 12:00 in Studio 1, weekly from Sat 28 Feb", "Riders on the 10:30 waitlist get first pick of bikes", "Max Lime is free to teach it"],
+    event: { date: "2026-02-28", start: 12 * 60, end: 12 * 60 + 45, title: "Saturday HIIT (2nd class)", studio: "Studio 1", type: "class" } },
+  { id: "rec-promo", Icon: Sparkles, title: "Promote the Wednesday lunch ride", detail: "Email lapsed members a free class pass to refill it.", uplift: "+15 riders / month",
+    action: "Launch promotion", doneLabel: "Promotion live",
+    steps: ["Email 212 lapsed lunchtime riders a free class pass", "Send a push reminder to nearby riders the day before", "Stops automatically once the ride is 80% full"],
+    event: { date: "2026-03-03", start: 9 * 60, end: 9 * 60 + 30, title: "Promo email · Wednesday lunch ride", studio: "Studio 2", type: "operations" } },
 ]
 const INSTRUCTOR_PERF = [
   { name: "JIM",          att: 92, ret: 90, rating: 4.9, repeat: 68, classes: 28, growth: 12 },
@@ -1762,6 +1794,7 @@ function PromoteOverlay({ task, darkMode, onFinish, onClose }) {
 function ClassRequestOverlay({ task, darkMode, onFinish, onClose }) {
   const t = tk(darkMode)
   const [message, setMessage] = useState("")
+  const [tab, setTab] = useState("request")
   const date = "2026-02-28", start = 10 * 60, studio = "Studio 2"
   const day = classesOn(date, studio)
   const clash = day.find(c => c.start < start + 45 && c.end > start)
@@ -1780,6 +1813,10 @@ function ClassRequestOverlay({ task, darkMode, onFinish, onClose }) {
         <button onClick={onClose} className={opsBtn("secondary", darkMode)}>Close</button>
         <button onClick={() => onFinish("Confirmed", { event: { id: `ev-${task.id}`, date, start, end: start + 45, title: "Rhythm Ride (new)", studio, type: "class" } })} className={opsBtn("primary", darkMode)}>Confirm class</button>
       </>}>
+      <OpsTabs darkMode={darkMode} tab={tab} setTab={setTab} tabs={[["request", "Request"], ["class", "Class details"], ["instructor", "Zen Kiwi's profile"]]} />
+      {tab === "class" && <ClassDetailsPanel darkMode={darkMode} {...REQUESTED_CLASS} />}
+      {tab === "instructor" && <InstructorProfilePanel darkMode={darkMode} name="Zen Kiwi" />}
+      {tab === "request" && <>
       <div className={`rounded-xl divide-y ${darkMode ? "divide-gray-700" : "divide-gray-200"} ${t.subtle}`}>
         {facts.map(([k, v]) => (
           <div key={k} className="flex gap-3 px-4 py-2.5">
@@ -1797,7 +1834,187 @@ function ClassRequestOverlay({ task, darkMode, onFinish, onClose }) {
       <p className={`text-xs font-bold uppercase tracking-wider mt-4 mb-2 ${t.muted}`}>Message to Zen Kiwi (optional)</p>
       <textarea value={message} onChange={e => setMessage(e.target.value)} rows={2} placeholder="e.g. Love it — let's launch it with a guest-pass weekend."
         className={`w-full rounded-xl border px-3 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#00aa13] ${darkMode ? "bg-gray-800 border-gray-700 text-white placeholder-gray-500" : "bg-white border-gray-200 text-gray-900 placeholder-gray-400"}`} />
+      <button onClick={() => setTab("instructor")} className="text-xs font-semibold mt-3" style={{ color: "#8b5cf6" }}>Vet this instructor before confirming →</button>
+      </>}
     </OpsModal>
+  )
+}
+
+// ── Vetting: full class details and instructor profile, for approvals and complaints ──
+function OpsTabs({ tabs, tab, setTab, darkMode }) {
+  return (
+    <div role="tablist" className={`flex gap-1 p-0.5 rounded-xl mb-4 overflow-x-auto ${darkMode ? "bg-gray-800" : "bg-gray-100"}`}>
+      {tabs.map(([k, label]) => (
+        <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
+          className={`flex-1 whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${tab === k ? (darkMode ? "bg-gray-700 text-white shadow-sm" : "bg-white text-gray-900 shadow-sm") : darkMode ? "text-gray-400" : "text-gray-500"}`}>
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+const REQUESTED_CLASS = {
+  blocks: [{ name: "Warm Up", mins: 6, zone: 1 }, { name: "Rhythm Block 1", mins: 10, zone: 3 }, { name: "Cadence Challenge", mins: 10, zone: 3 }, { name: "Rhythm Block 2", mins: 10, zone: 4 }, { name: "Cool Down", mins: 9, zone: 1 }],
+  songs: [["Dancing Queen", "ABBA", 101], ["Levitating", "Dua Lipa", 103], ["Uptown Funk", "Bruno Mars", 115], ["Shut Up and Dance", "Walk the Moon", 128], ["Mr. Brightside", "The Killers", 148], ["Don't Stop Me Now", "Queen", 156]],
+  level: "All levels", capacity: 20, format: "Social ride · random seating · Studio 2",
+}
+
+function ClassDetailsPanel({ darkMode, blocks = [], songs = [], level = "All levels", capacity, format }) {
+  const t = tk(darkMode)
+  const total = blocks.reduce((s, b) => s + b.mins, 0)
+  const peak = Math.max(0, ...blocks.map(b => b.zone))
+  const hardMins = blocks.filter(b => b.zone >= 4).reduce((s, b) => s + b.mins, 0)
+  const first = blocks[0], last = blocks[blocks.length - 1]
+  const checks = [
+    [`Warm-up · ${first?.mins || 0} min`, !!first && first.zone <= 2 && first.mins >= 5, "At least 5 easy minutes before any efforts"],
+    [`Cool-down · ${last?.mins || 0} min`, !!last && last.zone <= 2 && last.mins >= 4, "At least 4 easy minutes to finish"],
+    [`Peak intensity · Z${peak}`, level === "All levels" ? peak <= 5 : true, level === "All levels" ? "All-levels classes should stay at Z5 or below" : `Suits a ${level.toLowerCase()} class`],
+    [`Hard minutes (Z4+) · ${hardMins} min`, hardMins <= 20, "20 minutes or fewer keeps it safe for mixed groups"],
+    [`Length · ${total} min`, total >= 30 && total <= 60, "Classes should run 30–60 minutes"],
+  ]
+  const label = text => <p className={`text-xs font-bold uppercase tracking-wider mb-2 ${t.muted}`}>{text}</p>
+  return (
+    <div className="flex flex-col gap-3">
+      <div className={`rounded-xl p-4 ${t.subtle}`}>
+        <div className="flex justify-between gap-2">{label("Structure")}<p className={`text-xs font-semibold ${t.heading}`}>{level} · {total} min</p></div>
+        <OpsBlocksChart blocks={blocks} />
+        <div className="flex flex-col gap-1 mt-3">
+          {blocks.map((b, i) => (
+            <div key={i} className={`flex items-center gap-2 text-xs ${t.muted}`}>
+              <span className="w-2.5 h-2.5 rounded-sm" style={{ background: ZONE_COLORS[b.zone - 1] }} />
+              <span className={`flex-1 ${t.heading}`}>{b.name}</span>
+              <span className="tabular-nums">{b.mins} min</span>
+              <span className="w-8 text-right tabular-nums">Z{b.zone}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className={`rounded-xl p-4 ${t.subtle}`}>
+        {label("Safety & quality checks")}
+        {checks.map(([text, ok, hint]) => (
+          <div key={text} className="flex items-start gap-2.5 py-1">
+            <span className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0 mt-0.5" style={{ background: (ok ? GREEN : "#f59e0b") + "22", color: ok ? GREEN : "#f59e0b" }}>{ok ? "✓" : "!"}</span>
+            <div><p className={`text-sm ${t.heading}`}>{text}</p><p className={`text-[11px] ${t.muted}`}>{hint}</p></div>
+          </div>
+        ))}
+      </div>
+      {songs.length > 0 && (
+        <div className={`rounded-xl p-4 ${t.subtle}`}>
+          {label(`Playlist · ${songs.length} tracks`)}
+          {songs.map(([title, artist, bpm]) => (
+            <div key={title} className={`flex items-center gap-2 py-1.5 border-t first:border-t-0 ${t.border}`}>
+              <div className="flex-1 min-w-0"><p className={`text-sm truncate ${t.heading}`}>{title}</p>{artist && <p className={`text-[11px] ${t.muted}`}>{artist}</p>}</div>
+              {bpm && <span className={`text-xs tabular-nums ${t.muted}`}>{bpm} BPM</span>}
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded" style={{ background: GREEN + "1a", color: GREEN }}>Licensed</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {(format || capacity) && <p className={`text-xs ${t.muted}`}>{format}{capacity ? ` · ${capacity} bikes` : ""}</p>}
+    </div>
+  )
+}
+
+// Demo instructor records: vetting checks, ratings and rider feedback (including complaints)
+const INSTRUCTOR_PROFILES = {
+  "Zen Kiwi": {
+    joined: "Nov 2025", stage: "New instructor · probation until May 2026", classes: 18, rating: 4.9, attendance: 91, retention: 84,
+    checks: [["Indoor cycling certification", "Verified", true], ["First aid & CPR", "Valid to Aug 2026", true], ["Background check", "Clear", true], ["Shadowed classes", "3 with Anna Banana · signed off", true], ["Right to work", "Verified", true]],
+    stars: [52, 9, 2, 1, 0],
+    feedback: [
+      ["Priya S.", 5, "Best Saturday energy — the playlist was spot on."],
+      ["Tom W.", 5, "Great cues for beginners, I never felt lost."],
+      ["Anonymous", 2, "Music was very loud near the front row.", "Complaint · resolved 12 Feb — volume capped at 85 dB"],
+    ],
+  },
+  JIM: {
+    joined: "Mar 2023", stage: "Senior instructor", classes: 412, rating: 4.9, attendance: 92, retention: 90,
+    checks: [["Indoor cycling certification", "Verified", true], ["First aid & CPR", "Expires in 3 weeks — renewal due", false], ["Background check", "Clear", true], ["Right to work", "Verified", true]],
+    stars: [1020, 130, 22, 6, 2],
+    feedback: [
+      ["Grace L.", 5, "Tough but brilliant — two PRs this month."],
+      ["Omar H.", 3, "Intervals felt too hard for a lunchtime class.", "Feedback · shared with instructor"],
+      ["Ella M.", 2, "Class started five minutes late.", "Complaint · open"],
+    ],
+  },
+  _default: {
+    joined: "—", stage: "Instructor", classes: 0, rating: "—", attendance: "—", retention: "—",
+    checks: [["Indoor cycling certification", "Not on file", false], ["First aid & CPR", "Not on file", false], ["Background check", "Not on file", false]],
+    stars: [0, 0, 0, 0, 0], feedback: [],
+  },
+}
+
+function InstructorProfilePanel({ name, darkMode }) {
+  const t = tk(darkMode)
+  const p = INSTRUCTOR_PROFILES[name] || INSTRUCTOR_PROFILES._default
+  const reviews = p.stars.reduce((s, n) => s + n, 0)
+  const complaints = p.feedback.filter(f => f[3]?.startsWith("Complaint"))
+  const openComplaints = complaints.filter(f => f[3].includes("open"))
+  const label = text => <p className={`text-xs font-bold uppercase tracking-wider ${t.muted}`}>{text}</p>
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-3">
+        <Avatar name={name} size={48} />
+        <div className="min-w-0">
+          <p className={`text-base font-bold ${t.heading}`}>{name}</p>
+          <p className={`text-xs ${t.muted}`}>{p.stage} · joined {p.joined}</p>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        {[["Classes taught", p.classes], ["Rating", `★ ${p.rating}`], ["Attendance", `${p.attendance}%`], ["Rider retention", `${p.retention}%`]].map(([l, v]) => (
+          <div key={l} className={`rounded-xl p-3 ${t.subtle}`}><p className={`text-[11px] ${t.muted}`}>{l}</p><p className={`text-lg font-bold ${t.heading}`}>{v}</p></div>
+        ))}
+      </div>
+      <div className={`rounded-xl p-4 ${t.subtle}`}>
+        {label("Vetting & compliance")}
+        <div className="mt-2">
+          {p.checks.map(([text, status, ok]) => (
+            <div key={text} className="flex items-center gap-2.5 py-1.5">
+              <span className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0" style={{ background: (ok ? GREEN : "#f59e0b") + "22", color: ok ? GREEN : "#f59e0b" }}>{ok ? "✓" : "!"}</span>
+              <span className={`text-sm flex-1 ${t.heading}`}>{text}</span>
+              <span className="text-xs font-semibold text-right" style={{ color: ok ? GREEN : "#f59e0b" }}>{status}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className={`rounded-xl p-4 ${t.subtle}`}>
+        {label(`Ratings · ${reviews} reviews`)}
+        <div className="flex flex-col gap-1.5 mt-2">
+          {[5, 4, 3, 2, 1].map((star, i) => (
+            <div key={star} className={`flex items-center gap-2 text-xs ${t.muted}`}>
+              <span className="w-7 tabular-nums">{star} ★</span>
+              <div className={`flex-1 h-2 rounded-full overflow-hidden ${darkMode ? "bg-gray-900" : "bg-white"}`}>
+                <div className="h-full rounded-full" style={{ width: `${reviews ? p.stars[i] / reviews * 100 : 0}%`, background: star >= 4 ? GREEN : star === 3 ? "#f59e0b" : "#ef4444" }} />
+              </div>
+              <span className="w-10 text-right tabular-nums">{p.stars[i]}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className={`rounded-xl p-4 ${t.subtle}`}>
+        <div className="flex items-center justify-between gap-2">
+          {label("Recent feedback & complaints")}
+          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={openComplaints.length ? { background: "#ef44441a", color: "#ef4444" } : { background: GREEN + "1a", color: GREEN }}>
+            {openComplaints.length ? `${openComplaints.length} open complaint${openComplaints.length > 1 ? "s" : ""}` : complaints.length ? "Complaints resolved" : "No complaints"}
+          </span>
+        </div>
+        {p.feedback.length === 0 && <p className={`text-sm mt-2 ${t.muted}`}>No feedback yet.</p>}
+        {p.feedback.map(([who, stars, text, status]) => (
+          <div key={who + text} className={`py-2.5 border-t first:border-t-0 mt-1 ${t.border}`}>
+            <div className="flex items-center justify-between gap-2">
+              <p className={`text-sm font-semibold ${t.heading}`}>{who}</p>
+              <span className="text-xs text-amber-500">{"★".repeat(stars)}<span className={t.faint}>{"★".repeat(5 - stars)}</span></span>
+            </div>
+            <p className={`text-sm ${t.muted}`}>{text}</p>
+            {status && (
+              <span className="inline-block mt-1 text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                style={status.includes("open") ? { background: "#ef44441a", color: "#ef4444" } : { background: "#f59e0b1a", color: "#b45309" }}>{status}</span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -1818,6 +2035,7 @@ function ChangeRequestOverlay({ task, darkMode, onClose, onResolveChange }) {
   const r = task.request, ch = r.changes || {}
   const orig = ch.originalBlocks || [], next = ch.blocks || []
   const decide = status => { onResolveChange?.(r.id, status); onClose() }
+  const [tab, setTab] = useState("changes")
   return (
     <OpsModal wide darkMode={darkMode} Icon={Sparkles} color="#8b5cf6" title={`${r.instructor} wants to change ${r.className}`} sub={`${r.when} · ${r.studio} · ${ch.scope === "future" ? "All future classes" : "This class only"}`} done={task.doneLabel} onClose={onClose}
       footer={<>
@@ -1825,6 +2043,13 @@ function ChangeRequestOverlay({ task, darkMode, onClose, onResolveChange }) {
         <button onClick={onClose} className={opsBtn("secondary", darkMode)}>Close</button>
         <button onClick={() => decide("approved")} className={opsBtn("primary", darkMode)}>Approve changes</button>
       </>}>
+      <OpsTabs darkMode={darkMode} tab={tab} setTab={setTab} tabs={[["changes", "Changes"], ["class", "Class details"], ["instructor", `${r.instructor}'s profile`]]} />
+      {tab === "class" && (
+        <ClassDetailsPanel darkMode={darkMode} blocks={next.length ? next : orig} songs={(ch.songs || []).map(title => [title])}
+          level={ch.difficulty || "All levels"} capacity={r.studio === "Studio 2" ? 20 : 24} format={`${r.studio} · ${ch.scope === "future" ? "All future classes" : "This class only"}`} />
+      )}
+      {tab === "instructor" && <InstructorProfilePanel darkMode={darkMode} name={r.instructor} />}
+      {tab === "changes" && <>
       {r.note && <div className={`rounded-xl p-3 mb-4 text-sm italic ${t.subtle} ${t.heading}`}>“{r.note}”</div>}
       {next.length > 0 && (
         <div className="grid sm:grid-cols-2 gap-3 mb-4">
@@ -1872,6 +2097,7 @@ function ChangeRequestOverlay({ task, darkMode, onClose, onResolveChange }) {
         </div>
       )}
       {!next.length && <p className={`text-sm ${t.muted}`}>{r.summary}</p>}
+      </>}
     </OpsModal>
   )
 }
@@ -2402,8 +2628,14 @@ function OccRow({ c, darkMode }) {
     </div>
   )
 }
-export function OwnerClassesPage({ darkMode, onToggleDarkMode, onNavigate }) {
+export function OwnerClassesPage({ darkMode, onToggleDarkMode, onNavigate, ops = EMPTY_OPS, setOps }) {
   const t = tk(darkMode)
+  const [applying, setApplying] = useState(null)   // recommendation whose confirm dialog is open
+  const appliedLabel = id => ops.done?.[id]
+  function applyRec(r) {
+    setOps?.(o => ({ ...o, done: { ...o.done, [r.id]: r.doneLabel }, events: [...o.events.filter(e => e.id !== r.id), { id: r.id, ...r.event }] }))
+    setApplying(null)
+  }
   return (
     <Shell>
       <PageHead darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} onBack={() => onNavigate("Overview")} backLabel="Overview"
@@ -2437,12 +2669,33 @@ export function OwnerClassesPage({ darkMode, onToggleDarkMode, onNavigate }) {
               <p className={`text-xs mt-1 flex-1 ${t.muted}`}>{r.detail}</p>
               <div className="flex items-center justify-between mt-3">
                 <span className="text-xs font-bold text-[#00aa13]">{r.uplift}</span>
-                <button className={`text-xs font-semibold px-3 py-1.5 rounded-lg ${t.chip}`}>Apply</button>
+                {appliedLabel(r.id)
+                  ? <span className="flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg" style={{ background: GREEN + "1a", color: GREEN }}><Check size={13} /> {appliedLabel(r.id)}</span>
+                  : <button onClick={() => setApplying(r)} className="text-xs font-semibold px-3 py-1.5 rounded-lg text-white hover:opacity-90" style={{ background: GREEN }}>Apply</button>}
               </div>
             </div>
           ))}
         </div>
       </div>
+
+      {applying && (
+        <OpsModal darkMode={darkMode} Icon={applying.Icon} color="#8b5cf6" title={applying.title} sub={`${applying.uplift} · ${applying.detail}`} onClose={() => setApplying(null)}
+          footer={<>
+            <button onClick={() => setApplying(null)} className={opsBtn("secondary", darkMode)}>Cancel</button>
+            <button onClick={() => applyRec(applying)} className={opsBtn("primary", darkMode)}>{applying.action}</button>
+          </>}>
+          <p className={`text-xs font-bold uppercase tracking-wider mb-2 ${t.muted}`}>What happens when you apply</p>
+          <div className="flex flex-col gap-1.5">
+            {applying.steps.map((s, i) => (
+              <div key={s} className={`flex items-start gap-3 rounded-xl px-3 py-2.5 ${t.subtle}`}>
+                <span className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0" style={{ background: "#8b5cf6" }}>{i + 1}</span>
+                <span className={`text-sm ${t.heading}`}>{s}</span>
+              </div>
+            ))}
+          </div>
+          <p className={`text-xs mt-3 ${t.muted}`}>It'll show on the Studio calendar on {opFmtDay(applying.event.date)} at {opFmtMin(applying.event.start)}.</p>
+        </OpsModal>
+      )}
     </Shell>
   )
 }

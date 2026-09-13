@@ -458,7 +458,7 @@ function weekOffsetForDate(dateStr) {
 }
 
 function sessionCount(dateStr) {
-  const d = sessionsByDate[dateStr]
+  const d = timetableFor(dateStr)
   if (!d) return 0
   return (d.morning?.length || 0) + (d.afternoon?.length || 0) + (d.evening?.length || 0)
 }
@@ -1107,6 +1107,14 @@ export default function App() {
     if (window.parent !== window) window.parent.postMessage({ type: "cyclehq:ready" }, window.location.origin)
     return () => window.removeEventListener("message", onMessage)
   }, [])
+  const mainRef = useRef(null)   // the page scroll area (for scroll hints)
+  // Tapping your profile picture: an account sheet on phones, the Profile page on bigger screens
+  const [accountOpen, setAccountOpen] = useState(false)
+  useEffect(() => {
+    const open = () => { if (window.matchMedia("(max-width: 767px)").matches) setAccountOpen(true); else setActivePage("Profile") }
+    window.addEventListener("cyclehq:account", open)
+    return () => window.removeEventListener("cyclehq:account", open)
+  }, [])
   const [darkMode, setDarkMode]     = useState(false)
   const [authed, setAuthed]         = useState(true)
   const [openSections, setOpenSections] = useState({ rider: true, instructor: true, owner: true })
@@ -1125,6 +1133,8 @@ export default function App() {
   // Instructor edits to a class, sent to the studio owner to approve or decline
   const [changeRequests, setChangeRequests] = useState([])
   const [bookingsDate, setBookingsDate] = useState(null)   // date Bookings opens on (Calendar → "Find a class")
+  // Rider's bookings, seat moves, cancellations and waitlist changes — shared by Bookings and Calendar
+  const [riderChanges, setRiderChanges] = useState({})
   // Studio owner task progress: finished tasks, booked visits/deliveries, and the service-log draft
   const [ownerOps, setOwnerOps] = useState({ done: {}, events: [], logDraft: {} })
   const submitChange  = req => setChangeRequests(rs => [{ ...req, id: "cr" + Date.now(), status: "pending" }, ...rs.filter(r => r.classKey !== req.classKey)])
@@ -1216,11 +1226,11 @@ export default function App() {
 
       {/* ── Page content ── */}
       <ChangeRequestsContext.Provider value={{ requests: changeRequests, submit: submitChange }}>
-      <main className="flex-1 overflow-y-auto pb-24 md:pb-0">
+      <main ref={mainRef} className="flex-1 overflow-y-auto pb-24 md:pb-0">
         {/* Rider */}
         {activePage === "Home"         && <HomePage         darkMode={darkMode} onToggleDarkMode={dm} />}
-        {activePage === "Bookings"     && <BookingsPage     key={bookingsDate || "today"} initialDate={bookingsDate} darkMode={darkMode} onToggleDarkMode={dm} navExpanded={navExpanded} onCollapseNav={() => setNavExpanded(false)} />}
-        {activePage === "Calendar"     && <CalendarPage     darkMode={darkMode} onToggleDarkMode={dm} onFindClass={ds => { setBookingsDate(ds); setActivePage("Bookings") }} />}
+        {activePage === "Bookings"     && <BookingsPage     key={bookingsDate || "today"} initialDate={bookingsDate} darkMode={darkMode} onToggleDarkMode={dm} navExpanded={navExpanded} onCollapseNav={() => setNavExpanded(false)} riderChanges={riderChanges} setRiderChanges={setRiderChanges} />}
+        {activePage === "Calendar"     && <CalendarPage     darkMode={darkMode} onToggleDarkMode={dm} onFindClass={ds => { setBookingsDate(ds); setActivePage("Bookings") }} riderChanges={riderChanges} setRiderChanges={setRiderChanges} />}
         {activePage === "Rides"        && <RidesPage        darkMode={darkMode} onToggleDarkMode={dm} navExpanded={navExpanded} onCollapseNav={() => setNavExpanded(false)} />}
         {activePage === "Achievements" && <AchievementsPage darkMode={darkMode} onToggleDarkMode={dm} onNavigate={setActivePage} />}
         {/* Instructor */}
@@ -1235,7 +1245,7 @@ export default function App() {
         {activePage === "Overview"      && <OwnerOverviewPage     darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} changeRequests={changeRequests} onResolveChange={resolveChange} ops={ownerOps} setOps={setOwnerOps} />}
         {activePage === "Studio Calendar" && <OwnerCalendarPage   darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} changeRequests={changeRequests} ops={ownerOps} />}
         {activePage === "Revenue"       && <OwnerRevenuePage      darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
-        {activePage === "Classes"       && <OwnerClassesPage      darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
+        {activePage === "Classes"       && <OwnerClassesPage      darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} ops={ownerOps} setOps={setOwnerOps} />}
         {activePage === "Instructors"   && <OwnerInstructorsPage  darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
         {activePage === "Riders"        && <RidersCRMPage         darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
         {/* Shared */}
@@ -1244,6 +1254,47 @@ export default function App() {
         {activePage === "Log out"      && <LogOutPage   darkMode={darkMode} onLogout={() => setAuthed(false)} onStay={() => setActivePage(roles[0].home)} />}
       </main>
       </ChangeRequestsContext.Provider>
+
+      <style>{SCROLL_HINT_CSS}</style>
+      <PageScrollThumb mainRef={mainRef} darkMode={darkMode} />
+
+      {/* ── Account sheet (phone) — opened by tapping your profile picture ── */}
+      {accountOpen && (
+        <div className="fixed inset-0 z-[65] md:hidden flex flex-col justify-end" role="dialog" aria-modal="true" aria-label="Account"
+          onKeyDown={e => { if (e.key === "Escape") setAccountOpen(false) }}>
+          <style>{`@keyframes sheetUp { from { transform: translateY(100%) } to { transform: none } } @media (prefers-reduced-motion: reduce) { .sheet-up { animation: none !important } }`}</style>
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setAccountOpen(false)} />
+          <div className={`sheet-up relative rounded-t-3xl px-4 pt-3 pb-8 ${darkMode ? "bg-gray-900" : "bg-white"}`} style={{ animation: "sheetUp .25s cubic-bezier(.2,.8,.2,1)" }}>
+            <div className="flex justify-center mb-3"><div className={`w-10 h-1 rounded-full ${darkMode ? "bg-gray-600" : "bg-gray-300"}`} /></div>
+            <div className="flex items-center gap-3 px-1 mb-4">
+              <Avatar name="eenieJIM" size={44} />
+              <div className="min-w-0 flex-1">
+                <p className={`text-base font-bold ${darkMode ? "text-white" : "text-gray-900"}`}>eenieJIM</p>
+                <p className={`text-xs ${darkMode ? "text-gray-400" : "text-gray-500"}`}>{roles.map(r => r.label).join(" · ")}</p>
+              </div>
+              <button onClick={() => setAccountOpen(false)} aria-label="Close"
+                className={`w-8 h-8 rounded-lg flex items-center justify-center ${darkMode ? "bg-gray-800 text-gray-400" : "bg-gray-100 text-gray-500"}`}>✕</button>
+            </div>
+            <div className="flex flex-col gap-1">
+              {[["Profile", User], ["Settings", Settings]].map(([label, Icon]) => (
+                <button key={label} onClick={() => { setAccountOpen(false); navTo(label) }}
+                  className={`flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium transition-colors ${darkMode ? "text-gray-200 hover:bg-gray-800" : "text-gray-700 hover:bg-gray-50"}`}>
+                  <Icon size={18} /><span className="flex-1 text-left">{label}</span><span className={darkMode ? "text-gray-600" : "text-gray-300"}>›</span>
+                </button>
+              ))}
+              <button onClick={dm}
+                className={`flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium transition-colors ${darkMode ? "text-gray-200 hover:bg-gray-800" : "text-gray-700 hover:bg-gray-50"}`}>
+                <span className="w-[18px] text-center">{darkMode ? "☀" : "☾"}</span><span className="flex-1 text-left">{darkMode ? "Light mode" : "Dark mode"}</span>
+              </button>
+              <div className={`my-1 border-t ${darkMode ? "border-gray-800" : "border-gray-100"}`} />
+              <button onClick={() => { setAccountOpen(false); navTo("Log out") }}
+                className={`flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold text-red-500 transition-colors ${darkMode ? "hover:bg-red-500/10" : "hover:bg-red-50"}`}>
+                <LogOut size={18} /><span className="flex-1 text-left">Log out</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Mobile bottom navigation ── */}
       <div className="fixed bottom-0 left-0 right-0 md:hidden z-40">
@@ -1437,6 +1488,99 @@ function RiderProfile({ darkMode }) {
 
 // ─── HOME PAGE ──────────────────────────────────────────────────────────────
 
+// ─── Scroll hints ─────────────────────────────────────────────────────────────
+// Like most mobile apps: inner scroll areas fade at the edge that has more content, the page gets a
+// slim always-visible scroll thumb (phones hide native scrollbars), and sticky headers lift once content
+// slides under them. Areas with a pinned header only fade at the bottom so the header stays crisp.
+const SCROLL_HINT_CSS = `
+  main { scrollbar-width: none }
+  main::-webkit-scrollbar { display: none }
+  * { scrollbar-width: thin; scrollbar-color: rgba(120,130,145,.45) transparent }
+  *::-webkit-scrollbar { width: 6px; height: 6px }
+  *::-webkit-scrollbar-thumb { background: rgba(120,130,145,.4); border-radius: 999px }
+  *::-webkit-scrollbar-track { background: transparent }
+  [data-more="bottom"], [data-more="both"][data-sticky-top="1"] {
+    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 36px), transparent);
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 36px), transparent);
+  }
+  [data-more="top"]:not([data-sticky-top="1"]) {
+    -webkit-mask-image: linear-gradient(to top, #000 calc(100% - 36px), transparent);
+    mask-image: linear-gradient(to top, #000 calc(100% - 36px), transparent);
+  }
+  [data-more="both"]:not([data-sticky-top="1"]) {
+    -webkit-mask-image: linear-gradient(to bottom, transparent, #000 36px, #000 calc(100% - 36px), transparent);
+    mask-image: linear-gradient(to bottom, transparent, #000 36px, #000 calc(100% - 36px), transparent);
+  }
+  .app-sticky { transition: box-shadow .2s ease }
+  main[data-scrolled="1"] .app-sticky { box-shadow: 0 12px 20px -16px rgba(15,23,42,.4) }
+`
+
+function useScrollHints(mainRef) {
+  const [thumb, setThumb] = useState(null)   // { top, height, right, active } for the page scroll thumb
+  useEffect(() => {
+    const main = mainRef.current
+    if (!main) return
+    let raf = 0, idle = 0
+    // Inner scroll areas: tag which edges have more content (the CSS turns that into a fade)
+    const markInner = el => {
+      if (!(el instanceof HTMLElement) || el === main) return
+      const scrollable = /(auto|scroll)/.test(getComputedStyle(el).overflowY) && el.scrollHeight > el.clientHeight + 2
+      if (!scrollable) { if (el.dataset.more) delete el.dataset.more; return }
+      const up = el.scrollTop > 2, down = el.scrollTop + el.clientHeight < el.scrollHeight - 2
+      const more = up && down ? "both" : up ? "top" : down ? "bottom" : "none"
+      if (el.dataset.more !== more) el.dataset.more = more
+      const sticky = el.querySelector(":scope > .sticky, :scope > * > .sticky") ? "1" : ""
+      if (el.dataset.stickyTop !== sticky) el.dataset.stickyTop = sticky
+    }
+    // The page itself: a slim thumb showing where you are
+    const measureMain = active => {
+      const { scrollTop, scrollHeight, clientHeight } = main
+      main.dataset.scrolled = scrollTop > 4 ? "1" : ""
+      if (scrollHeight <= clientHeight + 4) { setThumb(null); return }
+      const rect = main.getBoundingClientRect()
+      const navSpace = window.matchMedia("(max-width: 767px)").matches ? 92 : 0   // stay clear of the phone bottom nav
+      const trackTop = rect.top + 8, trackH = rect.height - 16 - navSpace
+      const height = Math.max(36, trackH * clientHeight / scrollHeight)
+      const next = { top: trackTop + (trackH - height) * scrollTop / (scrollHeight - clientHeight), height, right: window.innerWidth - rect.right + 3, active }
+      setThumb(prev => prev && Math.abs(prev.top - next.top) < 0.5 && Math.abs(prev.height - next.height) < 0.5 && prev.right === next.right && prev.active === next.active ? prev : next)
+    }
+    const scan = () => {
+      raf = 0
+      document.querySelectorAll('[class*="overflow-y-auto"], [class*="overflow-auto"], [class*="overflow-y-scroll"]').forEach(markInner)
+      measureMain(false)
+    }
+    const queue = () => { if (!raf) raf = requestAnimationFrame(scan) }
+    const onScroll = e => {
+      if (e.target === main) { measureMain(true); clearTimeout(idle); idle = setTimeout(() => measureMain(false), 800) }
+      else markInner(e.target)
+    }
+    document.addEventListener("scroll", onScroll, true)
+    window.addEventListener("resize", queue)
+    const observer = new MutationObserver(queue)
+    observer.observe(document.body, { childList: true, subtree: true })
+    queue()
+    return () => {
+      document.removeEventListener("scroll", onScroll, true)
+      window.removeEventListener("resize", queue)
+      observer.disconnect(); cancelAnimationFrame(raf); clearTimeout(idle)
+    }
+  }, [mainRef])
+  return thumb
+}
+
+function PageScrollThumb({ mainRef, darkMode }) {
+  const thumb = useScrollHints(mainRef)
+  if (!thumb) return null
+  return (
+    <div aria-hidden="true" data-page-thumb className="fixed z-40 w-1 rounded-full pointer-events-none transition-opacity duration-300"
+      style={{ top: thumb.top, height: thumb.height, right: thumb.right, background: darkMode ? "#9ca3af" : "#6b7280", opacity: thumb.active ? 0.75 : 0.3 }} />
+  )
+}
+
+// Page headers (title, dark mode, profile) stay pinned while the page scrolls. The negative margins
+// line the frosted background up with the page padding so content slides cleanly underneath.
+const stickyHeader = darkMode => `app-sticky sticky top-0 z-30 -mx-4 md:-mx-8 px-4 md:px-8 -mt-4 md:-mt-8 pt-4 md:pt-8 pb-3 backdrop-blur-md ${darkMode ? "bg-gray-950/85" : "bg-gray-50/85"}`
+
 function DarkModeToggle({ darkMode, onToggle }) {
   return (
     <button
@@ -1451,15 +1595,23 @@ function DarkModeToggle({ darkMode, onToggle }) {
 
 // ─── SESSION PLAN MODAL ──────────────────────────────────────────────────────
 
-function Avatar({ name, size = 32, square = false }) {
+function Avatar({ name, size = 32, square = false, user = false }) {
   const initials = name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()
   const radius   = square ? Math.round(size * 0.28) : "50%"
-  return (
+  const face = (
     <div style={{ width: size, height: size, borderRadius: radius, flexShrink: 0,
       background: "#e6f9e8", display: "flex", alignItems: "center",
       justifyContent: "center", fontSize: size * 0.32, fontWeight: 700, color: "#00aa13" }}>
       {initials}
     </div>
+  )
+  if (!user) return face
+  // Your own profile picture opens the account menu (Profile, Settings, Log out)
+  return (
+    <button type="button" onClick={() => window.dispatchEvent(new CustomEvent("cyclehq:account"))} aria-label="Account menu"
+      className="rounded-full flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00aa13] active:scale-95 transition-transform">
+      {face}
+    </button>
   )
 }
 
@@ -1700,7 +1852,7 @@ function HomePage({ darkMode, onToggleDarkMode }) {
     <div className="p-4 md:p-8">
 
       {/* Top bar */}
-      <div className="flex items-center justify-end gap-3 mb-6 md:mb-8">
+      <div className={`${stickyHeader(darkMode)} flex items-center justify-end gap-3 mb-6 md:mb-8`}>
         <DarkModeToggle darkMode={darkMode} onToggle={onToggleDarkMode} />
         <span className={`hidden sm:inline text-sm ${muted}`}>eenieJIM</span>
         <Avatar name="eenieJIM" size={32} user />
@@ -1784,14 +1936,14 @@ function HomePage({ darkMode, onToggleDarkMode }) {
 
             {/* In progress achievements */}
             <p className={`text-xs font-semibold mt-4 mb-3 ${muted}`}>In progress</p>
-            <div className="flex gap-3">
+            <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))" }}>
               {achievements.filter(a => !a.earned).slice(0,2).map((a, i) => {
                 const [c1, c2] = achGradient(a.name)
                 const pct = a.progress / a.total
                 const r = 15, circ = 2 * Math.PI * r
                 const gid = `ipg${i}`
                 return (
-                  <div key={i} className={`flex-1 rounded-2xl p-3.5 ${darkMode ? "bg-gray-800 border border-gray-700" : "bg-white border border-gray-100"}`}
+                  <div key={i} className={`min-w-0 rounded-2xl p-3.5 ${darkMode ? "bg-gray-800 border border-gray-700" : "bg-white border border-gray-100"}`}
                     style={{ boxShadow: darkMode ? "none" : "0 2px 12px rgba(0,0,0,0.07)" }}>
                     <div className="flex items-center gap-3">
                       <div className="relative flex-shrink-0 w-10 h-10">
@@ -1818,7 +1970,7 @@ function HomePage({ darkMode, onToggleDarkMode }) {
 
             {/* Recent achievements */}
             <p className={`text-xs font-semibold mt-4 mb-3 ${muted}`}>Recent achievements</p>
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
               {achievements.filter(a => a.earned).concat(achievements.slice(0,2)).slice(0,4).map((a, i) => (
                 <div key={i} className="flex flex-col items-center gap-1.5">
                   <PremiumBadge icon={a.icon} colors={achGradient(a.name)} size={52} earned={a.earned} darkMode={darkMode} />
@@ -2391,9 +2543,51 @@ function SessionDonut({ sessionName, darkMode }) {
 // ─── Seating plan ────────────────────────────────────────────────────────────
 // Demo seating for a session: exactly `spaces` bikes free, 1–2 out of service, the rest booked.
 // Seeded from the session so the same class always shows the same layout.
+// Room shapes: most classes use their studio's rows; some rooms are laid out as circles, arcs or smaller spaces
+const ROOM_LAYOUTS = {
+  "HIIT Blast":      { kind: "arc",    tiers: [6, 8],     label: "Arena · 14 bikes in a semicircle" },
+  "Climb Intervals": { kind: "arc",    tiers: [6, 8, 10], label: "Amphitheatre · 24 bikes in 3 tiers" },
+  "Cadence Control": { kind: "circle", count: 14,         label: "Circle · 14 bikes facing the instructor" },
+  "Midday Burn":     { kind: "circle", count: 18,         label: "Big circle · 18 bikes" },
+  "Recovery Ride":   { kind: "rows",   rows: [[1, 2, 3, 4, 5, 6], [7, 8, 9, 10, 11, 12]], label: "Small room · 12 bikes" },
+  "Easy Endurance":  { kind: "rows",   rows: [[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12], [13, 14, 15, 16]], label: "Compact room · 16 bikes" },
+}
+function roomFor(session) {
+  if (ROOM_LAYOUTS[session.name]) return ROOM_LAYOUTS[session.name]
+  const studio = STUDIO_LAYOUTS[session.studio] || { rows: bikes, label: "3 rows · 24 bikes" }
+  return { kind: "rows", rows: studio.rows, label: studio.label }
+}
+const roomSeats = room => room.kind === "rows" ? room.rows.flat()
+  : Array.from({ length: room.kind === "circle" ? room.count : room.tiers.reduce((a, b) => a + b, 0) }, (_, i) => i + 1)
+// Seat positions (in the room's own px space) and the angle each bike faces — always towards the instructor
+function roomGeometry(room) {
+  const seats = []
+  if (room.kind === "circle") {
+    const size = room.count > 14 ? 340 : 300, c = size / 2, r = c - 26
+    for (let i = 0; i < room.count; i++) {
+      const t = -90 + i * 360 / room.count, rad = t * Math.PI / 180
+      seats.push({ n: i + 1, x: c + r * Math.cos(rad), y: c + r * Math.sin(rad), angle: t - 90 })
+    }
+    return { width: size, height: size, instructor: { x: c, y: c }, seats }
+  }
+  // Arc: instructor at the front, tiers fanning out behind (front tier numbered first, left to right)
+  const r0 = 92, gap = 48, top = 34
+  const rMax = r0 + gap * (room.tiers.length - 1)
+  const width = 2 * rMax + 60, cx = width / 2
+  let n = 1
+  room.tiers.forEach((count, k) => {
+    const r = r0 + gap * k
+    for (let i = 0; i < count; i++) {
+      const t = 160 - 140 * (count === 1 ? 0.5 : i / (count - 1)), rad = t * Math.PI / 180
+      seats.push({ n: n++, x: cx + r * Math.cos(rad), y: top + r * Math.sin(rad), angle: t - 90 })
+    }
+  })
+  return { width, height: top + rMax + 30, instructor: { x: cx, y: top - 4 }, seats }
+}
+
 function seatPlan(session) {
-  const rows = (STUDIO_LAYOUTS[session.studio] || { rows: bikes }).rows
-  const all = rows.flat()
+  const room = roomFor(session)
+  const all = roomSeats(room)
   let h = 7
   for (const ch of session.name + session.time) h = (h * 31 + ch.charCodeAt(0)) >>> 0
   const downCount = 1 + (h % 2)
@@ -2409,7 +2603,7 @@ function seatPlan(session) {
   const mine = session.bike || (session.state === "booked" ? order[downCount + open] : null)
   if (mine && status[mine]) status[mine] = "mine"
   const freeBikes = all.filter(n => status[n] === "free")
-  return { rows, status, capacity: all.length, free: freeBikes.length, firstFree: freeBikes[0] ?? null, mine: mine || null }
+  return { room, rows: room.rows, status, capacity: all.length, free: freeBikes.length, firstFree: freeBikes[0] ?? null, mine: mine || null }
 }
 
 const SEAT_STYLES = {
@@ -2428,37 +2622,67 @@ const SEAT_INFO = {
 // Bike grid. Booked / out-of-service bikes explain themselves: a tooltip on hover (mouse), a message on tap (touch)
 function BikeMap({ plan, selectedBike, interactive, lockedNote, onPick, onNote, darkMode, changing = false }) {
   const tone = darkMode ? "dark" : "light"
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex justify-center mb-1">
-        <div className="flex flex-col items-center gap-1">
-          <span className={`text-xs ${darkMode ? "text-gray-400" : "text-gray-500"}`}>Instructor</span>
-          <div className="w-8 h-10 rounded-lg bg-[#00aa13]" />
+  const room = plan.room
+  const mutedText = darkMode ? "text-gray-400" : "text-gray-500"
+
+  // One bike: coloured by status, with a handlebar mark on the side facing the instructor
+  const seat = (num, { align = "center", angle = 0, className = "relative", style }) => {
+    const st = plan.status[num]
+    const pickable = interactive && st === "free"
+    const look = st === "mine" ? SEAT_STYLES[changing ? "current" : "picked"][tone]
+      : pickable && selectedBike === num ? SEAT_STYLES.picked[tone] : SEAT_STYLES[st][tone]
+    const info = st === "free" ? (pickable ? `Bike ${num} · free` : lockedNote) : SEAT_INFO[st](num)
+    const tip = align === "left" ? "left-0" : align === "right" ? "right-0" : "left-1/2 -translate-x-1/2"
+    return (
+      <button key={num} type="button" aria-label={info} aria-disabled={!pickable} style={style}
+        onClick={() => pickable ? onPick(num) : onNote(info)}
+        className={`group ${className} w-8 h-10 text-xs font-medium ${pickable ? "" : "cursor-not-allowed"}`}>
+        <span className={`absolute inset-0 rounded-lg flex items-center justify-center transition-colors ${look} ${st === "mine" && !changing ? "ring-2 ring-[#00aa13] ring-offset-1" : ""}`}
+          style={angle ? { transform: `rotate(${angle}deg)` } : undefined}>
+          <span className="absolute left-2 right-2 top-1 h-[3px] rounded-full bg-current opacity-30" />
+          <span style={angle ? { transform: `rotate(${-angle}deg)` } : undefined}>{num}</span>
+        </span>
+        {!pickable && (
+          <span role="tooltip" className={`pointer-events-none absolute bottom-full ${tip} mb-1.5 hidden group-hover:block whitespace-nowrap rounded-md bg-gray-900 px-2 py-1 text-[11px] font-medium text-white shadow-lg z-30`}>{info}</span>
+        )}
+      </button>
+    )
+  }
+
+  if (room.kind === "rows") {
+    return (
+      <div className="flex flex-col gap-2">
+        <div className="flex justify-center mb-1">
+          <div className="flex flex-col items-center gap-1">
+            <span className={`text-xs ${mutedText}`}>Instructor</span>
+            <div className="w-8 h-10 rounded-lg bg-[#00aa13]" />
+          </div>
         </div>
+        {room.rows.map((row, ri) => (
+          <div key={ri} className="flex gap-2 justify-center">
+            {row.map((num, ci) => seat(num, { align: ci < 2 ? "left" : ci >= row.length - 2 ? "right" : "center" }))}
+          </div>
+        ))}
       </div>
-      {plan.rows.map((row, ri) => (
-        <div key={ri} className="flex gap-2 justify-center">
-          {row.map((num, ci) => {
-            const st = plan.status[num]
-            const pickable = interactive && st === "free"
-            const look = st === "mine" ? SEAT_STYLES[changing ? "current" : "picked"][tone]
-              : pickable && selectedBike === num ? SEAT_STYLES.picked[tone] : SEAT_STYLES[st][tone]
-            const info = st === "free" ? (pickable ? `Bike ${num} · free` : lockedNote) : SEAT_INFO[st](num)
-            const tipAlign = ci < 2 ? "left-0" : ci >= row.length - 2 ? "right-0" : "left-1/2 -translate-x-1/2"
-            return (
-              <button key={num} type="button" aria-label={info} aria-disabled={!pickable}
-                onClick={() => pickable ? onPick(num) : onNote(info)}
-                className={`group relative w-8 h-10 rounded-lg text-xs font-medium transition-colors ${look}
-                  ${pickable ? "" : "cursor-not-allowed"} ${st === "mine" && !changing ? "ring-2 ring-[#00aa13] ring-offset-1" : ""}`}>
-                {num}
-                {!pickable && (
-                  <span role="tooltip" className={`pointer-events-none absolute bottom-full ${tipAlign} mb-1.5 hidden group-hover:block whitespace-nowrap rounded-md bg-gray-900 px-2 py-1 text-[11px] font-medium text-white shadow-lg z-30`}>{info}</span>
-                )}
-              </button>
-            )
-          })}
-        </div>
-      ))}
+    )
+  }
+
+  // Circle and arc rooms: bikes placed around the instructor, each angled to face them. Scales to fit.
+  const geo = roomGeometry(room)
+  const pct = (v, total) => `${v / total * 100}%`
+  return (
+    <div className="relative mx-auto w-full" style={{ maxWidth: geo.width, aspectRatio: `${geo.width} / ${geo.height}` }}>
+      <div className="absolute flex flex-col items-center gap-0.5 -translate-x-1/2 -translate-y-1/2"
+        style={{ left: pct(geo.instructor.x, geo.width), top: pct(geo.instructor.y, geo.height) }}>
+        <div className="w-7 h-7 rounded-full bg-[#00aa13] shadow-sm" />
+        <span className={`text-[10px] font-medium ${mutedText}`}>Instructor</span>
+      </div>
+      {geo.seats.map(s => seat(s.n, {
+        angle: s.angle,
+        align: s.x < geo.width * 0.3 ? "left" : s.x > geo.width * 0.7 ? "right" : "center",
+        className: "absolute -translate-x-1/2 -translate-y-1/2",
+        style: { left: pct(s.x, geo.width), top: pct(s.y, geo.height) },
+      }))}
     </div>
   )
 }
@@ -2656,6 +2880,7 @@ function SessionBookingPanel({ session, isPast, booked, selectedBike, onPickBike
         <p className={`text-sm font-semibold ${heading}`}>Choose your bike</p>
         <span className={`text-xs ${muted}`}>{plan.free} of {plan.capacity} free</span>
       </div>
+      <p className={`text-[11px] -mt-3 mb-3 ${muted}`}>{plan.room.label}</p>
       {seating(true, "", false)}
       {validBike && !tappedBike && (
         <p className={`text-xs text-center -mt-1 mb-3 ${muted}`}>We've picked bike {validBike} for you — tap any free bike to change it.</p>
@@ -2672,11 +2897,10 @@ function SessionBookingPanel({ session, isPast, booked, selectedBike, onPickBike
   )
 }
 
-function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onCollapseNav, initialDate }) {
+function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onCollapseNav, initialDate, riderChanges = {}, setRiderChanges }) {
   const [selectedSession, setSelectedSession] = useState(null)
   const [selectedBike, setSelectedBike]       = useState(null)
   const bookingDrag = useDragToDismiss(() => { setSelectedSession(null); setShowPlan(false) })
-  const [bookedSessions, setBookedSessions]   = useState([])
   const [toast, setToast]                     = useState(null)
   const [showPlan, setShowPlan]               = useState(false)
   const [weekOffset, setWeekOffset]           = useState(() => initialDate ? weekOffsetForDate(initialDate) : 0)
@@ -2692,7 +2916,9 @@ function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onColla
   const divider = darkMode ? "border-gray-800" : "border-gray-100"
 
   const weekDates   = getWeekDates(weekOffset)
-  const dayData     = sessionsByDate[selectedDate] || { morning: [], afternoon: [], evening: [] }
+  // Timetable + your schedule + changes — the same data the Calendar shows
+  const daySessions = riderDay(selectedDate, riderChanges)
+  const dayData     = Object.fromEntries(["morning", "afternoon", "evening"].map(part => [part, daySessions.filter(s => s.part === part)]))
   const hasSessions = Object.values(dayData).some(arr => arr.length > 0)
   const monthCells  = getMonthGrid(monthView.year, monthView.month)
   const isPast      = selectedDate < BOOKING_TODAY
@@ -2709,10 +2935,8 @@ function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onColla
     revealConfirm()
   }
 
-  // Changes made during this visit (booked bike, joined / left a waitlist), layered over the demo session data
-  const [overrides, setOverrides] = useState({})
-  const effective = s => s && { ...s, ...overrides[s.time + s.name] }
-  const activeSession = effective(selectedSession)
+  // The selected class, kept in step with any booking / seat / waitlist change
+  const activeSession = selectedSession ? daySessions.find(s => s.time === selectedSession.time && s.name === selectedSession.name) || selectedSession : null
 
   function flashToast(msg) {
     setToast(msg)
@@ -2720,13 +2944,10 @@ function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onColla
   }
 
   function handleBook(session, bike = selectedBike) {
-    const key = session.time + session.name
     const social = isSocialClass(session.name)
-    if (bookedSessions.includes(key) || (!social && !bike)) return
-    setBookedSessions(prev => [...prev, key])
-    setOverrides(o => ({ ...o, [key]: { state: "booked", bike: social ? null : bike } }))
+    if (session.state === "booked" || (!social && !bike)) return
+    patchRider(setRiderChanges, session, { state: "booked", bike: social ? null : bike })
     flashToast(`Booked: ${session.name}${social ? "" : ` · Bike ${bike}`}`)
-    setSelectedSession({ ...session, state: "booked" })
     setCelebration({ id: Date.now(), pieces: makeConfetti() })
     setTimeout(() => setCelebration(null), 3800)
     revealConfirm()
@@ -2734,17 +2955,15 @@ function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onColla
 
   function joinWaitlist(session) {
     const position = (session.count || 0) + 1
-    setOverrides(o => ({ ...o, [session.time + session.name]: { state: "waiting", position } }))
-    flashToast(`You're #${position} on the waitlist for ${session.name}`)
-    playFlourish("peek")
+    patchRider(setRiderChanges, session, { state: "waiting", position })
+    playFlourish("peek", { position, name: session.name })   // the green confirmation rides up with the cyclist — no separate toast underneath
     revealConfirm()
   }
 
   // Move an existing booking to another free bike; the old bike is released
   function changeSeat(session, bike) {
-    const key = session.time + session.name
     const old = seatPlan(session).mine
-    setOverrides(o => ({ ...o, [key]: { ...o[key], state: "booked", bike, freed: [...(o[key]?.freed || []), ...(old && old !== bike ? [old] : [])] } }))
+    patchRider(setRiderChanges, session, changeSeatFields(session, bike))
     setSelectedBike(null)
     flashToast(`Moved to bike ${bike}`)
     playFlourish("swap", { from: old, to: bike })
@@ -2752,15 +2971,13 @@ function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onColla
   }
 
   function cancelBooking(session) {
-    const key = session.time + session.name
-    setBookedSessions(prev => prev.filter(k => k !== key))
-    setOverrides(o => ({ ...o, [key]: { state: "book", bike: null, freed: [], spaces: session.spaces || 4 } }))
+    patchRider(setRiderChanges, session, cancelFields(session))
     setSelectedBike(null)
     flashToast(`Booking cancelled: ${session.name}`)
   }
 
   function leaveWaitlist(session) {
-    setOverrides(o => ({ ...o, [session.time + session.name]: { state: "waitlist", count: Math.max(0, (session.position || 1) - 1) } }))
+    patchRider(setRiderChanges, session, leaveFields(session))
     flashToast(`You've left the waitlist for ${session.name}`)
     revealConfirm()
   }
@@ -2773,15 +2990,13 @@ function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onColla
     setViewMode("week")
   }
 
-  function SessionCard({ session: raw }) {
-    const session    = effective(raw)
-    const key        = session.time + session.name
-    const isBooked   = bookedSessions.includes(key) || session.state === "booked"
+  function SessionCard({ session }) {
+    const isBooked   = session.state === "booked"
     const isSelected = selectedSession?.name === session.name && selectedSession?.time === session.time
-    const myBike     = isBooked && !isSocialClass(session.name) ? seatPlan({ ...session, state: "booked" }).mine : null
+    const myBike     = isBooked && !isSocialClass(session.name) ? seatPlan(session).mine : null
     return (
       <div
-        onClick={() => { setSelectedSession(raw); setSelectedBike(null) }}
+        onClick={() => { setSelectedSession(session); setSelectedBike(null) }}
         className={`p-4 border-b cursor-pointer transition-all ${divider}
           ${isSelected ? "border-l-2 border-l-[#00aa13] bg-[#e6f9e8]" : darkMode ? "hover:bg-gray-800" : "hover:bg-gray-50"}`}
       >
@@ -2815,7 +3030,7 @@ function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onColla
     <div className="p-4 md:p-8 flex flex-col md:h-full">
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-5">
+      <div className={`${stickyHeader(darkMode)} flex items-center justify-between mb-5`}>
         <div>
           <h1 className={`text-xl font-semibold ${heading}`}>Browse sessions</h1>
           <p className={`text-sm ${muted}`}>Find a class that fits your week</p>
@@ -2901,8 +3116,7 @@ function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onColla
                 const dayName = DAYS_FULL[(d.getDay() + 6) % 7]
                 const dayNum  = d.getDate()
                 const monthName = MONTH_NAMES_FULL[d.getMonth()]
-                const sd = sessionsByDate[selectedDate] || { morning: [], afternoon: [], evening: [] }
-                const allSessions = [...(sd.morning||[]), ...(sd.afternoon||[]), ...(sd.evening||[])]
+                const allSessions = daySessions
                 return (
                   <>
                     <div className={`px-5 py-4 border-b ${divider}`}>
@@ -2917,8 +3131,7 @@ function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onColla
                       </div>
                     ) : (
                       <div className="flex flex-col">
-                        {allSessions.map((raw, i) => {
-                          const s = effective(raw)
+                        {allSessions.map((s, i) => {
                           const stateColor = s.state === "book" ? "text-[#00aa13]"
                             : s.state === "full" ? (darkMode ? "text-gray-500" : "text-gray-400")
                             : s.state === "booked" ? "text-[#00aa13]"
@@ -2946,7 +3159,7 @@ function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onColla
                         <div className={`px-5 py-4 mt-auto`}>
                           <div className={`rounded-xl p-4 ${darkMode ? "bg-gray-800" : "bg-gray-50"}`}>
                             <p className={`text-xs font-semibold mb-2 ${heading}`}>{allSessions.length} class{allSessions.length !== 1 ? "es" : ""} scheduled</p>
-                            <p className={`text-xs ${muted}`}>{allSessions.filter(s => s.state === "book").length} available · {allSessions.filter(s => s.state === "full").length} full · {allSessions.filter(s => s.state === "booked" || bookedSessions.includes(s.time + s.name)).length} booked</p>
+                            <p className={`text-xs ${muted}`}>{allSessions.filter(s => s.state === "book").length} available · {allSessions.filter(s => s.state === "full").length} full · {allSessions.filter(s => s.state === "booked").length} booked</p>
                           </div>
                         </div>
                       </div>
@@ -2971,6 +3184,11 @@ function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onColla
                 ${darkMode ? "hover:bg-gray-800 text-gray-300" : "hover:bg-gray-100 text-gray-600"}`}
             >‹</button>
             <span className={`font-semibold text-base ${heading}`}>{weekRangeLabel(weekDates)}</span>
+            <button onClick={() => selectDay(BOOKING_TODAY)} disabled={selectedDate === BOOKING_TODAY && weekOffset === 0}
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-colors disabled:opacity-40 disabled:cursor-default
+                ${darkMode ? "border-gray-700 text-gray-300 hover:bg-gray-800" : "border-gray-200 text-gray-600 hover:bg-gray-100"}`}>
+              Today
+            </button>
             <button
               onClick={() => setWeekOffset(w => w + 1)}
               className={`w-10 h-10 rounded-xl flex items-center justify-center text-2xl font-light transition-colors flex-shrink-0
@@ -3093,7 +3311,7 @@ function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onColla
                 </div>
 
                 <SessionBookingPanel key={activeSession.time + activeSession.name} session={activeSession} isPast={isPast}
-                  booked={bookedSessions.includes(activeSession.time + activeSession.name) || activeSession.state === "booked"}
+                  booked={activeSession.state === "booked"}
                   selectedBike={selectedBike} onPickBike={chooseBike} onBook={bike => handleBook(activeSession, bike)} onChangeSeat={bike => changeSeat(activeSession, bike)} onCancelBooking={() => cancelBooking(activeSession)}
                   onJoinWaitlist={() => joinWaitlist(activeSession)} onLeaveWaitlist={() => leaveWaitlist(activeSession)}
                   darkMode={darkMode} />
@@ -3177,7 +3395,7 @@ function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onColla
               </div>
               {/* Seating + book / waitlist, or past message */}
               <SessionBookingPanel key={activeSession.time + activeSession.name} session={activeSession} isPast={isPast}
-                booked={bookedSessions.includes(activeSession.time + activeSession.name) || activeSession.state === "booked"}
+                booked={activeSession.state === "booked"}
                 selectedBike={selectedBike} onPickBike={chooseBike} onBook={bike => handleBook(activeSession, bike)} onChangeSeat={bike => changeSeat(activeSession, bike)} onCancelBooking={() => cancelBooking(activeSession)}
                 onJoinWaitlist={() => joinWaitlist(activeSession)} onLeaveWaitlist={() => leaveWaitlist(activeSession)}
                 darkMode={darkMode} className="px-5 py-4 pb-10" />
@@ -3209,6 +3427,76 @@ function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onColla
 // ─── MY SCHEDULE DATA ────────────────────────────────────────────────────────
 // Personal schedule: only sessions the user has committed to (attended / booked / waitlist / cancelled).
 
+// ─── Rider schedule: one merged view of each day, shared by Bookings and the Calendar ───
+// Weekly template used to fill future dates the demo timetable doesn't cover (Monday first)
+const RIDER_WEEK_TEMPLATE = [
+  [["06:30", "Sunrise Power", "Anna Banana", "Studio 1"], ["12:30", "Lunch Sprint", "Clueless Banana", "Studio 2"], ["18:00", "Evening Flow", "Zen Kiwi", "Studio 1"], ["19:30", "HIIT Blast", "Anya Banana", "Studio 2"]],
+  [["07:00", "Cadence Control", "Liam Gallager", "Studio 1"], ["12:30", "Midday Burn", "Alex Papaya", "Studio 1"], ["18:30", "Threshold Push", "Max Lime", "Studio 1"]],
+  [["06:30", "Endurance Builder", "Alien Banana", "Studio 2"], ["12:00", "Lunch Sprint", "Clueless Banana", "Studio 2"], ["18:00", "Power Tempo", "Anna Banana", "Studio 1"], ["19:30", "Climb Intervals", "The Banana", "Studio 2"]],
+  [["06:15", "Sunrise Power", "Anna Banana", "Studio 1"], ["10:00", "Recovery Ride", "Loopy Banana", "Studio 1"], ["16:30", "Power Tempo", "Anna Banana", "Studio 1"], ["18:00", "Evening Flow", "Zen Kiwi", "Studio 2"]],
+  [["07:00", "Threshold Push", "Max Lime", "Studio 1"], ["12:30", "Midday Burn", "Alex Papaya", "Studio 1"], ["17:30", "Rhythm Ride", "Rob Banana", "Studio 2"]],
+  [["09:00", "Rhythm Ride", "Rob Banana", "Studio 1"], ["10:30", "Saturday HIIT", "Max Lime", "Studio 1"], ["11:30", "Endurance Builder", "Alien Banana", "Studio 2"]],
+  [["09:00", "Easy Endurance", "Lemon Banana", "Studio 1"], ["11:00", "Recovery Ride", "Loopy Banana", "Studio 2"]],
+]
+const sessionPart = time => { const h = Number(time.slice(0, 2)); return h < 12 ? "morning" : h < 17 ? "afternoon" : "evening" }
+function timetableFor(date) {
+  const demo = sessionsByDate[date]
+  // Past days keep whatever the demo data says; future days with no classes get the weekly template
+  if (date < BOOKING_TODAY) return demo || null
+  if (demo && Object.values(demo).some(list => list?.length)) return demo
+  const out = { morning: [], afternoon: [], evening: [] }
+  RIDER_WEEK_TEMPLATE[(new Date(date + "T00:00:00").getDay() + 6) % 7].forEach(([time, name, instructor, studio]) => {
+    let h = 0
+    for (const ch of date + time) h = (h * 31 + ch.charCodeAt(0)) >>> 0
+    const spaces = h % 7
+    const avail = spaces > 0 ? { spaces, state: "book" } : h % 2 ? { spaces: 0, state: "waitlist", count: 1 + (h % 4) } : { spaces: 0, state: "full" }
+    out[sessionPart(time)].push({ time, name, instructor, studio, ...avail })
+  })
+  return out
+}
+// The timetable + your own schedule + changes made this visit. `state` is the Bookings view
+// (book / full / waitlist / booked / waiting); `personal` is what the Calendar shows (or null).
+function riderDay(date, changes = {}) {
+  const byKey = new Map()
+  const table = timetableFor(date) || {}
+  for (const part of ["morning", "afternoon", "evening"]) {
+    for (const s of table[part] || []) {
+      // The timetable's own "booked" flags only count when the class is in your schedule
+      const booked = s.state === "booked"
+      byKey.set(s.time + s.name, { ...s, date, part, state: booked ? "book" : s.state, spaces: booked ? (s.spaces || 3) : s.spaces, personal: null })
+    }
+  }
+  for (const m of mySchedule[date] || []) {
+    const key = m.time + m.name, base = byKey.get(key)
+    const personal = m.state === "waitlist" ? "waiting" : m.state
+    const position = m.state === "waitlist" ? (m.count || 0) + 1 : m.position
+    const state = personal === "booked" || personal === "waiting" ? personal : base ? base.state : "full"
+    byKey.set(key, { ...(base || { spaces: 0, part: sessionPart(m.time) }), ...m, date, position, state, personal })
+  }
+  for (const [key, change] of Object.entries(changes)) {
+    if (!key.startsWith(date)) continue
+    const k = key.slice(date.length)
+    const base = byKey.get(k) || { ...change.session, date, part: sessionPart(change.session.time), spaces: 0, state: "full", personal: null }
+    const next = { ...base, ...change.fields }
+    next.personal = next.state === "booked" ? "booked" : next.state === "waiting" ? "waiting" : base.personal === "booked" || base.personal === "cancelled" ? "cancelled" : null
+    byKey.set(k, next)
+  }
+  return [...byKey.values()].sort((a, b) => a.time.localeCompare(b.time))
+}
+const riderKey = s => s.date + s.time + s.name
+function patchRider(setChanges, s, fields) {
+  setChanges?.(c => {
+    const key = riderKey(s)
+    return { ...c, [key]: { session: { time: s.time, name: s.name, instructor: s.instructor, studio: s.studio }, fields: { ...(c[key]?.fields || {}), ...fields } } }
+  })
+}
+function changeSeatFields(s, bike) {
+  const old = seatPlan(s).mine
+  return { state: "booked", bike, freed: [...(s.freed || []), ...(old && old !== bike ? [old] : [])] }
+}
+const cancelFields = s => ({ state: "book", bike: null, freed: [], spaces: (s.spaces || 3) + (s.bike ? 0 : 1) })
+const leaveFields  = s => ({ state: "waitlist", count: Math.max(0, (s.position || 1) - 1) })
+
 // ─── Little animations: waitlist peek, seat swap, streak collect ─────────────
 const FLOURISH_MS = { peek: 3200, swap: 3300, streak: 3000 }
 const FLOURISH_CSS = `
@@ -3218,7 +3506,7 @@ const FLOURISH_CSS = `
   @keyframes fl-rise { 0% { transform: translate(-50%, 110%) } 16% { transform: translate(-50%, 6%) } 22%, 82% { transform: translate(-50%, 14%) } 100% { transform: translate(-50%, 115%) } }
   @keyframes fl-look { 0%, 24% { transform: translateX(0) } 34%, 50% { transform: translateX(-5px) } 60%, 76% { transform: translateX(5px) } 86%, 100% { transform: translateX(0) } }
   @keyframes fl-blink { 0%, 53%, 58%, 100% { transform: scaleY(1) } 55% { transform: scaleY(.1) } }
-  @keyframes fl-bubble { 0%, 22% { opacity: 0; transform: translateY(8px) scale(.9) } 30%, 76% { opacity: 1; transform: none } 86%, 100% { opacity: 0 } }
+  @keyframes fl-bubble { 0%, 12% { opacity: 0; transform: translateY(16px) scale(.94) } 22%, 82% { opacity: 1; transform: none } 96%, 100% { opacity: 0; transform: translateY(10px) } }
   @keyframes fl-dot { 0%, 100% { opacity: .25 } 50% { opacity: 1 } }
   @keyframes fl-bike-l { 0% { transform: translateX(-60vw) } 34%, 84% { transform: translateX(-80px) } 100% { transform: translateX(-80px); opacity: 0 } }
   @keyframes fl-bike-r { 0% { transform: translateX(60vw) scaleX(-1) } 34%, 84% { transform: translateX(80px) scaleX(-1) } 100% { transform: translateX(80px) scaleX(-1); opacity: 0 } }
@@ -3226,10 +3514,10 @@ const FLOURISH_CSS = `
   @keyframes fl-rider-r { 0% { transform: translate(60vw, 0) } 34%, 42% { transform: translate(80px, 0) } 54% { transform: translate(0, -80px) rotate(-180deg) } 66%, 84% { transform: translate(-80px, 0) rotate(-360deg) } 100% { transform: translate(-80px, 0) rotate(-360deg); opacity: 0 } }
   @keyframes fl-label { 0%, 62% { opacity: 0; transform: translate(-50%, 10px) } 70%, 90% { opacity: 1; transform: translate(-50%, 0) } 100% { opacity: 0; transform: translate(-50%, 0) } }
   @keyframes fl-streak-ride { from { transform: translateX(-200px) } to { transform: translateX(calc(100vw + 200px)) } }
-  @keyframes fl-float { 0%, 100% { transform: translateY(0) } 50% { transform: translateY(-6px) } }
-  @keyframes fl-gem { 0% { transform: scale(1); opacity: 1 } 40% { transform: scale(1.7); opacity: 1 } 100% { transform: scale(0); opacity: 0 } }
-  @keyframes fl-spark { 0% { opacity: 0; transform: rotate(var(--a)) translateY(0) } 15% { opacity: 1 } 100% { opacity: 0; transform: rotate(var(--a)) translateY(-46px) } }
-  @keyframes fl-trail { 0%, 100% { opacity: .15; transform: scale(.6) } 50% { opacity: 1; transform: scale(1) } }
+  @keyframes fl-veil { 0% { opacity: 0 } 14%, 84% { opacity: 1 } 100% { opacity: 0 } }
+  @keyframes fl-fly { 0% { opacity: 0; transform: translate(0, 0) scale(1) } 12% { opacity: 1 } 100% { opacity: 0; transform: translate(var(--fx), var(--fy)) scale(.3) } }
+  @keyframes fl-settle { 0% { opacity: 0; transform: translate(0, 0) scale(.3) } 12% { opacity: 1; transform: translate(0, -8px) scale(1) } 100% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(.5) } }
+  @keyframes fl-twinkle { 0%, 100% { opacity: 0; transform: scale(.4) rotate(0deg) } 50% { opacity: 1; transform: scale(1.1) rotate(45deg) } }
   @keyframes fl-count { 0%, 72% { opacity: 0; transform: translate(-50%, 12px) scale(.9) } 80%, 94% { opacity: 1; transform: translate(-50%, 0) scale(1) } 100% { opacity: 0; transform: translate(-50%, 0) } }
 `
 
@@ -3251,23 +3539,32 @@ function Flourish({ kind, data, darkMode }) {
   return (
     <div className="flourish fixed inset-0 z-[75] pointer-events-none overflow-hidden" aria-hidden="true">
       <style>{FLOURISH_CSS}</style>
-      {kind === "peek" && <WaitlistPeek ink={ink} darkMode={darkMode} />}
+      {kind === "peek" && <WaitlistPeek ink={ink} darkMode={darkMode} position={data.position} name={data.name} />}
       {kind === "swap" && <SeatSwap ink={ink} from={data.from} to={data.to} darkMode={darkMode} />}
       {kind === "streak" && <StreakRide ink={ink} />}
     </div>
   )
 }
 
-// A helmeted cyclist pops up from the bottom and looks around, curious — waiting for a spot
-function WaitlistPeek({ ink, darkMode }) {
+// A helmeted cyclist pops up from the bottom and looks around, curious — waiting for a spot.
+// A soft veil fades in behind so it never sits on top of page text (e.g. the mobile booking sheet).
+function WaitlistPeek({ ink, darkMode, position, name }) {
+  const veil = darkMode ? "17,24,39" : "255,255,255"
   return (
-    <div className="absolute bottom-0" style={{ left: "max(125px, 30%)", animation: "fl-rise 3.2s cubic-bezier(.3,.7,.3,1) forwards" }}>
-      <div className={`absolute bottom-[182px] left-[118px] whitespace-nowrap rounded-2xl rounded-bl-sm px-3 py-2 text-sm font-semibold shadow-lg ${darkMode ? "bg-gray-800 text-white" : "bg-white text-gray-900"}`}
-        style={{ animation: "fl-bubble 3.2s ease forwards" }}>
-        Waiting for a spot
-        {[0, 1, 2].map(i => <span key={i} style={{ animation: `fl-dot 1s ease-in-out ${i * 0.2}s infinite` }}>.</span>)}
+    <>
+      <div className="absolute inset-x-0 bottom-0 h-80" style={{ background: `linear-gradient(to top, rgba(${veil},.97) 45%, rgba(${veil},0))`, animation: "fl-veil 3.2s ease forwards" }} />
+      <div className="absolute left-1/2 bottom-0" style={{ animation: "fl-rise 3.2s cubic-bezier(.3,.7,.3,1) forwards" }}>
+      {/* The green confirmation rides up above the cyclist's head and leaves with it */}
+      <div className="absolute left-1/2 bottom-[176px] -translate-x-1/2">
+        <div className="w-max max-w-[88vw] rounded-xl px-5 py-3 text-center text-white shadow-lg bg-[#00aa13]"
+          style={{ animation: "fl-bubble 3.2s ease forwards" }}>
+          <p className="text-sm font-semibold">{position ? `You're #${position} on the waitlist` : "You're on the waitlist"}{name ? ` for ${name}` : ""}</p>
+          <p className="text-xs opacity-85">
+            Waiting for a spot{[0, 1, 2].map(i => <span key={i} style={{ animation: `fl-dot 1s ease-in-out ${i * 0.2}s infinite` }}>.</span>)}
+          </p>
+        </div>
       </div>
-      <svg width="230" height="196" viewBox="0 0 200 170">
+      <svg width="200" height="170" viewBox="0 0 200 170">
         <path d="M45 172 Q50 118 100 112 Q150 118 155 172 Z" fill="#00aa13" />
         <path d="M78 116 L100 140 L122 116" fill="none" stroke="#fff" strokeWidth="4" opacity=".6" />
         <circle cx="100" cy="76" r="42" fill="#f6c9a0" />
@@ -3293,14 +3590,15 @@ function WaitlistPeek({ ink, darkMode }) {
         <circle cx="40" cy="152" r="11" fill="#f6c9a0" stroke={ink} strokeWidth="2" />
         <circle cx="160" cy="152" r="11" fill="#f6c9a0" stroke={ink} strokeWidth="2" />
       </svg>
-    </div>
+      </div>
+    </>
   )
 }
 
 function BikeFrame({ ink, color = "#00aa13", gold = false }) {
   const wheel = gold ? "#f5b301" : ink
   return (
-    <svg width="112" height="70" viewBox="0 0 112 70" fill="none" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="112" height="70" viewBox="0 0 112 70" fill="none" strokeLinecap="round" strokeLinejoin="round" style={{ overflow: "visible", filter: gold ? "drop-shadow(0 0 5px rgba(255,200,40,.95))" : undefined }}>
       {[24, 88].map(cx => (
         <g key={cx} className="fl-wheel">
           <circle cx={cx} cy="52" r="16" stroke={wheel} strokeWidth={gold ? 4 : 3} />
@@ -3340,39 +3638,34 @@ function SeatSwap({ ink, from, to, darkMode }) {
   )
 }
 
-// A bike with golden wheels rides through wheel-shaped gems that burst into gold sparks
+// A bike on glowing gold tyres rides across, throwing off gold dust that sparkles and settles behind it
 function StreakRide({ ink }) {
   const width = typeof window === "undefined" ? 1200 : window.innerWidth
-  const gems = [0.14, 0.31, 0.48, 0.65, 0.82]
-  const RIDE = 2.4
+  const RIDE = 2.6
+  // Dust left along the road — each speck lights up as the back tyre passes it
+  const trail = Array.from({ length: 42 }, (_, i) => {
+    const x = 2 + i * 2.35
+    return { x, delay: RIDE * (x / 100 * width + 200 - 12) / (width + 400), dx: ((i * 29) % 44) - 22, dy: -(14 + (i * 13) % 34), size: 2 + (i * 7) % 4, top: 44 + (i * 11) % 16 }
+  })
   return (
     <div className="absolute inset-x-0 top-[40%]">
-      {gems.map((p, i) => {
-        const d = RIDE * (p * width - 40 + 200) / (width + 400)
-        return (
-          <div key={i} className="absolute" style={{ left: `${p * 100}%`, top: 8, marginLeft: -20 }}>
-            <div style={{ animation: "fl-float 1.2s ease-in-out infinite", animationDelay: `${i * 0.15}s` }}>
-              <div style={{ animation: `fl-gem .5s ease-out ${d}s forwards` }}>
-                <svg width="40" height="40" viewBox="0 0 40 40">
-                  <circle cx="20" cy="20" r="16" fill="#fff4c2" stroke="#f5b301" strokeWidth="4" />
-                  <path d="M20 5v30M5 20h30M9 9l22 22M31 9L9 31" stroke="#f5b301" strokeWidth="1.6" />
-                  <circle cx="20" cy="20" r="4" fill="#f5b301" />
-                </svg>
-              </div>
-            </div>
-            {Array.from({ length: 8 }).map((_, k) => (
-              <span key={k} className="absolute left-[19px] top-[14px] w-[3px] h-[10px] rounded-full"
-                style={{ background: k % 2 ? "#ffd54a" : "#f5b301", "--a": `${k * 45}deg`, opacity: 0, transformOrigin: "50% 16px", animation: `fl-spark .6s ease-out ${d}s forwards` }} />
-            ))}
-          </div>
-        )
-      })}
+      {trail.map((s, i) => (
+        <span key={i} className="absolute rounded-full"
+          style={{ left: `${s.x}%`, top: s.top, width: s.size, height: s.size, background: i % 3 ? "#ffd54a" : "#fff3b0", boxShadow: "0 0 6px 1px rgba(255,200,40,.9)", opacity: 0, "--dx": `${s.dx}px`, "--dy": `${s.dy}px`, animation: `fl-settle 1.4s ease-out ${s.delay}s forwards` }} />
+      ))}
       <div className="absolute left-0 top-[-16px]" style={{ animation: `fl-streak-ride ${RIDE}s linear forwards` }}>
         <div className="relative">
           <div className="absolute" style={{ left: 32, top: -44 }}><Rider color="#00aa13" /></div>
           <BikeFrame ink={ink} gold />
-          {[0, 1, 2, 3, 4].map(k => (
-            <span key={k} className="absolute rounded-full" style={{ left: -6 - k * 12, top: 46 + (k % 2) * 8, width: 6, height: 6, background: k % 2 ? "#ffd54a" : "#f5b301", animation: `fl-trail .5s ease-in-out ${k * 0.08}s infinite` }} />
+          {/* gold dust flying off both tyres */}
+          {[24, 88].flatMap(cx => Array.from({ length: 9 }, (_, k) => (
+            <span key={`${cx}-${k}`} className="absolute rounded-full"
+              style={{ left: cx - 2, top: 58 + (k % 3) * 3, width: 3 + (k % 3), height: 3 + (k % 3), background: k % 2 ? "#ffd54a" : "#f5b301", boxShadow: "0 0 5px rgba(255,200,40,.9)", opacity: 0, "--fx": `${-36 - k * 9}px`, "--fy": `${-30 + (k % 5) * 12}px`, animation: `fl-fly .7s linear ${k * 0.08}s infinite` }} />
+          )))}
+          {/* sparkles glinting on the tyres */}
+          {[[30, 34, 0], [92, 40, 0.3], [18, 60, 0.55], [82, 62, 0.15]].map(([x, y, d]) => (
+            <span key={`${x}-${y}`} className="absolute text-[13px] leading-none"
+              style={{ left: x, top: y, color: "#fff7c2", textShadow: "0 0 6px #f5b301, 0 0 10px #ffd54a", opacity: 0, animation: `fl-twinkle .8s ease-in-out ${d}s infinite` }}>✦</span>
           ))}
         </div>
       </div>
@@ -3501,14 +3794,13 @@ const mySchedule = {
 
 // ─── CALENDAR PAGE ──────────────────────────────────────────────────────────
 
-function CalendarPage({ darkMode, onToggleDarkMode, onFindClass }) {
+function CalendarPage({ darkMode, onToggleDarkMode, onFindClass, riderChanges = {}, setRiderChanges }) {
   const [calView, setCalView]           = useState("month")
   const [selectedDate, setSelectedDate] = useState(BOOKING_TODAY)
   const [calMonth, setCalMonth]         = useState({ year: 2026, month: 2 })
   const [calWeekOff, setCalWeekOff]     = useState(0)
   const [widgetIdx, setWidgetIdx]       = useState(0)
   const [showCalPlan, setShowCalPlan]   = useState(false)
-  const [overrides, setOverrides]       = useState({})     // seat moves, cancellations, left waitlists — keyed date+time+name
   const [manageKey, setManageKey]       = useState(null)   // session open in the manage overlay
   const [calBike, setCalBike]           = useState(null)   // bike picked while changing seat
   const [flourishNode, playFlourish]    = useFlourish(darkMode)
@@ -3522,7 +3814,7 @@ function CalendarPage({ darkMode, onToggleDarkMode, onFindClass }) {
   const monthCells   = getMonthGrid(calMonth.year, calMonth.month)
   const weekDates    = getWeekDates(calWeekOff)
   // Your schedule, including changes made here (seat moves, cancellations, leaving a waitlist)
-  const sessionsOn   = ds => (mySchedule[ds] || []).map(s => ({ ...s, ...overrides[ds + s.time + s.name] })).filter(s => !s.removed)
+  const sessionsOn   = ds => riderDay(ds, riderChanges).filter(s => s.personal).map(s => ({ ...s, state: s.personal }))
   const keyOf        = s => selectedDate + s.time + s.name
   const mySessions   = sessionsOn(selectedDate)
   const widgetCount  = mySessions.length
@@ -3542,14 +3834,25 @@ function CalendarPage({ darkMode, onToggleDarkMode, onFindClass }) {
   // Dot colour per session: booked green, waitlist orange, cancelled red, attended grey
   const dotColor = st => st === "booked" ? "bg-[#00aa13]" : st === "waiting" || st === "waitlist" ? "bg-amber-500" : st === "cancelled" ? "bg-red-400" : darkMode ? "bg-gray-500" : "bg-gray-400"
 
+  // Changes go through the shared rider schedule, so Bookings always shows the same thing
   function calChangeSeat(s, bike) {
-    const key = keyOf(s), old = seatPlan(s).mine
-    setOverrides(o => ({ ...o, [key]: { ...o[key], bike, freed: [...(o[key]?.freed || []), ...(old && old !== bike ? [old] : [])] } }))
+    const old = seatPlan(s).mine
+    patchRider(setRiderChanges, s, changeSeatFields(s, bike))
     setCalBike(null)
     playFlourish("swap", { from: old, to: bike })
   }
-  function calCancel(s)  { setOverrides(o => ({ ...o, [keyOf(s)]: { state: "cancelled" } })); setManageKey(null) }
-  function calLeave(s)   { setOverrides(o => ({ ...o, [keyOf(s)]: { removed: true } })); setManageKey(null); setWidgetIdx(0) }
+  function calCancel(s) { patchRider(setRiderChanges, s, cancelFields(s)); setManageKey(null) }
+  function calLeave(s)  { patchRider(setRiderChanges, s, leaveFields(s)); setManageKey(null); setWidgetIdx(0) }
+
+  const onToday = selectedDate === BOOKING_TODAY && calMonth.year === 2026 && calMonth.month === 2 && calWeekOff === 0
+  function goToday() { setSelectedDate(BOOKING_TODAY); setWidgetIdx(0); setCalMonth({ year: 2026, month: 2 }); setCalWeekOff(0) }
+  const todayButton = (
+    <button onClick={goToday} disabled={onToday}
+      className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-colors disabled:opacity-40 disabled:cursor-default
+        ${darkMode ? "border-gray-700 text-gray-300 hover:bg-gray-800" : "border-gray-200 text-gray-600 hover:bg-gray-100"}`}>
+      Today
+    </button>
+  )
 
   function sessionBadge(s) {
     if (s.state === "attended")  return <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${darkMode ? "text-gray-400" : "text-gray-500"}`}><span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${darkMode ? "bg-gray-500" : "bg-gray-400"}`} />Attended</span>
@@ -3583,7 +3886,7 @@ function CalendarPage({ darkMode, onToggleDarkMode, onFindClass }) {
           <style>{`@keyframes freeBounce { 0%, 100% { transform: translateY(0) } 50% { transform: translateY(-6px) } } @media (prefers-reduced-motion: reduce) { .free-bounce { animation: none !important } }`}</style>
           <span className="free-bounce text-4xl" style={{ animation: "freeBounce 2.4s ease-in-out infinite" }}>🚴</span>
           <p className={`text-base font-bold ${heading}`}>{isToday ? "You're free today!" : "You're free!"}</p>
-          <p className={`text-xs max-w-[16rem] ${muted}`}>{lines[Number(selectedDate.slice(8)) % lines.length]}</p>
+          <p className={`text-xs max-w-md text-balance ${muted}`}>{lines[Number(selectedDate.slice(8)) % lines.length]}</p>
           <button onClick={() => onFindClass?.(selectedDate)}
             className="mt-2 px-4 py-2.5 rounded-xl bg-[#00aa13] hover:bg-[#008a0f] text-white text-sm font-semibold transition-colors">
             Find a class on this day →
@@ -3596,8 +3899,8 @@ function CalendarPage({ darkMode, onToggleDarkMode, onFindClass }) {
 
     return (
       <div className="flex flex-col gap-3">
-        {/* Context label + page indicator */}
-        <div className="flex items-center justify-between">
+        {/* Context label + class switcher — pinned to the top while the details scroll */}
+        <div className={`sticky -top-4 z-10 -mx-4 -mt-4 px-4 pt-4 pb-2 flex items-center justify-between gap-2 ${subtle}`}>
           <div>
             {isToday && s.state === "booked" && (
               <span className="text-xs px-2.5 py-1 rounded-full bg-[#00aa13] text-white font-semibold tracking-wide">Up Next</span>
@@ -3618,9 +3921,15 @@ function CalendarPage({ darkMode, onToggleDarkMode, onFindClass }) {
               <span className="text-xs font-medium text-amber-600">On waitlist</span>
             )}
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 flex-shrink-0">
             {widgetCount > 1 && (
-              <span className={`text-xs tabular-nums ${muted}`}>{clampedIdx + 1} / {widgetCount}</span>
+              <div className="flex items-center">
+                <button onClick={() => setWidgetIdx(Math.max(0, clampedIdx - 1))} disabled={clampedIdx === 0} aria-label="Previous class"
+                  className={`w-7 h-7 rounded-lg flex items-center justify-center text-lg leading-none disabled:opacity-25 disabled:cursor-default ${darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-200 text-gray-600"}`}>‹</button>
+                <span className={`text-xs tabular-nums w-10 text-center ${muted}`}>{clampedIdx + 1} / {widgetCount}</span>
+                <button onClick={() => setWidgetIdx(Math.min(widgetCount - 1, clampedIdx + 1))} disabled={clampedIdx === widgetCount - 1} aria-label="Next class"
+                  className={`w-7 h-7 rounded-lg flex items-center justify-center text-lg leading-none disabled:opacity-25 disabled:cursor-default ${darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-200 text-gray-600"}`}>›</button>
+              </div>
             )}
             {canManage(s) && (
               <button onClick={() => setManageKey(keyOf(s))} aria-label="Open class details" title="Open details"
@@ -3734,29 +4043,6 @@ function CalendarPage({ darkMode, onToggleDarkMode, onFindClass }) {
           <p className={`text-xs ${muted}`}>{s.count} {s.count === 1 ? "person" : "people"} ahead of you on the waitlist.</p>
         )}
 
-        {/* Prev / Next carousel */}
-        {widgetCount > 1 && (
-          <div className={`flex items-center justify-between pt-3 border-t ${divider}`}>
-            <button
-              onClick={e => { e.stopPropagation(); setWidgetIdx(i => Math.max(0, i - 1)) }}
-              disabled={clampedIdx === 0}
-              className={`w-8 h-8 rounded-lg flex items-center justify-center text-xl font-light transition-all
-                ${clampedIdx === 0 ? "opacity-25 cursor-not-allowed" : darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-200 text-gray-600"}`}
-            >‹</button>
-            <div className="flex gap-1 items-center">
-              {Array.from({ length: widgetCount }).map((_, j) => (
-                <button key={j} onClick={e => { e.stopPropagation(); setWidgetIdx(j) }}
-                  className={`rounded-full transition-all ${j === clampedIdx ? "w-4 h-1.5 bg-[#00aa13]" : `w-1.5 h-1.5 ${darkMode ? "bg-gray-600" : "bg-gray-300"}`}`} />
-              ))}
-            </div>
-            <button
-              onClick={e => { e.stopPropagation(); setWidgetIdx(i => Math.min(widgetCount - 1, i + 1)) }}
-              disabled={clampedIdx === widgetCount - 1}
-              className={`w-8 h-8 rounded-lg flex items-center justify-center text-xl font-light transition-all
-                ${clampedIdx === widgetCount - 1 ? "opacity-25 cursor-not-allowed" : darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-200 text-gray-600"}`}
-            >›</button>
-          </div>
-        )}
       </div>
     )
   }
@@ -3766,7 +4052,7 @@ function CalendarPage({ darkMode, onToggleDarkMode, onFindClass }) {
       <div className={`border-t ${divider} p-4 md:p-5 flex flex-col sm:flex-row gap-4`} style={{ minHeight: "160px" }}>
 
         {/* Session list — compact, so the details get the room */}
-        <div className="sm:w-56 md:w-64 sm:flex-shrink-0 min-w-0 overflow-y-auto">
+        <div className="sm:w-56 md:w-64 sm:flex-shrink-0 min-w-0 sm:max-h-[28rem] overflow-y-auto">
           <h3 className={`text-sm font-semibold mb-2 ${heading}`}>
             {isToday ? "Today" : isPast ? "Session history" : "Upcoming"}
           </h3>
@@ -3785,15 +4071,15 @@ function CalendarPage({ darkMode, onToggleDarkMode, onFindClass }) {
           ) : (
             <p className={`text-xs ${muted}`}>{isPast ? "No classes this day." : "Nothing booked yet."}</p>
           )}
-          <div className={`flex flex-wrap gap-x-3 gap-y-1 mt-3 text-[10px] ${muted}`}>
-            {[["booked", "Booked"], ["waiting", "Waitlist"], ["attended", "Attended"], ["cancelled", "Cancelled"]].map(([st, l]) => (
-              <span key={st} className="flex items-center gap-1"><span className={`w-1.5 h-1.5 rounded-full ${dotColor(st)}`} />{l}</span>
-            ))}
-          </div>
         </div>
 
         {/* Session details — the roomy part */}
-        <div className={`flex-1 min-w-0 rounded-2xl p-4 ${subtle}`}>
+        <div role="region" aria-label="Class details" tabIndex={0}
+          onKeyDown={e => {
+            if (e.key === "ArrowRight" && clampedIdx < widgetCount - 1) { setWidgetIdx(clampedIdx + 1); e.preventDefault() }
+            if (e.key === "ArrowLeft" && clampedIdx > 0) { setWidgetIdx(clampedIdx - 1); e.preventDefault() }
+          }}
+          className={`flex-1 min-w-0 rounded-2xl p-4 max-h-[28rem] overflow-y-auto overflow-x-hidden overscroll-contain focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00aa13] ${subtle}`}>
           {renderWidget()}
         </div>
 
@@ -3802,10 +4088,10 @@ function CalendarPage({ darkMode, onToggleDarkMode, onFindClass }) {
   }
 
   return (
-    <div className="p-4 md:p-8 flex flex-col md:h-full">
+    <div className="p-4 md:p-8 flex flex-col md:min-h-full">
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-5">
+      <div className={`${stickyHeader(darkMode)} flex items-center justify-between mb-5`}>
         <div>
           <h1 className={`text-xl font-semibold ${heading}`}>Calendar</h1>
           <p className={`text-sm ${muted}`}>Your schedule at a glance</p>
@@ -3832,7 +4118,7 @@ function CalendarPage({ darkMode, onToggleDarkMode, onFindClass }) {
       {calView === "month" ? (
 
         /* ── Month view ── */
-        <div className={`${card} flex-1 flex flex-col overflow-hidden`}>
+        <div className={`${card} flex-1 flex flex-col`}>
 
           {/* Month navigation */}
           <div className={`flex items-center justify-between px-6 py-3 border-b ${divider}`}>
@@ -3841,7 +4127,10 @@ function CalendarPage({ darkMode, onToggleDarkMode, onFindClass }) {
               className={`w-10 h-10 rounded-xl flex items-center justify-center text-2xl font-light transition-colors
                 ${darkMode ? "hover:bg-gray-800 text-gray-300" : "hover:bg-gray-100 text-gray-600"}`}
             >‹</button>
-            <h2 className={`font-semibold ${heading}`}>{MONTH_NAMES_FULL[calMonth.month - 1]} {calMonth.year}</h2>
+            <div className="flex items-center gap-2.5">
+              <h2 className={`font-semibold ${heading}`}>{MONTH_NAMES_FULL[calMonth.month - 1]} {calMonth.year}</h2>
+              {todayButton}
+            </div>
             <button
               onClick={() => setCalMonth(m => { const d = new Date(m.year, m.month, 1); return { year: d.getFullYear(), month: d.getMonth() + 1 } })}
               className={`w-10 h-10 rounded-xl flex items-center justify-center text-2xl font-light transition-colors
@@ -3893,7 +4182,7 @@ function CalendarPage({ darkMode, onToggleDarkMode, onFindClass }) {
       ) : (
 
         /* ── Week view ── */
-        <div className="flex flex-col flex-1 gap-4 md:overflow-hidden">
+        <div className="flex flex-col flex-1 gap-4">
 
           {/* Week navigation */}
           <div className="flex items-center gap-3">
@@ -3903,6 +4192,7 @@ function CalendarPage({ darkMode, onToggleDarkMode, onFindClass }) {
                 ${darkMode ? "hover:bg-gray-800 text-gray-300" : "hover:bg-gray-100 text-gray-600"}`}
             >‹</button>
             <span className={`font-semibold text-base ${heading}`}>{weekRangeLabel(weekDates)}</span>
+            {todayButton}
             <button
               onClick={() => setCalWeekOff(w => w + 1)}
               className={`w-10 h-10 rounded-xl flex items-center justify-center text-2xl font-light transition-colors flex-shrink-0
@@ -3911,7 +4201,7 @@ function CalendarPage({ darkMode, onToggleDarkMode, onFindClass }) {
           </div>
 
           {/* 7-column timeline */}
-          <div className={`${card} flex-1 md:overflow-hidden flex flex-col md:min-h-0 overflow-x-auto`}>
+          <div className={`${card} flex-1 flex flex-col overflow-x-auto`}>
 
             {/* Column headers */}
             <div className={`grid grid-cols-7 border-b ${divider} flex-shrink-0 min-w-[560px]`}>
@@ -4256,7 +4546,7 @@ function RidesPage({ darkMode, onToggleDarkMode, navExpanded = false, onCollapse
     <div className="p-4 md:p-8 flex flex-col md:h-full">
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-5">
+      <div className={`${stickyHeader(darkMode)} flex items-center justify-between mb-5`}>
         <div>
           <h1 className={`text-xl font-semibold ${heading}`}>My Rides</h1>
           <p className={`text-sm ${muted}`}>{ridesData.length} rides · Feb – Mar 2026</p>
@@ -4705,7 +4995,7 @@ function AchievementsPage({ darkMode, onToggleDarkMode, onNavigate }) {
 
   return (
     <div className="p-4 md:p-8">
-      <div className="flex items-center justify-between mb-6 md:mb-8">
+      <div className={`${stickyHeader(darkMode)} flex items-center justify-between mb-6 md:mb-8`}>
         <div>
           <h1 className={`text-xl font-semibold ${heading}`}>Achievements</h1>
           <p className={`text-sm ${muted}`}>Track your progress and milestones</p>
@@ -4857,10 +5147,10 @@ function SettingsPage({ darkMode, onToggleDarkMode }) {
   }
 
   return (
-    <div className="p-4 md:p-8 max-w-2xl mx-auto pb-16">
+    <div className="p-4 md:p-8 pb-16">
 
       {/* Header */}
-      <div className="mb-8">
+      <div className={`${stickyHeader(darkMode)} mb-8`}>
         <h1 className={`text-xl font-semibold ${heading}`}>Settings</h1>
         <p className={`text-sm mt-1 ${muted}`}>Manage your account, preferences and notifications</p>
       </div>
@@ -5034,10 +5324,10 @@ function ProfilePage({ darkMode, onToggleDarkMode }) {
   }
 
   return (
-    <div className="p-4 md:p-8 max-w-2xl mx-auto pb-16">
+    <div className="p-4 md:p-8 pb-16">
 
       {/* Top bar */}
-      <div className="flex items-center justify-between mb-6">
+      <div className={`${stickyHeader(darkMode)} flex items-center justify-between mb-6`}>
         <h1 className={`text-xl font-semibold ${heading}`}>Profile</h1>
         <div className="flex items-center gap-3">
           <DarkModeToggle darkMode={darkMode} onToggle={onToggleDarkMode} />
@@ -5603,7 +5893,7 @@ function InstructorTopBar({ title, sub, darkMode, onToggleDarkMode }) {
   const heading = darkMode ? "text-white"    : "text-gray-900"
   const muted   = darkMode ? "text-gray-400" : "text-gray-500"
   return (
-    <div className="flex items-center justify-between mb-6">
+    <div className={`${stickyHeader(darkMode)} flex items-center justify-between mb-6`}>
       <div>
         <h1 className={`text-xl font-semibold ${heading}`}>{title}</h1>
         {sub && <p className={`text-sm mt-0.5 ${muted}`}>{sub}</p>}
@@ -5611,7 +5901,7 @@ function InstructorTopBar({ title, sub, darkMode, onToggleDarkMode }) {
       <div className="flex items-center gap-3">
         <DarkModeToggle darkMode={darkMode} onToggle={onToggleDarkMode} />
         <span className={`hidden sm:inline text-sm ${muted}`}>JIM · Instructor</span>
-        <Avatar name="JIM" size={32} />
+        <Avatar name="JIM" size={32} user />
       </div>
     </div>
   )
@@ -5673,7 +5963,7 @@ function InstructorHomePage({ darkMode, onToggleDarkMode, onOpenRoster, onNaviga
   const locShort = l => l.replace("CycleHQ · ", "")
 
   return (
-    <div className="p-4 md:p-8 max-w-5xl mx-auto pb-16">
+    <div className="p-4 md:p-8 pb-16">
       <InstructorTopBar title="Good morning, JIM" sub={today.length ? `${today.length} ${today.length === 1 ? "class" : "classes"} to teach today` : "No classes scheduled today"} darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
 
       {/* Location filter */}
@@ -6397,7 +6687,7 @@ function InstructorClassesPage({ darkMode, onToggleDarkMode, initialClass, navEx
   )
 
   return (
-    <div className="p-4 md:p-8 max-w-5xl mx-auto pb-16">
+    <div className="p-4 md:p-8 pb-16">
       <InstructorTopBar title="My Classes" sub="Classes you're teaching at CycleHQ" darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
 
       {/* Upcoming / past sessions (list view) + view toggle */}
@@ -6946,7 +7236,7 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish, initialRide, 
   const lengthOpts = [30, 45, 60]
 
   return (
-    <div className="p-4 md:p-8 max-w-3xl mx-auto pb-16">
+    <div className="p-4 md:p-8 pb-16">
       <InstructorTopBar title="Class Builder" sub="Tap zones to paint your session in real time" darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
 
       {ir && (
@@ -7589,7 +7879,7 @@ function InstructorStatsPage({ darkMode, onToggleDarkMode, onNavigate }) {
   const tabs = [["performance", "Performance"], ["feedback", "Feedback"]]
 
   return (
-    <div className="p-4 md:p-8 max-w-6xl mx-auto pb-16">
+    <div className="p-4 md:p-8 pb-16">
       <InstructorTopBar title="Insights" sub="Performance, earnings & rider feedback" darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
 
       {/* tab switcher */}
@@ -7782,7 +8072,7 @@ function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] 
   }
 
   return (
-    <div className="p-4 md:p-8 max-w-3xl mx-auto pb-16">
+    <div className="p-4 md:p-8 pb-16">
       <InstructorTopBar title="Schedule a Class" sub="Request a slot to teach — one-off or recurring" darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
 
       {/* Request form */}

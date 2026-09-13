@@ -2359,6 +2359,219 @@ function SessionDonut({ sessionName, darkMode }) {
   )
 }
 
+// ─── Seating plan ────────────────────────────────────────────────────────────
+// Demo seating for a session: exactly `spaces` bikes free, 1–2 out of service, the rest booked.
+// Seeded from the session so the same class always shows the same layout.
+function seatPlan(session) {
+  const rows = (STUDIO_LAYOUTS[session.studio] || { rows: bikes }).rows
+  const all = rows.flat()
+  let h = 7
+  for (const ch of session.name + session.time) h = (h * 31 + ch.charCodeAt(0)) >>> 0
+  const downCount = 1 + (h % 2)
+  const rand = () => (h = (h * 1664525 + 1013904223) >>> 0) / 4294967296
+  const order = [...all]
+  for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [order[i], order[j]] = [order[j], order[i]] }
+  const open = Math.min(session.spaces || 0, all.length - downCount)
+  const status = {}
+  order.forEach((n, i) => { status[n] = i < downCount ? "down" : i < downCount + open ? "free" : "booked" })
+  if (session.bike && status[session.bike]) status[session.bike] = "mine"
+  return { rows, status, capacity: all.length, free: Object.values(status).filter(s => s === "free").length }
+}
+
+const SEAT_STYLES = {
+  free:   { light: "bg-white border border-gray-300 text-gray-600 hover:border-[#00aa13] hover:text-[#00aa13]", dark: "bg-gray-800 border border-gray-600 text-gray-300 hover:border-[#00aa13] hover:text-[#00aa13]" },
+  picked: { light: "bg-[#00aa13] text-white", dark: "bg-[#00aa13] text-white" },
+  booked: { light: "bg-slate-300 text-slate-500", dark: "bg-slate-700 text-slate-400" },
+  down:   { light: "bg-red-500 text-white", dark: "bg-red-600 text-white" },
+}
+const SEAT_INFO = {
+  booked: n => `Bike ${n} is already booked`,
+  down:   n => `Bike ${n} is out of service — it's being repaired`,
+  mine:   n => `Bike ${n} is your bike for this class`,
+}
+
+// Bike grid. Booked / out-of-service bikes explain themselves: a tooltip on hover (mouse), a message on tap (touch)
+function BikeMap({ plan, selectedBike, interactive, lockedNote, onPick, onNote, darkMode }) {
+  const tone = darkMode ? "dark" : "light"
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex justify-center mb-1">
+        <div className="flex flex-col items-center gap-1">
+          <span className={`text-xs ${darkMode ? "text-gray-400" : "text-gray-500"}`}>Instructor</span>
+          <div className="w-8 h-10 rounded-lg bg-[#00aa13]" />
+        </div>
+      </div>
+      {plan.rows.map((row, ri) => (
+        <div key={ri} className="flex gap-2 justify-center">
+          {row.map((num, ci) => {
+            const st = plan.status[num]
+            const pickable = interactive && st === "free"
+            const look = st === "mine" || (pickable && selectedBike === num) ? SEAT_STYLES.picked[tone] : SEAT_STYLES[st === "mine" ? "picked" : st][tone]
+            const info = st === "free" ? (pickable ? `Bike ${num} · free` : lockedNote) : SEAT_INFO[st](num)
+            const tipAlign = ci < 2 ? "left-0" : ci >= row.length - 2 ? "right-0" : "left-1/2 -translate-x-1/2"
+            return (
+              <button key={num} type="button" aria-label={info} aria-disabled={!pickable}
+                onClick={() => pickable ? onPick(num) : onNote(info)}
+                className={`group relative w-8 h-10 rounded-lg text-xs font-medium transition-colors ${look}
+                  ${pickable ? "" : "cursor-not-allowed"} ${st === "mine" ? "ring-2 ring-[#00aa13] ring-offset-1" : ""}`}>
+                {num}
+                {!pickable && (
+                  <span role="tooltip" className={`pointer-events-none absolute bottom-full ${tipAlign} mb-1.5 hidden group-hover:block whitespace-nowrap rounded-md bg-gray-900 px-2 py-1 text-[11px] font-medium text-white shadow-lg z-30`}>{info}</span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// Seating + booking action for a selected session — shared by the desktop panel and the mobile sheet
+function SessionBookingPanel({ session, isPast, booked, selectedBike, onPickBike, onBook, onJoinWaitlist, onLeaveWaitlist, darkMode, className = "p-5" }) {
+  const [note, setNote] = useState("")
+  const heading = darkMode ? "text-white" : "text-gray-900"
+  const muted   = darkMode ? "text-gray-400" : "text-gray-500"
+  const tone    = darkMode ? "dark" : "light"
+  const greyBtn = `w-full py-3 rounded-xl text-sm font-semibold cursor-not-allowed ${darkMode ? "bg-gray-800 text-gray-500" : "bg-gray-100 text-gray-400"}`
+  const pill    = (cls, text) => <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${cls}`}>{text}</span>
+
+  if (isPast) {
+    return <div className={`${className} text-center`}><p className={`text-sm ${muted} py-4`}>This session has passed — view only</p></div>
+  }
+
+  const social = isSocialClass(session.name)
+  const plan   = seatPlan(session)
+  const validBike = plan.status[selectedBike] === "free" ? selectedBike : null
+
+  const seating = (interactive, lockedNote, dim) => (
+    <div className={dim ? "opacity-70" : ""}>
+      <BikeMap plan={plan} selectedBike={validBike} interactive={interactive} lockedNote={lockedNote} darkMode={darkMode}
+        onPick={num => { setNote(""); onPickBike(num) }} onNote={setNote} />
+      <div className={`flex flex-wrap justify-center gap-x-3 gap-y-1.5 mt-4 text-[11px] ${muted}`}>
+        {[["Free", "free"], [interactive ? "Selected" : "Your bike", "picked"], ["Booked", "booked"], ["Out of service", "down"]].map(([label, key]) => (
+          <span key={key} className="flex items-center gap-1.5">
+            <span className={`w-3 h-3.5 rounded-[4px] ${SEAT_STYLES[key][tone].replace(/hover:\S+/g, "")}`} />{label}
+          </span>
+        ))}
+      </div>
+      <p aria-live="polite" className={`text-xs text-center font-medium mt-3 min-h-[1rem] ${note.includes("out of service") ? "text-red-500" : muted}`}>{note}</p>
+    </div>
+  )
+
+  // Already booked (this visit, or in the demo data)
+  if (booked) {
+    return (
+      <div className={className}>
+        <div className="flex items-center justify-between mb-4">
+          <p className={`text-sm font-semibold ${heading}`}>{session.bike ? "Your bike" : "Seating"}</p>
+          {pill("bg-[#e6f9e8] text-[#00aa13]", "● Booked")}
+        </div>
+        {social ? (
+          <p className={`text-xs text-center mb-4 ${muted}`}>Social ride — your bike is assigned when you arrive.</p>
+        ) : seating(false, "You're already booked on this class", false)}
+        <button data-confirm-booking className="w-full mt-2 py-3 rounded-xl bg-[#00aa13] text-white font-semibold text-sm cursor-default">
+          {session.bike ? `✓ Booked! · Bike ${session.bike}` : "✓ Booked!"}
+        </button>
+      </div>
+    )
+  }
+
+  // Full with no waitlist: nothing to book
+  if (session.state === "full") {
+    return (
+      <div className={className}>
+        <div className="flex items-center justify-between mb-4">
+          <p className={`text-sm font-semibold ${heading}`}>Seating</p>
+          {pill(darkMode ? "bg-gray-800 text-gray-400" : "bg-gray-100 text-gray-500", "● Full")}
+        </div>
+        {seating(false, "This class is full — no bikes available", true)}
+        <p className={`text-xs text-center mb-4 ${muted}`}>No spaces left — check back for cancellations.</p>
+        <button data-confirm-booking disabled className={greyBtn}>Full</button>
+      </div>
+    )
+  }
+
+  // On the waitlist: no seat until a space opens
+  if (session.state === "waiting") {
+    return (
+      <div className={className}>
+        <div className="flex items-center justify-between mb-4">
+          <p className={`text-sm font-semibold ${heading}`}>Seating</p>
+          {pill(darkMode ? "bg-amber-900/40 text-amber-300" : "bg-amber-50 text-amber-700", `#${session.position} on waitlist`)}
+        </div>
+        <div className={`rounded-xl p-4 mb-4 text-center ${darkMode ? "bg-gray-800" : "bg-amber-50/60"}`}>
+          <p className={`text-sm font-semibold ${heading}`}>No seat assigning available</p>
+          <p className={`text-xs mt-1 ${muted}`}>You're #{session.position} on the waitlist. If a space opens we'll assign you a bike and let you know.</p>
+        </div>
+        {seating(false, "Seats can't be picked while you're on the waitlist", true)}
+        <button data-confirm-booking onClick={onLeaveWaitlist}
+          className={`w-full py-3 rounded-xl text-sm font-semibold border transition-colors ${darkMode ? "border-gray-700 text-gray-300 hover:bg-gray-800" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}>
+          Leave waitlist
+        </button>
+      </div>
+    )
+  }
+
+  // Waitlist open: seats locked, join the queue instead
+  if (session.state === "waitlist") {
+    const position = (session.count || 0) + 1
+    return (
+      <div className={className}>
+        <div className="flex items-center justify-between mb-4">
+          <p className={`text-sm font-semibold ${heading}`}>Seating</p>
+          {pill(darkMode ? "bg-amber-900/40 text-amber-300" : "bg-amber-50 text-amber-700", session.count ? `Waitlist · ${session.count} ahead` : "Waitlist open")}
+        </div>
+        <div className={`rounded-xl p-4 mb-4 text-center ${darkMode ? "bg-gray-800" : "bg-gray-50"}`}>
+          <p className={`text-sm font-semibold ${heading}`}>Seats can't be picked</p>
+          <p className={`text-xs mt-1 ${muted}`}>This class is full. Join the waitlist and we'll assign you a bike if a space opens.</p>
+        </div>
+        {seating(false, "Seats can't be picked while there's a waitlist", true)}
+        <button data-confirm-booking onClick={onJoinWaitlist}
+          className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-semibold text-sm transition-colors">
+          Join waitlist as #{position}
+        </button>
+      </div>
+    )
+  }
+
+  // Social ride: random seating, book straight away
+  if (social) {
+    return (
+      <div className={className}>
+        <div className={`rounded-xl p-4 text-center ${darkMode ? "bg-gray-800" : "bg-[#e6f9e8]"}`}>
+          <p className="text-2xl mb-1">🎲</p>
+          <p className={`text-sm font-semibold ${heading}`}>Social ride · random seating</p>
+          <p className={`text-xs mt-1 ${muted}`}>Your bike is assigned when you arrive — a great way to mix the room and meet other riders.</p>
+        </div>
+        <button data-confirm-booking onClick={onBook}
+          className="w-full mt-5 py-3 rounded-xl bg-[#00aa13] hover:bg-[#008a0f] text-white font-semibold text-sm transition-colors">
+          Confirm booking
+        </button>
+      </div>
+    )
+  }
+
+  // Spaces available: pick a free bike, then book
+  return (
+    <div className={className}>
+      <div className="flex items-center justify-between mb-4">
+        <p className={`text-sm font-semibold ${heading}`}>Choose your bike</p>
+        <span className={`text-xs ${muted}`}>{plan.free} of {plan.capacity} free</span>
+      </div>
+      {seating(true, "", false)}
+      {validBike ? (
+        <button data-confirm-booking onClick={onBook}
+          className="w-full py-3 rounded-xl bg-[#00aa13] hover:bg-[#008a0f] text-white font-semibold text-sm transition-colors">
+          Confirm booking · Bike {validBike}
+        </button>
+      ) : (
+        <button data-confirm-booking disabled className={greyBtn}>Pick a free bike to book</button>
+      )}
+    </div>
+  )
+}
+
 function BookingsPage({ darkMode, onToggleDarkMode }) {
   const [selectedSession, setSelectedSession] = useState(null)
   const [selectedBike, setSelectedBike]       = useState(null)
@@ -2394,32 +2607,58 @@ function BookingsPage({ darkMode, onToggleDarkMode }) {
     revealConfirm()
   }
 
+  // Changes made during this visit (booked bike, joined / left a waitlist), layered over the demo session data
+  const [overrides, setOverrides] = useState({})
+  const effective = s => s && { ...s, ...overrides[s.time + s.name] }
+  const activeSession = effective(selectedSession)
+
+  function flashToast(msg) {
+    setToast(msg)
+    setTimeout(() => setToast(null), 2500)
+  }
+
   function handleBook(session) {
     const key = session.time + session.name
-    if (bookedSessions.includes(key)) return
+    const social = isSocialClass(session.name)
+    if (bookedSessions.includes(key) || (!social && !selectedBike)) return
     setBookedSessions(prev => [...prev, key])
-    setToast(`Booked: ${session.name}`)
+    setOverrides(o => ({ ...o, [key]: { state: "booked", bike: social ? null : selectedBike } }))
+    flashToast(`Booked: ${session.name}${social ? "" : ` · Bike ${selectedBike}`}`)
     setSelectedSession({ ...session, state: "booked" })
-    setTimeout(() => setToast(null), 2500)
     setCelebration({ id: Date.now(), pieces: makeConfetti() })
     setTimeout(() => setCelebration(null), 3800)
+    revealConfirm()
+  }
+
+  function joinWaitlist(session) {
+    const position = (session.count || 0) + 1
+    setOverrides(o => ({ ...o, [session.time + session.name]: { state: "waiting", position } }))
+    flashToast(`You're #${position} on the waitlist for ${session.name}`)
+    revealConfirm()
+  }
+
+  function leaveWaitlist(session) {
+    setOverrides(o => ({ ...o, [session.time + session.name]: { state: "waitlist", count: Math.max(0, (session.position || 1) - 1) } }))
+    flashToast(`You've left the waitlist for ${session.name}`)
     revealConfirm()
   }
 
   function selectDay(dateStr) {
     setSelectedDate(dateStr)
     setSelectedSession(null)
+    setSelectedBike(null)
     setWeekOffset(weekOffsetForDate(dateStr))
     setViewMode("week")
   }
 
-  function SessionCard({ session }) {
+  function SessionCard({ session: raw }) {
+    const session    = effective(raw)
     const key        = session.time + session.name
     const isBooked   = bookedSessions.includes(key) || session.state === "booked"
     const isSelected = selectedSession?.name === session.name && selectedSession?.time === session.time
     return (
       <div
-        onClick={() => setSelectedSession(session)}
+        onClick={() => { setSelectedSession(raw); setSelectedBike(null) }}
         className={`p-4 border-b cursor-pointer transition-all ${divider}
           ${isSelected ? "border-l-2 border-l-[#00aa13] bg-[#e6f9e8]" : darkMode ? "hover:bg-gray-800" : "hover:bg-gray-50"}`}
       >
@@ -2555,7 +2794,8 @@ function BookingsPage({ darkMode, onToggleDarkMode }) {
                       </div>
                     ) : (
                       <div className="flex flex-col">
-                        {allSessions.map((s, i) => {
+                        {allSessions.map((raw, i) => {
+                          const s = effective(raw)
                           const stateColor = s.state === "book" ? "text-[#00aa13]"
                             : s.state === "full" ? (darkMode ? "text-gray-500" : "text-gray-400")
                             : s.state === "booked" ? "text-[#00aa13]"
@@ -2729,89 +2969,11 @@ function BookingsPage({ darkMode, onToggleDarkMode }) {
                   )})()}
                 </div>
 
-                {isPast ? (
-                  <div className="p-5 text-center">
-                    <p className={`text-sm ${muted} py-4`}>This session has passed — view only</p>
-                  </div>
-                ) : selectedSession.state === "full" ? (
-                  <div className="p-5 pt-6 pb-6">
-                    <div className={`rounded-xl px-4 py-5 text-center ${darkMode ? "bg-gray-800" : "bg-gray-50"}`}>
-                      <p className={`text-sm font-semibold mb-1 ${heading}`}>Class full</p>
-                      <p className={`text-xs ${muted}`}>No spaces remaining — check back for cancellations.</p>
-                    </div>
-                    <button disabled className={`w-full mt-4 py-3 rounded-xl text-sm font-semibold cursor-not-allowed ${darkMode ? "bg-gray-800 text-gray-600" : "bg-gray-100 text-gray-400"}`}>
-                      Unavailable
-                    </button>
-                  </div>
-                ) : (selectedSession.state === "waitlist" || selectedSession.state === "waiting") ? (
-                  <div className="p-5">
-                    <p className={`text-sm font-semibold mb-3 ${muted}`}>Bike selection not available</p>
-                    <div className="flex flex-col gap-2 opacity-25 pointer-events-none select-none mb-4">
-                      <div className="flex justify-center mb-1">
-                        <div className="flex flex-col items-center gap-1">
-                          <span className={`text-xs ${muted}`}>Instructor</span>
-                          <div className="w-8 h-10 rounded-lg bg-[#00aa13]" />
-                        </div>
-                      </div>
-                      {(STUDIO_LAYOUTS[selectedSession.studio]?.rows || bikes).map((row, ri) => (
-                        <div key={ri} className="flex gap-2 justify-center">
-                          {row.map(num => (
-                            <div key={num} className={`w-8 h-10 rounded-lg flex items-center justify-center text-xs font-medium ${darkMode ? "bg-gray-700 text-gray-400" : "bg-gray-100 text-gray-400"}`}>{num}</div>
-                          ))}
-                        </div>
-                      ))}
-                    </div>
-                    {selectedSession.state === "waiting" ? (<>
-                      <p className={`text-xs text-center mb-4 ${muted}`}>You are #{selectedSession.position} on the waitlist</p>
-                      <button className={`w-full py-3 rounded-xl text-sm font-semibold border transition-colors ${darkMode ? "border-gray-700 text-gray-300 hover:bg-gray-800" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}>Leave Waitlist</button>
-                    </>) : (<>
-                      <p className={`text-xs text-center mb-4 ${muted}`}>{selectedSession.count} {selectedSession.count === 1 ? "person" : "people"} ahead on waitlist</p>
-                      <button className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-semibold text-sm transition-colors">Join Waitlist</button>
-                    </>)}
-                  </div>
-                ) : isSocialClass(selectedSession.name) ? (
-                  <div className="p-5">
-                    <div className={`rounded-xl p-4 text-center ${darkMode ? "bg-gray-800" : "bg-[#e6f9e8]"}`}>
-                      <p className="text-2xl mb-1">🎲</p>
-                      <p className={`text-sm font-semibold ${heading}`}>Social ride · random seating</p>
-                      <p className={`text-xs mt-1 ${muted}`}>Your bike is assigned when you arrive — a great way to mix the room and meet other riders.</p>
-                    </div>
-                    <button data-confirm-booking onClick={() => handleBook(selectedSession)}
-                      className="w-full mt-5 py-3 rounded-xl bg-[#00aa13] hover:bg-[#008a0f] text-white font-semibold text-sm transition-colors">
-                      {bookedSessions.includes(selectedSession.time + selectedSession.name) ? "✓ Booked!" : "Confirm booking"}
-                    </button>
-                  </div>
-                ) : (
-                  <div className="p-5">
-                    <div className="flex items-center justify-between mb-4">
-                      <p className={`text-sm font-semibold ${heading}`}>Choose your bike</p>
-                      <span className={`text-xs ${muted}`}>{STUDIO_LAYOUTS[selectedSession.studio]?.label || "24 bikes"}</span>
-                    </div>
-                    <div className="flex flex-col gap-2">
-                      <div className="flex justify-center mb-1">
-                        <div className="flex flex-col items-center gap-1">
-                          <span className={`text-xs ${muted}`}>Instructor</span>
-                          <div className="w-8 h-10 rounded-lg bg-[#00aa13]" />
-                        </div>
-                      </div>
-                      {(STUDIO_LAYOUTS[selectedSession.studio]?.rows || bikes).map((row, ri) => (
-                        <div key={ri} className="flex gap-2 justify-center">
-                          {row.map(num => (
-                            <button key={num} onClick={() => chooseBike(num)}
-                              className={`w-8 h-10 rounded-lg text-xs font-medium transition-all
-                                ${selectedBike === num ? "bg-[#00aa13] text-white" : darkMode ? "bg-gray-700 text-gray-300 hover:bg-gray-600" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>
-                              {num}
-                            </button>
-                          ))}
-                        </div>
-                      ))}
-                    </div>
-                    <button data-confirm-booking onClick={() => handleBook(selectedSession)}
-                      className="w-full mt-6 py-3 rounded-xl bg-[#00aa13] hover:bg-[#008a0f] text-white font-semibold text-sm transition-colors">
-                      {bookedSessions.includes(selectedSession.time + selectedSession.name) ? "✓ Booked!" : "Confirm booking"}
-                    </button>
-                  </div>
-                )}
+                <SessionBookingPanel key={activeSession.time + activeSession.name} session={activeSession} isPast={isPast}
+                  booked={bookedSessions.includes(activeSession.time + activeSession.name) || activeSession.state === "booked"}
+                  selectedBike={selectedBike} onPickBike={chooseBike} onBook={() => handleBook(activeSession)}
+                  onJoinWaitlist={() => joinWaitlist(activeSession)} onLeaveWaitlist={() => leaveWaitlist(activeSession)}
+                  darkMode={darkMode} />
               </div>
             ) : null /* closed: the session list takes the full width */}
 
@@ -2890,51 +3052,12 @@ function BookingsPage({ darkMode, onToggleDarkMode }) {
                   <p className={heading}>Energy: <span className="font-bold">1.2 kWh</span></p>
                 </div>
               </div>
-              {/* Bike + book or past message */}
-              {isPast ? (
-                <div className="px-5 py-6 text-center">
-                  <p className={`text-sm ${muted}`}>This session has passed — view only</p>
-                </div>
-              ) : isSocialClass(selectedSession.name) ? (
-                <div className="px-5 py-4 pb-10">
-                  <div className={`rounded-xl p-4 text-center ${darkMode ? "bg-gray-800" : "bg-[#e6f9e8]"}`}>
-                    <p className="text-2xl mb-1">🎲</p>
-                    <p className={`text-sm font-semibold ${heading}`}>Social ride · random seating</p>
-                    <p className={`text-xs mt-1 ${muted}`}>Your bike is assigned when you arrive — a great way to mix the room and meet other riders.</p>
-                  </div>
-                  <button data-confirm-booking onClick={() => handleBook(selectedSession)}
-                    className="w-full mt-5 py-3 rounded-xl bg-[#00aa13] hover:bg-[#008a0f] text-white font-semibold text-sm transition-colors">
-                    {bookedSessions.includes(selectedSession.time + selectedSession.name) ? "✓ Booked!" : "Confirm booking"}
-                  </button>
-                </div>
-              ) : (
-                <div className="px-5 py-4 pb-10">
-                  <p className={`text-sm font-semibold mb-4 ${heading}`}>Choose your bike</p>
-                  <div className="flex flex-col gap-2">
-                    <div className="flex justify-center mb-1">
-                      <div className="flex flex-col items-center gap-1">
-                        <span className={`text-xs ${muted}`}>Instructor</span>
-                        <div className="w-8 h-10 rounded-lg bg-[#00aa13]" />
-                      </div>
-                    </div>
-                    {(STUDIO_LAYOUTS[selectedSession.studio]?.rows || bikes).map((row, ri) => (
-                      <div key={ri} className="flex gap-2 justify-center">
-                        {row.map(num => (
-                          <button key={num} onClick={() => chooseBike(num)}
-                            className={`w-8 h-10 rounded-lg text-xs font-medium transition-all
-                              ${selectedBike === num ? "bg-[#00aa13] text-white" : darkMode ? "bg-gray-700 text-gray-300 hover:bg-gray-600" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>
-                            {num}
-                          </button>
-                        ))}
-                      </div>
-                    ))}
-                  </div>
-                  <button data-confirm-booking onClick={() => handleBook(selectedSession)}
-                    className="w-full mt-6 py-3 rounded-xl bg-[#00aa13] hover:bg-[#008a0f] text-white font-semibold text-sm transition-colors">
-                    {bookedSessions.includes(selectedSession.time + selectedSession.name) ? "✓ Booked!" : "Confirm booking"}
-                  </button>
-                </div>
-              )}
+              {/* Seating + book / waitlist, or past message */}
+              <SessionBookingPanel key={activeSession.time + activeSession.name} session={activeSession} isPast={isPast}
+                booked={bookedSessions.includes(activeSession.time + activeSession.name) || activeSession.state === "booked"}
+                selectedBike={selectedBike} onPickBike={chooseBike} onBook={() => handleBook(activeSession)}
+                onJoinWaitlist={() => joinWaitlist(activeSession)} onLeaveWaitlist={() => leaveWaitlist(activeSession)}
+                darkMode={darkMode} className="px-5 py-4 pb-10" />
             </div>
           </div>
         </div>
@@ -2951,7 +3074,7 @@ function BookingsPage({ darkMode, onToggleDarkMode }) {
       {celebration && <BookingCelebration key={celebration.id} pieces={celebration.pieces} darkMode={darkMode} />}
 
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[#00aa13] text-white text-sm px-5 py-3 rounded-xl shadow-lg">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] bg-[#00aa13] text-white text-sm px-5 py-3 rounded-xl shadow-lg">
           {toast}
         </div>
       )}
@@ -4938,6 +5061,16 @@ const YT_CATALOG = [
   { title: "Around the World", artist: "Daft Punk",     bpm: 121 },
   { title: "Eye of the Tiger", artist: "Survivor",      bpm: 109 },
   { title: "Run the World",   artist: "Beyoncé",        bpm: 127 },
+  { title: "Do I Wanna Know?", artist: "Arctic Monkeys", bpm: 85  },
+  { title: "R U Mine?",       artist: "Arctic Monkeys", bpm: 97  },
+  { title: "Why'd You Only Call Me When You're High?", artist: "Arctic Monkeys", bpm: 92 },
+  { title: "Arabella",        artist: "Arctic Monkeys", bpm: 90  },
+  { title: "Snap Out of It",  artist: "Arctic Monkeys", bpm: 128 },
+  { title: "505",             artist: "Arctic Monkeys", bpm: 140 },
+  { title: "Fluorescent Adolescent", artist: "Arctic Monkeys", bpm: 112 },
+  { title: "I Bet You Look Good on the Dancefloor", artist: "Arctic Monkeys", bpm: 103 },
+  { title: "Brianstorm",      artist: "Arctic Monkeys", bpm: 165 },
+  { title: "Teddy Picker",    artist: "Arctic Monkeys", bpm: 160 },
 ]
 const YT_PLAYLISTS = [
   { name: "Spin Anthems",   songs: ["Titanium","Levels","One More Time","Sandstorm","Wake Me Up","Clarity"] },
@@ -4945,6 +5078,7 @@ const YT_PLAYLISTS = [
   { name: "Peak Drops",     songs: ["Bangarang","Born Slippy","Insomnia","Galvanize","Animals","Strobe"] },
   { name: "Climb Classics", songs: ["Eye of the Tiger","Seven Nation Army","Believer","Wake Up"] },
   { name: "Techno Engine",  songs: ["Cola","Opus","Strobe","Adagio for Strings","Around the World"] },
+  { name: "Arctic Monkeys", songs: ["Do I Wanna Know?","R U Mine?","Arabella","Snap Out of It","Fluorescent Adolescent","I Bet You Look Good on the Dancefloor","Brianstorm","505"] },
 ]
 
 function hashBpm(title) {
@@ -6893,6 +7027,7 @@ function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] 
   const [toast, setToast]     = useState(false)
   const [flash, setFlash]     = useState("")              // transient picker hint
   const [preview, setPreview] = useState(null)            // live { day, min, ok } under the cursor / finger
+  const [pendingSlot, setPendingSlot] = useState(null)    // tapped slot awaiting "Add this time?" confirmation
 
   const selectedClass = builtClasses.find(b => b.name === className)
   const isSet = !!selectedClass?.series
@@ -6946,11 +7081,17 @@ function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] 
     const busy = [...commitments.filter(c => c.day === day), ...slots.filter(s => s.day === day).map(s => ({ start: toMin(s.time), mins: s.dur || newDur }))]
     return { day, min: m, ok: !busy.some(b => ns < b.start + b.mins && b.start < ne) }
   }
+  // Tapping the timetable asks first, so a stray tap or scroll doesn't schedule a class
   function commitPreview(pv) {
     if (!pv) return
-    if (pv.ok) setSlots(s => [...s, { day: pv.day, time: fmtTime(pv.min), dur: slotDur }])
+    if (pv.ok) setPendingSlot(pv)
     else { setFlash("That time overlaps a class you already teach — pick a free slot."); setTimeout(() => setFlash(""), 2400) }
   }
+  function confirmPendingSlot() {
+    if (pendingSlot) setSlots(s => [...s, { day: pendingSlot.day, time: fmtTime(pendingSlot.min), dur: slotDur }])
+    setPendingSlot(null); setPreview(null)
+  }
+  function cancelPendingSlot() { setPendingSlot(null); setPreview(null) }
   function say(m) { setFlash(m); setTimeout(() => setFlash(""), 2400) }
   function addTyped() {
     if (!typeTime) return
@@ -7111,6 +7252,27 @@ function InstructorSchedulePage({ darkMode, onToggleDarkMode, builtClasses = [] 
         </div>
 
         {flash && <p className="text-xs font-medium text-amber-500 mt-2.5">{flash}</p>}
+
+        {/* Confirm a tapped slot before adding it */}
+        {pendingSlot && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="confirm-slot-title"
+            onKeyDown={e => { if (e.key === "Escape") cancelPendingSlot() }}>
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={cancelPendingSlot} />
+            <div className={`relative w-full max-w-sm rounded-2xl p-5 shadow-2xl ${darkMode ? "bg-gray-900 border border-gray-800" : "bg-white"}`}>
+              <p id="confirm-slot-title" className={`text-base font-semibold ${heading}`}>Add this time?</p>
+              <div className={`mt-3 rounded-xl p-3 ${subtle}`}>
+                <p className={`text-sm font-semibold ${heading}`}>{className || "New class"}</p>
+                <p className={`text-xs mt-0.5 ${muted}`}>{pendingSlot.day} · {fmtTime(pendingSlot.min)}–{fmtTime(pendingSlot.min + slotDur)} · {slotDur} min{recurring ? " · weekly" : ""}</p>
+              </div>
+              <div className="flex gap-2 mt-4">
+                <button autoFocus onClick={cancelPendingSlot}
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border transition-colors ${darkMode ? "border-gray-700 text-gray-300 hover:bg-gray-800" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}>Cancel</button>
+                <button onClick={confirmPendingSlot}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-[#00aa13] hover:bg-[#008a0f] text-white transition-colors">Add slot</button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* chosen times */}
         {slots.length > 0 ? (

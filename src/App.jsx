@@ -2626,7 +2626,7 @@ function BikeMap({ plan, selectedBike, interactive, lockedNote, onPick, onNote, 
   const mutedText = darkMode ? "text-gray-400" : "text-gray-500"
 
   // One bike: coloured by status, with a handlebar mark on the side facing the instructor
-  const seat = (num, { align = "center", angle = 0, className = "relative", style }) => {
+  const seat = (num, { align = "center", angle = 0, className = "relative w-8 h-10", style }) => {
     const st = plan.status[num]
     const pickable = interactive && st === "free"
     const look = st === "mine" ? SEAT_STYLES[changing ? "current" : "picked"][tone]
@@ -2636,7 +2636,7 @@ function BikeMap({ plan, selectedBike, interactive, lockedNote, onPick, onNote, 
     return (
       <button key={num} type="button" aria-label={info} aria-disabled={!pickable} style={style}
         onClick={() => pickable ? onPick(num) : onNote(info)}
-        className={`group ${className} w-8 h-10 text-xs font-medium ${pickable ? "" : "cursor-not-allowed"}`}>
+        className={`group ${className} text-xs font-medium ${pickable ? "" : "cursor-not-allowed"}`}>
         <span className={`absolute inset-0 rounded-lg flex items-center justify-center transition-colors ${look} ${st === "mine" && !changing ? "ring-2 ring-[#00aa13] ring-offset-1" : ""}`}
           style={angle ? { transform: `rotate(${angle}deg)` } : undefined}>
           <span className="absolute left-2 right-2 top-1 h-[3px] rounded-full bg-current opacity-30" />
@@ -2681,7 +2681,8 @@ function BikeMap({ plan, selectedBike, interactive, lockedNote, onPick, onNote, 
         angle: s.angle,
         align: s.x < geo.width * 0.3 ? "left" : s.x > geo.width * 0.7 ? "right" : "center",
         className: "absolute -translate-x-1/2 -translate-y-1/2",
-        style: { left: pct(s.x, geo.width), top: pct(s.y, geo.height) },
+        // Bikes scale with the room (not fixed px) so rows of bikes never overlap when the room shrinks to fit
+        style: { left: pct(s.x, geo.width), top: pct(s.y, geo.height), width: pct(32, geo.width), aspectRatio: "4 / 5", fontSize: "clamp(9px, 2.6vw, 12px)" },
       }))}
     </div>
   )

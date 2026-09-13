@@ -405,7 +405,7 @@ export function InstructorPlatformPage({ darkMode, onToggleDarkMode, onNavigate,
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-[1.3fr_1fr] gap-5 mb-5">
+      <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_1fr] gap-5 mb-5">
         {/* C · RECENT TEMPLATES */}
         <div className={`${t.card} p-5`}>
           <div className="flex items-center justify-between mb-4">
@@ -562,7 +562,7 @@ export function LiveModePage({ onNavigate }) {
           {next && <p className="text-[11px] text-white/45 mt-2">Up next · <span className="text-white/85 font-semibold">{next.name}</span> · {fmtMSS(next.secs)} · {next.rpm} RPM</p>}
         </div>
 
-        <div className="grid lg:grid-cols-[1.2fr_1fr] gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_1fr] gap-4">
           {/* cue teleprompter */}
           <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
             <p className="text-[#36ff5e] text-xs font-bold uppercase tracking-[0.2em] mb-1">Now · {seg.zone} · {seg.rpm} RPM</p>
@@ -829,7 +829,7 @@ export function FeedbackPage({ darkMode, onToggleDarkMode, onNavigate, embedded 
         {cards.map((c, i) => <StatCard key={i} darkMode={darkMode} {...c} />)}
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-4 mb-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
         <div className={`${t.card} p-5 lg:col-span-2`}>
           <div className="flex items-center justify-between mb-1">
             <p className={`text-sm font-semibold ${t.heading}`}>Rating trend</p>
@@ -845,7 +845,7 @@ export function FeedbackPage({ darkMode, onToggleDarkMode, onNavigate, embedded 
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* sentiment trend */}
         <div className={`${t.card} p-5`}>
           <p className={`text-sm font-semibold mb-1 ${t.heading}`}>Sentiment over time</p>
@@ -936,7 +936,7 @@ export function SubsMarketplacePage({ darkMode, onToggleDarkMode, onNavigate }) 
         ))}
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 space-y-5">
           {groups.map(g => g.items.length > 0 && (
             <div key={g.key}>
@@ -1037,7 +1037,7 @@ export function GrowthDashboardPage({ darkMode, onToggleDarkMode, onNavigate, em
         {kpis.map((k, i) => <div key={i} className="pop-in" style={{ animationDelay: `${i * 60}ms` }}><StatCard darkMode={darkMode} {...k} /></div>)}
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-4 mb-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
         <div className={`${t.card} p-5`}>
           <div className="flex items-center justify-between mb-1">
             <p className={`text-sm font-semibold ${t.heading}`}>Avg attendance trend</p>
@@ -2460,7 +2460,7 @@ export function OwnerOverviewPage({ darkMode, onToggleDarkMode, onNavigate, chan
         {OWNER_KPIS.map((k, i) => <div key={i} className="pop-in" style={{ animationDelay: `${i * 60}ms` }}><StatCard darkMode={darkMode} {...k} /></div>)}
       </div>
 
-      <div className="grid lg:grid-cols-[1.5fr_1fr] gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[1.5fr_1fr] gap-4">
         {/* Studio tasks — tabs by type, filtered to a time window */}
         <div className={`${t.card} p-5`}>
           <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
@@ -2575,7 +2575,7 @@ export function OwnerRevenuePage({ darkMode, onToggleDarkMode, onNavigate }) {
         {cards.map((c, i) => <div key={i} className="pop-in" style={{ animationDelay: `${i * 60}ms` }}><StatCard darkMode={darkMode} {...c} /></div>)}
       </div>
 
-      <div className="grid lg:grid-cols-[1.6fr_1fr] gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[1.6fr_1fr] gap-4">
         <div className={`${t.card} p-5`}>
           <div className="flex items-center justify-between mb-1">
             <p className={`text-sm font-semibold ${t.heading}`}>Monthly revenue trend</p>
@@ -2648,7 +2648,7 @@ export function OwnerClassesPage({ darkMode, onToggleDarkMode, onNavigate, ops =
         <StatCard darkMode={darkMode} label="Waitlisted riders" value="61" Icon={Users} accent="#8b5cf6" trend={11} />
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-4 mb-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
         <div className={`${t.card} p-5`}>
           <div className="flex items-center gap-2 mb-3"><span className="w-6 h-6 rounded-lg flex items-center justify-center" style={{ background: GREEN + "1a", color: GREEN }}><Trophy size={14} /></span><p className={`text-sm font-semibold ${t.heading}`}>Top performing</p></div>
           <div className="flex flex-col gap-2.5">{CLASS_TOP.map((c, i) => <OccRow key={i} c={c} darkMode={darkMode} />)}</div>

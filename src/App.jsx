@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react"
+import { createPortal } from "react-dom"
 import { Home, Calendar, BookOpen, Bike, Trophy, User, Settings, LogOut,
   ChevronDown, PanelLeftClose, PanelLeftOpen, LayoutDashboard, Users, ListMusic, SlidersHorizontal, BarChart3, CalendarClock, Sparkles, Radio, Building2, Wallet, Activity, Award } from "lucide-react"
 import {
@@ -1038,6 +1039,9 @@ const USER_ROLES = [
   { key: "owner",      label: "Studio Owner", icon: Building2,        nav: OWNER_NAV,      home: "Overview" },
 ]
 
+// Instructor class-change requests, shared so a class's detail view can submit them and show their status
+const ChangeRequestsContext = React.createContext({ requests: [], submit: () => {} })
+
 // Which workspace a page belongs to (shared pages like Profile belong to none)
 const workspaceOf = page => INSTRUCTOR_EXTRA_PAGES.includes(page) ? "instructor" : USER_ROLES.find(r => r.nav.some(n => n.label === page))?.key
 
@@ -1117,6 +1121,10 @@ export default function App() {
   const [builtClasses, setBuiltClasses] = useState(SEED_BUILT_CLASSES)
   const [templates, setTemplates]       = useState(INSTRUCTOR_TEMPLATE_SEED)  // Instructor Platform ride templates
   const [builderRide, setBuilderRide]   = useState(null)                      // ride pre-loaded into Class Builder
+  // Instructor edits to a class, sent to the studio owner to approve or decline
+  const [changeRequests, setChangeRequests] = useState([])
+  const submitChange  = req => setChangeRequests(rs => [{ ...req, id: "cr" + Date.now(), status: "pending" }, ...rs.filter(r => r.classKey !== req.classKey)])
+  const resolveChange = (id, status) => setChangeRequests(rs => rs.map(r => r.id === id ? { ...r, status } : r))
 
   function publishClass(cls) {
     setBuiltClasses(prev => {
@@ -1203,12 +1211,13 @@ export default function App() {
       </aside>
 
       {/* ── Page content ── */}
+      <ChangeRequestsContext.Provider value={{ requests: changeRequests, submit: submitChange }}>
       <main className="flex-1 overflow-y-auto pb-24 md:pb-0">
         {/* Rider */}
         {activePage === "Home"         && <HomePage         darkMode={darkMode} onToggleDarkMode={dm} />}
-        {activePage === "Bookings"     && <BookingsPage     darkMode={darkMode} onToggleDarkMode={dm} />}
+        {activePage === "Bookings"     && <BookingsPage     darkMode={darkMode} onToggleDarkMode={dm} navExpanded={navExpanded} onCollapseNav={() => setNavExpanded(false)} />}
         {activePage === "Calendar"     && <CalendarPage     darkMode={darkMode} onToggleDarkMode={dm} />}
-        {activePage === "Rides"        && <RidesPage        darkMode={darkMode} onToggleDarkMode={dm} />}
+        {activePage === "Rides"        && <RidesPage        darkMode={darkMode} onToggleDarkMode={dm} navExpanded={navExpanded} onCollapseNav={() => setNavExpanded(false)} />}
         {activePage === "Achievements" && <AchievementsPage darkMode={darkMode} onToggleDarkMode={dm} onNavigate={setActivePage} />}
         {/* Instructor */}
         {activePage === "Studio Home"   && <InstructorHomePage    darkMode={darkMode} onToggleDarkMode={dm} onOpenRoster={openRoster} onNavigate={navTo} templates={templates} onOpenBuilder={openInBuilder} />}
@@ -1219,7 +1228,7 @@ export default function App() {
         {activePage === "Insights"      && <InstructorStatsPage   darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
         {activePage === "Subs"          && <SubsMarketplacePage   darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
         {/* Studio Owner */}
-        {activePage === "Overview"      && <OwnerOverviewPage     darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
+        {activePage === "Overview"      && <OwnerOverviewPage     darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} changeRequests={changeRequests} onResolveChange={resolveChange} />}
         {activePage === "Revenue"       && <OwnerRevenuePage      darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
         {activePage === "Classes"       && <OwnerClassesPage      darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
         {activePage === "Instructors"   && <OwnerInstructorsPage  darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
@@ -1229,6 +1238,7 @@ export default function App() {
         {activePage === "Settings"     && <SettingsPage darkMode={darkMode} onToggleDarkMode={dm} />}
         {activePage === "Log out"      && <LogOutPage   darkMode={darkMode} onLogout={() => setAuthed(false)} onStay={() => setActivePage(roles[0].home)} />}
       </main>
+      </ChangeRequestsContext.Provider>
 
       {/* ── Mobile bottom navigation ── */}
       <div className="fixed bottom-0 left-0 right-0 md:hidden z-40">
@@ -1446,6 +1456,20 @@ function Avatar({ name, size = 32, square = false }) {
       {initials}
     </div>
   )
+}
+
+// Tablet portrait only has room for the sidebar OR a detail panel beside a list — the list comes first.
+// Expanding the sidebar (or arriving with it expanded) closes the panel; opening a panel collapses the sidebar.
+function useListFirstOnTablet(navExpanded, panelOpen, closePanel, collapseNav) {
+  const prev = useRef({ navExpanded: false, panelOpen: true })
+  useEffect(() => {
+    const tablet = window.matchMedia("(min-width: 768px) and (max-width: 1023px)").matches
+    if (tablet && navExpanded && panelOpen) {
+      if (prev.current.panelOpen) closePanel()
+      else collapseNav?.()
+    }
+    prev.current = { navExpanded, panelOpen }
+  })
 }
 
 function useDragToDismiss(onDismiss) {
@@ -1668,7 +1692,7 @@ function HomePage({ darkMode, onToggleDarkMode }) {
   const subtle  = darkMode ? "bg-gray-800"   : "bg-gray-50"
 
   return (
-    <div className="p-4 md:p-6 lg:p-8 max-w-6xl mx-auto">
+    <div className="p-4 md:p-8">
 
       {/* Top bar */}
       <div className="flex items-center justify-end gap-3 mb-6 md:mb-8">
@@ -2371,11 +2395,16 @@ function seatPlan(session) {
   const rand = () => (h = (h * 1664525 + 1013904223) >>> 0) / 4294967296
   const order = [...all]
   for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [order[i], order[j]] = [order[j], order[i]] }
-  const open = Math.min(session.spaces || 0, all.length - downCount)
+  // Bookings made before this visit have no spaces in the demo data — give them a few free bikes to move to
+  const open = Math.min(session.state === "booked" && !session.spaces ? 3 : session.spaces || 0, all.length - downCount)
   const status = {}
   order.forEach((n, i) => { status[n] = i < downCount ? "down" : i < downCount + open ? "free" : "booked" })
-  if (session.bike && status[session.bike]) status[session.bike] = "mine"
-  return { rows, status, capacity: all.length, free: Object.values(status).filter(s => s === "free").length }
+  for (const n of session.freed || []) if (status[n] === "booked") status[n] = "free"   // seats you moved away from
+  // Your bike: the one you picked, or a stable demo seat for bookings made before this visit
+  const mine = session.bike || (session.state === "booked" ? order[downCount + open] : null)
+  if (mine && status[mine]) status[mine] = "mine"
+  const freeBikes = all.filter(n => status[n] === "free")
+  return { rows, status, capacity: all.length, free: freeBikes.length, firstFree: freeBikes[0] ?? null, mine: mine || null }
 }
 
 const SEAT_STYLES = {
@@ -2383,6 +2412,7 @@ const SEAT_STYLES = {
   picked: { light: "bg-[#00aa13] text-white", dark: "bg-[#00aa13] text-white" },
   booked: { light: "bg-slate-300 text-slate-500", dark: "bg-slate-700 text-slate-400" },
   down:   { light: "bg-red-500 text-white", dark: "bg-red-600 text-white" },
+  current: { light: "bg-[#e6f9e8] text-[#00aa13] border border-[#00aa13]", dark: "bg-[#00aa13]/20 text-[#4ade80] border border-[#00aa13]" },
 }
 const SEAT_INFO = {
   booked: n => `Bike ${n} is already booked`,
@@ -2391,7 +2421,7 @@ const SEAT_INFO = {
 }
 
 // Bike grid. Booked / out-of-service bikes explain themselves: a tooltip on hover (mouse), a message on tap (touch)
-function BikeMap({ plan, selectedBike, interactive, lockedNote, onPick, onNote, darkMode }) {
+function BikeMap({ plan, selectedBike, interactive, lockedNote, onPick, onNote, darkMode, changing = false }) {
   const tone = darkMode ? "dark" : "light"
   return (
     <div className="flex flex-col gap-2">
@@ -2406,14 +2436,15 @@ function BikeMap({ plan, selectedBike, interactive, lockedNote, onPick, onNote, 
           {row.map((num, ci) => {
             const st = plan.status[num]
             const pickable = interactive && st === "free"
-            const look = st === "mine" || (pickable && selectedBike === num) ? SEAT_STYLES.picked[tone] : SEAT_STYLES[st === "mine" ? "picked" : st][tone]
+            const look = st === "mine" ? SEAT_STYLES[changing ? "current" : "picked"][tone]
+              : pickable && selectedBike === num ? SEAT_STYLES.picked[tone] : SEAT_STYLES[st][tone]
             const info = st === "free" ? (pickable ? `Bike ${num} · free` : lockedNote) : SEAT_INFO[st](num)
             const tipAlign = ci < 2 ? "left-0" : ci >= row.length - 2 ? "right-0" : "left-1/2 -translate-x-1/2"
             return (
               <button key={num} type="button" aria-label={info} aria-disabled={!pickable}
                 onClick={() => pickable ? onPick(num) : onNote(info)}
                 className={`group relative w-8 h-10 rounded-lg text-xs font-medium transition-colors ${look}
-                  ${pickable ? "" : "cursor-not-allowed"} ${st === "mine" ? "ring-2 ring-[#00aa13] ring-offset-1" : ""}`}>
+                  ${pickable ? "" : "cursor-not-allowed"} ${st === "mine" && !changing ? "ring-2 ring-[#00aa13] ring-offset-1" : ""}`}>
                 {num}
                 {!pickable && (
                   <span role="tooltip" className={`pointer-events-none absolute bottom-full ${tipAlign} mb-1.5 hidden group-hover:block whitespace-nowrap rounded-md bg-gray-900 px-2 py-1 text-[11px] font-medium text-white shadow-lg z-30`}>{info}</span>
@@ -2428,8 +2459,10 @@ function BikeMap({ plan, selectedBike, interactive, lockedNote, onPick, onNote, 
 }
 
 // Seating + booking action for a selected session — shared by the desktop panel and the mobile sheet
-function SessionBookingPanel({ session, isPast, booked, selectedBike, onPickBike, onBook, onJoinWaitlist, onLeaveWaitlist, darkMode, className = "p-5" }) {
-  const [note, setNote] = useState("")
+function SessionBookingPanel({ session, isPast, booked, selectedBike, onPickBike, onBook, onChangeSeat, onCancelBooking, onJoinWaitlist, onLeaveWaitlist, darkMode, className = "p-5" }) {
+  const [note, setNote]                   = useState("")
+  const [changingSeat, setChangingSeat]   = useState(false)   // picking a new bike for an existing booking
+  const [confirmCancel, setConfirmCancel] = useState(false)   // "Cancel your booking?" overlay
   const heading = darkMode ? "text-white" : "text-gray-900"
   const muted   = darkMode ? "text-gray-400" : "text-gray-500"
   const tone    = darkMode ? "dark" : "light"
@@ -2442,14 +2475,19 @@ function SessionBookingPanel({ session, isPast, booked, selectedBike, onPickBike
 
   const social = isSocialClass(session.name)
   const plan   = seatPlan(session)
-  const validBike = plan.status[selectedBike] === "free" ? selectedBike : null
+  // A free bike you tapped; otherwise we pre-pick the first free bike so you can book straight away
+  const tappedBike = plan.status[selectedBike] === "free" ? selectedBike : null
+  const validBike  = booked ? tappedBike : tappedBike ?? plan.firstFree
 
   const seating = (interactive, lockedNote, dim) => (
     <div className={dim ? "opacity-70" : ""}>
-      <BikeMap plan={plan} selectedBike={validBike} interactive={interactive} lockedNote={lockedNote} darkMode={darkMode}
+      <BikeMap plan={plan} selectedBike={validBike} interactive={interactive} lockedNote={lockedNote} darkMode={darkMode} changing={changingSeat}
         onPick={num => { setNote(""); onPickBike(num) }} onNote={setNote} />
       <div className={`flex flex-wrap justify-center gap-x-3 gap-y-1.5 mt-4 text-[11px] ${muted}`}>
-        {[["Free", "free"], [interactive ? "Selected" : "Your bike", "picked"], ["Booked", "booked"], ["Out of service", "down"]].map(([label, key]) => (
+        {(changingSeat
+          ? [["Free", "free"], ["New seat", "picked"], ["Current bike", "current"], ["Booked", "booked"], ["Out of service", "down"]]
+          : [["Free", "free"], [interactive ? "Selected" : "Your bike", "picked"], ["Booked", "booked"], ["Out of service", "down"]]
+        ).map(([label, key]) => (
           <span key={key} className="flex items-center gap-1.5">
             <span className={`w-3 h-3.5 rounded-[4px] ${SEAT_STYLES[key][tone].replace(/hover:\S+/g, "")}`} />{label}
           </span>
@@ -2459,20 +2497,74 @@ function SessionBookingPanel({ session, isPast, booked, selectedBike, onPickBike
     </div>
   )
 
-  // Already booked (this visit, or in the demo data)
+  // Already booked (this visit, or in the demo data): show your bike, with change seat / cancel booking
   if (booked) {
+    const cancelOverlay = confirmCancel && createPortal(
+      <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" role="alertdialog" aria-modal="true" aria-labelledby="cancel-booking-title"
+        onKeyDown={e => { if (e.key === "Escape") setConfirmCancel(false) }}>
+        <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" onClick={() => setConfirmCancel(false)} />
+        <div className={`relative w-full max-w-sm rounded-2xl p-5 shadow-2xl ${darkMode ? "bg-gray-900 border border-gray-800" : "bg-white"}`}>
+          <p id="cancel-booking-title" className={`text-base font-semibold ${heading}`}>Cancel your booking?</p>
+          <p className={`text-sm mt-2 ${muted}`}>
+            You'll lose your place in <span className={`font-semibold ${heading}`}>{session.name}</span> at {session.time}
+            {plan.mine && !social ? <> and bike {plan.mine} will be released to other riders</> : null}.
+          </p>
+          <div className="flex gap-2 mt-5">
+            <button autoFocus onClick={() => setConfirmCancel(false)}
+              className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border transition-colors ${darkMode ? "border-gray-700 text-gray-300 hover:bg-gray-800" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}>Keep booking</button>
+            <button onClick={() => { setConfirmCancel(false); onCancelBooking() }}
+              className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-red-500 hover:bg-red-600 text-white transition-colors">Yes, cancel</button>
+          </div>
+        </div>
+      </div>,
+      document.body
+    )
+
+    if (changingSeat) {
+      return (
+        <div className={className}>
+          <div className="flex items-center justify-between mb-4">
+            <p className={`text-sm font-semibold ${heading}`}>Change seat</p>
+            {pill("bg-[#e6f9e8] text-[#00aa13]", `Current: Bike ${plan.mine}`)}
+          </div>
+          {seating(true, "", false)}
+          {plan.free === 0 && <p className={`text-xs text-center mb-3 ${muted}`}>No other bikes are free right now.</p>}
+          <div data-confirm-booking className="flex gap-2">
+            <button onClick={() => { setChangingSeat(false); onPickBike(null) }}
+              className={`flex-1 py-3 rounded-xl text-sm font-semibold border transition-colors ${darkMode ? "border-gray-700 text-gray-300 hover:bg-gray-800" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}>
+              Keep bike {plan.mine}
+            </button>
+            <button disabled={!tappedBike} onClick={() => { onChangeSeat(tappedBike); setChangingSeat(false) }}
+              className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-colors ${tappedBike ? "bg-[#00aa13] hover:bg-[#008a0f] text-white" : darkMode ? "bg-gray-800 text-gray-500 cursor-not-allowed" : "bg-gray-100 text-gray-400 cursor-not-allowed"}`}>
+              {tappedBike ? `Confirm new seat · Bike ${tappedBike}` : "Pick a new seat"}
+            </button>
+          </div>
+        </div>
+      )
+    }
+
     return (
       <div className={className}>
         <div className="flex items-center justify-between mb-4">
-          <p className={`text-sm font-semibold ${heading}`}>{session.bike ? "Your bike" : "Seating"}</p>
-          {pill("bg-[#e6f9e8] text-[#00aa13]", "● Booked")}
+          <p className={`text-sm font-semibold ${heading}`}>{social ? "Seating" : "Your bike"}</p>
+          {pill("bg-[#e6f9e8] text-[#00aa13]", social || !plan.mine ? "● Booked" : `● Booked · Bike ${plan.mine}`)}
         </div>
         {social ? (
           <p className={`text-xs text-center mb-4 ${muted}`}>Social ride — your bike is assigned when you arrive.</p>
         ) : seating(false, "You're already booked on this class", false)}
-        <button data-confirm-booking className="w-full mt-2 py-3 rounded-xl bg-[#00aa13] text-white font-semibold text-sm cursor-default">
-          {session.bike ? `✓ Booked! · Bike ${session.bike}` : "✓ Booked!"}
-        </button>
+        <div data-confirm-booking className="flex gap-2">
+          {!social && plan.mine && (
+            <button onClick={() => { setNote(""); onPickBike(null); setChangingSeat(true) }}
+              className="flex-1 py-3 rounded-xl text-sm font-semibold border border-[#00aa13] text-[#00aa13] hover:bg-[#e6f9e8] transition-colors">
+              Change seat
+            </button>
+          )}
+          <button onClick={() => setConfirmCancel(true)}
+            className={`flex-1 py-3 rounded-xl text-sm font-semibold border transition-colors ${darkMode ? "border-gray-700 text-red-400 hover:bg-red-500/10" : "border-gray-200 text-red-500 hover:bg-red-50"}`}>
+            Cancel booking
+          </button>
+        </div>
+        {cancelOverlay}
       </div>
     )
   }
@@ -2544,7 +2636,7 @@ function SessionBookingPanel({ session, isPast, booked, selectedBike, onPickBike
           <p className={`text-sm font-semibold ${heading}`}>Social ride · random seating</p>
           <p className={`text-xs mt-1 ${muted}`}>Your bike is assigned when you arrive — a great way to mix the room and meet other riders.</p>
         </div>
-        <button data-confirm-booking onClick={onBook}
+        <button data-confirm-booking onClick={() => onBook(null)}
           className="w-full mt-5 py-3 rounded-xl bg-[#00aa13] hover:bg-[#008a0f] text-white font-semibold text-sm transition-colors">
           Confirm booking
         </button>
@@ -2560,19 +2652,22 @@ function SessionBookingPanel({ session, isPast, booked, selectedBike, onPickBike
         <span className={`text-xs ${muted}`}>{plan.free} of {plan.capacity} free</span>
       </div>
       {seating(true, "", false)}
+      {validBike && !tappedBike && (
+        <p className={`text-xs text-center -mt-1 mb-3 ${muted}`}>We've picked bike {validBike} for you — tap any free bike to change it.</p>
+      )}
       {validBike ? (
-        <button data-confirm-booking onClick={onBook}
+        <button data-confirm-booking onClick={() => onBook(validBike)}
           className="w-full py-3 rounded-xl bg-[#00aa13] hover:bg-[#008a0f] text-white font-semibold text-sm transition-colors">
           Confirm booking · Bike {validBike}
         </button>
       ) : (
-        <button data-confirm-booking disabled className={greyBtn}>Pick a free bike to book</button>
+        <button data-confirm-booking disabled className={greyBtn}>No bikes free</button>
       )}
     </div>
   )
 }
 
-function BookingsPage({ darkMode, onToggleDarkMode }) {
+function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onCollapseNav }) {
   const [selectedSession, setSelectedSession] = useState(null)
   const [selectedBike, setSelectedBike]       = useState(null)
   const bookingDrag = useDragToDismiss(() => { setSelectedSession(null); setShowPlan(false) })
@@ -2583,6 +2678,7 @@ function BookingsPage({ darkMode, onToggleDarkMode }) {
   const [selectedDate, setSelectedDate]       = useState(BOOKING_TODAY)
   const [viewMode, setViewMode]               = useState("week")
   const [monthView, setMonthView]             = useState({ year: 2026, month: 2 })
+  useListFirstOnTablet(navExpanded, !!selectedSession, () => { setSelectedSession(null); setShowPlan(false) }, onCollapseNav)
 
   const card    = `rounded-2xl border transition-colors ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`
   const heading = darkMode ? "text-white"      : "text-gray-900"
@@ -2617,13 +2713,13 @@ function BookingsPage({ darkMode, onToggleDarkMode }) {
     setTimeout(() => setToast(null), 2500)
   }
 
-  function handleBook(session) {
+  function handleBook(session, bike = selectedBike) {
     const key = session.time + session.name
     const social = isSocialClass(session.name)
-    if (bookedSessions.includes(key) || (!social && !selectedBike)) return
+    if (bookedSessions.includes(key) || (!social && !bike)) return
     setBookedSessions(prev => [...prev, key])
-    setOverrides(o => ({ ...o, [key]: { state: "booked", bike: social ? null : selectedBike } }))
-    flashToast(`Booked: ${session.name}${social ? "" : ` · Bike ${selectedBike}`}`)
+    setOverrides(o => ({ ...o, [key]: { state: "booked", bike: social ? null : bike } }))
+    flashToast(`Booked: ${session.name}${social ? "" : ` · Bike ${bike}`}`)
     setSelectedSession({ ...session, state: "booked" })
     setCelebration({ id: Date.now(), pieces: makeConfetti() })
     setTimeout(() => setCelebration(null), 3800)
@@ -2635,6 +2731,24 @@ function BookingsPage({ darkMode, onToggleDarkMode }) {
     setOverrides(o => ({ ...o, [session.time + session.name]: { state: "waiting", position } }))
     flashToast(`You're #${position} on the waitlist for ${session.name}`)
     revealConfirm()
+  }
+
+  // Move an existing booking to another free bike; the old bike is released
+  function changeSeat(session, bike) {
+    const key = session.time + session.name
+    const old = seatPlan(session).mine
+    setOverrides(o => ({ ...o, [key]: { ...o[key], state: "booked", bike, freed: [...(o[key]?.freed || []), ...(old && old !== bike ? [old] : [])] } }))
+    setSelectedBike(null)
+    flashToast(`Moved to bike ${bike}`)
+    revealConfirm()
+  }
+
+  function cancelBooking(session) {
+    const key = session.time + session.name
+    setBookedSessions(prev => prev.filter(k => k !== key))
+    setOverrides(o => ({ ...o, [key]: { state: "book", bike: null, freed: [], spaces: session.spaces || 4 } }))
+    setSelectedBike(null)
+    flashToast(`Booking cancelled: ${session.name}`)
   }
 
   function leaveWaitlist(session) {
@@ -2656,6 +2770,7 @@ function BookingsPage({ darkMode, onToggleDarkMode }) {
     const key        = session.time + session.name
     const isBooked   = bookedSessions.includes(key) || session.state === "booked"
     const isSelected = selectedSession?.name === session.name && selectedSession?.time === session.time
+    const myBike     = isBooked && !isSocialClass(session.name) ? seatPlan({ ...session, state: "booked" }).mine : null
     return (
       <div
         onClick={() => { setSelectedSession(raw); setSelectedBike(null) }}
@@ -2672,7 +2787,7 @@ function BookingsPage({ darkMode, onToggleDarkMode }) {
             {isPast
               ? <span className={`text-xs ${muted}`}>View only</span>
               : isBooked
-              ? <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#00aa13]"><span className="w-1.5 h-1.5 rounded-full bg-[#00aa13] flex-shrink-0" />Booked</span>
+              ? <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#00aa13]"><span className="w-1.5 h-1.5 rounded-full bg-[#00aa13] flex-shrink-0" />Booked{myBike ? ` · Bike ${myBike}` : ""}</span>
               : session.state === "book"     ? <>
                   <span className={`text-xs ${muted}`}>{session.spaces} spaces</span>
                   <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#00aa13]"><span className="w-1.5 h-1.5 rounded-full bg-[#00aa13] flex-shrink-0" />Available</span>
@@ -2766,7 +2881,7 @@ function BookingsPage({ darkMode, onToggleDarkMode }) {
               </div>
               <div className={`px-4 py-3 border-t ${divider} flex items-center gap-4`}>
                 <div className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-[#00aa13]" /><span className={`text-xs ${muted}`}>Available</span></div>
-                <div className="flex items-center gap-1.5"><div className={`w-1.5 h-1.5 rounded-full ${darkMode ? "bg-gray-600" : "bg-gray-300"}`} /><span className={`text-xs ${muted}`}>Not released</span></div>
+                <div className="flex items-center gap-1.5"><div className={`w-1.5 h-1.5 rounded-full ${darkMode ? "bg-gray-600" : "bg-gray-300"}`} /><span className={`text-xs ${muted}`}>No classes</span></div>
               </div>
             </div>
 
@@ -2789,8 +2904,8 @@ function BookingsPage({ darkMode, onToggleDarkMode }) {
                     {allSessions.length === 0 ? (
                       <div className="flex flex-col items-center justify-center flex-1 px-6 text-center gap-3 py-10">
                         <span className="text-3xl">🗓️</span>
-                        <p className={`text-sm font-semibold ${heading}`}>Classes not yet released</p>
-                        <p className={`text-xs ${muted}`}>Check back soon — the schedule for this day hasn't been published yet.</p>
+                        <p className={`text-sm font-semibold ${heading}`}>No classes this day</p>
+                        <p className={`text-xs ${muted}`}>There aren't any classes on this day — try another date.</p>
                       </div>
                     ) : (
                       <div className="flex flex-col">
@@ -2895,8 +3010,8 @@ function BookingsPage({ darkMode, onToggleDarkMode }) {
                   })
                 : <div className="flex flex-col items-center justify-center h-full py-16 gap-3">
                     <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-2xl ${darkMode ? "bg-gray-800" : "bg-gray-50"}`}>🗓️</div>
-                    <p className={`text-sm font-semibold ${heading}`}>Classes not yet released</p>
-                    <p className={`text-xs text-center max-w-xs ${muted}`}>Check back soon — classes for this day haven't been added to the schedule yet.</p>
+                    <p className={`text-sm font-semibold ${heading}`}>No classes this day</p>
+                    <p className={`text-xs text-center max-w-xs ${muted}`}>There aren't any classes on this day — try another date.</p>
                   </div>
               }
             </div>
@@ -2971,7 +3086,7 @@ function BookingsPage({ darkMode, onToggleDarkMode }) {
 
                 <SessionBookingPanel key={activeSession.time + activeSession.name} session={activeSession} isPast={isPast}
                   booked={bookedSessions.includes(activeSession.time + activeSession.name) || activeSession.state === "booked"}
-                  selectedBike={selectedBike} onPickBike={chooseBike} onBook={() => handleBook(activeSession)}
+                  selectedBike={selectedBike} onPickBike={chooseBike} onBook={bike => handleBook(activeSession, bike)} onChangeSeat={bike => changeSeat(activeSession, bike)} onCancelBooking={() => cancelBooking(activeSession)}
                   onJoinWaitlist={() => joinWaitlist(activeSession)} onLeaveWaitlist={() => leaveWaitlist(activeSession)}
                   darkMode={darkMode} />
               </div>
@@ -3055,7 +3170,7 @@ function BookingsPage({ darkMode, onToggleDarkMode }) {
               {/* Seating + book / waitlist, or past message */}
               <SessionBookingPanel key={activeSession.time + activeSession.name} session={activeSession} isPast={isPast}
                 booked={bookedSessions.includes(activeSession.time + activeSession.name) || activeSession.state === "booked"}
-                selectedBike={selectedBike} onPickBike={chooseBike} onBook={() => handleBook(activeSession)}
+                selectedBike={selectedBike} onPickBike={chooseBike} onBook={bike => handleBook(activeSession, bike)} onChangeSeat={bike => changeSeat(activeSession, bike)} onCancelBooking={() => cancelBooking(activeSession)}
                 onJoinWaitlist={() => joinWaitlist(activeSession)} onLeaveWaitlist={() => leaveWaitlist(activeSession)}
                 darkMode={darkMode} className="px-5 py-4 pb-10" />
             </div>
@@ -3387,7 +3502,7 @@ function CalendarPage({ darkMode, onToggleDarkMode }) {
             <div className="flex items-center gap-3 py-2">
               <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0 ${darkMode ? "bg-gray-800" : "bg-gray-50"}`}>🌿</div>
               <div>
-                <p className={`text-sm font-semibold ${heading}`}>Classes not yet released</p>
+                <p className={`text-sm font-semibold ${heading}`}>No classes this day</p>
                 <p className={`text-xs ${muted}`}>Check back soon — classes haven't been added yet.</p>
               </div>
             </div>
@@ -3822,12 +3937,13 @@ function RideVsClass({ ride, darkMode }) {
   )
 }
 
-function RidesPage({ darkMode, onToggleDarkMode }) {
+function RidesPage({ darkMode, onToggleDarkMode, navExpanded = false, onCollapseNav }) {
   const [selectedRide, setSelectedRide]       = useState(ridesData[0])
   const [collectedStreaks, setCollectedStreaks] = useState(new Set())
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false)
   const [chartModalOpen, setChartModalOpen]   = useState(false)
   const ridesDrag = useDragToDismiss(() => setMobileSheetOpen(false))
+  useListFirstOnTablet(navExpanded, !!selectedRide, () => setSelectedRide(null), onCollapseNav)
 
   function collectStreak(ride) {
     setCollectedStreaks(prev => new Set([...prev, ride.date + ride.name]))
@@ -4291,7 +4407,7 @@ function AchievementsPage({ darkMode, onToggleDarkMode, onNavigate }) {
   const muted   = darkMode ? "text-gray-400" : "text-gray-500"
 
   return (
-    <div className="p-4 md:p-6 lg:p-8 max-w-6xl mx-auto">
+    <div className="p-4 md:p-8">
       <div className="flex items-center justify-between mb-6 md:mb-8">
         <div>
           <h1 className={`text-xl font-semibold ${heading}`}>Achievements</h1>
@@ -5436,7 +5552,157 @@ function InstructorHomePage({ darkMode, onToggleDarkMode, onOpenRoster, onNaviga
   )
 }
 
+// ─── Instructor: edit a class (sent to the studio owner for approval) ─────────
+const DIFFICULTY_LEVELS = ["Easy", "Moderate", "Hard", "Very hard"]
+const INTENSITY_SHIFTS  = [["lighter", "Make it lighter"], ["same", "Keep as planned"], ["harder", "Make it harder"]]
+// Demo playlist for a class — stable per class
+function classPlaylist(cls) {
+  return Array.from({ length: 6 }, (_, i) => YT_CATALOG[((cls.seed || 1) * 7 + i * 5) % YT_CATALOG.length])
+}
+function difficultyOf(cls) {
+  const peak = Math.max(...getIntensity(cls.name))
+  return peak >= 9 ? "Very hard" : peak >= 7 ? "Hard" : peak >= 5 ? "Moderate" : "Easy"
+}
+
+function ClassEditModal({ cls, darkMode, existing, onClose, onSubmit }) {
+  const heading = darkMode ? "text-white" : "text-gray-900"
+  const muted   = darkMode ? "text-gray-400" : "text-gray-500"
+  const subtle  = darkMode ? "bg-gray-800" : "bg-gray-50"
+  const past    = cls.status === "done"
+  const original = classPlaylist(cls)
+  const originalDifficulty = difficultyOf(cls)
+
+  const [difficulty, setDifficulty] = useState(existing?.changes.difficulty ?? originalDifficulty)
+  const [intensity, setIntensity]   = useState(existing?.changes.intensity ?? "same")
+  const [songs, setSongs]           = useState(existing?.changes.songs ?? original.map(s => s.title))
+  const [scope, setScope]           = useState(existing?.changes.scope ?? (past ? "future" : "this"))
+  const [note, setNote]             = useState(existing?.note ?? "")
+  const [adding, setAdding]         = useState("")
+
+  const removed = original.filter(s => !songs.includes(s.title)).map(s => s.title)
+  const added   = songs.filter(title => !original.some(s => s.title === title))
+  const plural  = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`
+  const summary = [
+    difficulty !== originalDifficulty && `Difficulty ${originalDifficulty} → ${difficulty}`,
+    intensity !== "same" && (intensity === "lighter" ? "Lighter intervals" : "Harder intervals"),
+    removed.length > 0 && `−${plural(removed.length, "song")}`,
+    added.length > 0 && `+${plural(added.length, "song")}`,
+  ].filter(Boolean)
+  const canSubmit = summary.length > 0 || note.trim().length > 0
+
+  function submit() {
+    onSubmit({
+      classKey: cls.dateIso + cls.time + cls.name, className: cls.name, when: `${cls.dateLabel} · ${cls.time}`, studio: cls.studio, instructor: "JIM",
+      note: note.trim(), summary: [...summary, scope === "future" ? "Future classes" : "This class only"].join(" · "),
+      changes: { difficulty, intensity, songs, scope, removed, added },
+    })
+    onClose()
+  }
+
+  const chip = on => `px-3 py-2 rounded-xl text-xs font-semibold border transition-colors ${on
+    ? "bg-[#00aa13] border-[#00aa13] text-white"
+    : darkMode ? "border-gray-700 text-gray-300 hover:bg-gray-800" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`
+  const label = text => <p className={`text-xs font-semibold uppercase tracking-wider mb-2 ${muted}`}>{text}</p>
+
+  return createPortal(
+    <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="edit-class-title"
+      onKeyDown={e => { if (e.key === "Escape") onClose() }}>
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" onClick={onClose} />
+      <div className={`relative w-full sm:max-w-lg max-h-[90vh] overflow-y-auto overscroll-contain rounded-t-3xl sm:rounded-2xl shadow-2xl ${darkMode ? "bg-gray-900 border border-gray-800" : "bg-white"}`}>
+        <div className={`sticky top-0 z-10 flex items-start justify-between gap-3 px-5 pt-5 pb-3 ${darkMode ? "bg-gray-900" : "bg-white"}`}>
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-[#00aa13]">Edit class</p>
+            <h2 id="edit-class-title" className={`text-lg font-bold ${heading}`}>{cls.name}</h2>
+            <p className={`text-xs ${muted}`}>{cls.dateLabel} · {cls.time} · {cls.studio}{past ? " · completed" : ""}</p>
+          </div>
+          <button onClick={onClose} aria-label="Close" className={`w-8 h-8 rounded-lg flex items-center justify-center ${darkMode ? "hover:bg-gray-800 text-gray-400" : "hover:bg-gray-100 text-gray-500"}`}>✕</button>
+        </div>
+
+        <div className="px-5 pb-5 flex flex-col gap-5">
+          <p className={`text-xs rounded-xl p-3 ${subtle} ${muted}`}>
+            {past ? "This class has finished — your changes will apply to future runs once the studio owner approves them."
+                  : "Changes are sent to the studio owner to approve before riders see them."}
+          </p>
+
+          <div>
+            {label("Difficulty")}
+            <div className="flex flex-wrap gap-2">
+              {DIFFICULTY_LEVELS.map(d => <button key={d} onClick={() => setDifficulty(d)} className={chip(difficulty === d)}>{d}{d === originalDifficulty ? " · current" : ""}</button>)}
+            </div>
+          </div>
+
+          <div>
+            {label("Intervals")}
+            <div className="flex flex-wrap gap-2">
+              {INTENSITY_SHIFTS.map(([k, l]) => <button key={k} onClick={() => setIntensity(k)} className={chip(intensity === k)}>{l}</button>)}
+            </div>
+          </div>
+
+          <div>
+            {label(`Playlist · ${plural(songs.length, "song")}`)}
+            <div className="flex flex-col gap-1.5">
+              {songs.map(title => {
+                const s = YT_CATALOG.find(x => x.title === title)
+                const isNew = added.includes(title)
+                return (
+                  <div key={title} className={`flex items-center gap-3 rounded-xl px-3 py-2 ${subtle}`}>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-medium truncate ${heading}`}>{title}{isNew && <span className="ml-2 text-[10px] font-bold text-[#00aa13]">NEW</span>}</p>
+                      <p className={`text-xs truncate ${muted}`}>{s?.artist} · {s?.bpm} BPM</p>
+                    </div>
+                    <button onClick={() => setSongs(list => list.filter(t => t !== title))} aria-label={`Remove ${title}`}
+                      className={`w-7 h-7 rounded-lg flex items-center justify-center text-sm ${darkMode ? "text-gray-400 hover:bg-gray-700" : "text-gray-400 hover:bg-gray-200"}`}>✕</button>
+                  </div>
+                )
+              })}
+            </div>
+            <div className="flex gap-2 mt-2">
+              <select value={adding} onChange={e => setAdding(e.target.value)} aria-label="Add a song"
+                className={`flex-1 min-w-0 px-3 py-2 rounded-xl border text-sm ${darkMode ? "bg-gray-800 border-gray-700 text-white" : "bg-white border-gray-200 text-gray-900"}`}>
+                <option value="">Add a song…</option>
+                {YT_CATALOG.filter(s => !songs.includes(s.title)).map(s => <option key={s.title} value={s.title}>{s.title} — {s.artist} ({s.bpm} BPM)</option>)}
+              </select>
+              <button disabled={!adding} onClick={() => { setSongs(list => [...list, adding]); setAdding("") }}
+                className={`px-4 py-2 rounded-xl text-sm font-semibold ${adding ? "bg-[#00aa13] hover:bg-[#008a0f] text-white" : darkMode ? "bg-gray-800 text-gray-500" : "bg-gray-100 text-gray-400"}`}>Add</button>
+            </div>
+          </div>
+
+          <div>
+            {label("Apply to")}
+            <div className="flex flex-wrap gap-2">
+              <button disabled={past} onClick={() => setScope("this")} className={`${chip(scope === "this")} ${past ? "opacity-40 cursor-not-allowed" : ""}`}>This class only</button>
+              <button onClick={() => setScope("future")} className={chip(scope === "future")}>All future classes</button>
+            </div>
+          </div>
+
+          <div>
+            {label("Note for the studio owner")}
+            <textarea value={note} onChange={e => setNote(e.target.value)} rows={3}
+              placeholder="e.g. The intervals were too hard for this group — easing them off and swapping in some slower tracks."
+              className={`w-full px-3 py-2.5 rounded-xl border text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#00aa13] ${darkMode ? "bg-gray-800 border-gray-700 text-white placeholder-gray-500" : "bg-white border-gray-200 text-gray-900 placeholder-gray-400"}`} />
+          </div>
+
+          {summary.length > 0 && <p className={`text-xs ${muted}`}><span className="font-semibold">Changes:</span> {summary.join(" · ")}</p>}
+
+          <div className="flex gap-2">
+            <button onClick={onClose}
+              className={`flex-1 py-3 rounded-xl text-sm font-semibold border transition-colors ${darkMode ? "border-gray-700 text-gray-300 hover:bg-gray-800" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}>Cancel</button>
+            <button disabled={!canSubmit} onClick={submit}
+              className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-colors ${canSubmit ? "bg-[#00aa13] hover:bg-[#008a0f] text-white" : darkMode ? "bg-gray-800 text-gray-500 cursor-not-allowed" : "bg-gray-100 text-gray-400 cursor-not-allowed"}`}>
+              Submit for approval
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
 function ClassRoster({ cls, darkMode }) {
+  const changes  = React.useContext(ChangeRequestsContext)
+  const request  = changes.requests.find(r => r.classKey === cls.dateIso + cls.time + cls.name)
+  const [editing, setEditing] = useState(false)
   const heading = darkMode ? "text-white"    : "text-gray-900"
   const muted   = darkMode ? "text-gray-400" : "text-gray-500"
   const card    = `rounded-2xl border transition-colors ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`
@@ -5475,14 +5741,34 @@ function ClassRoster({ cls, darkMode }) {
           </div>
           <p className={`text-xs mt-0.5 ${muted}`}>{cls.dateLabel} · {cls.time} · {cls.location?.replace("CycleHQ · ","")} · {cls.studio}</p>
         </div>
-        {past
-          ? <span className="text-xs font-semibold text-amber-500 flex-shrink-0">{cls.rating} ★</span>
-          : <span className={`text-xs font-semibold flex-shrink-0 ${cls.booked >= cls.capacity ? "text-orange-500" : "text-[#00aa13]"}`}>{cls.booked >= cls.capacity ? "Full" : `${cls.capacity - cls.booked} spaces`}</span>}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {past
+            ? <span className="text-xs font-semibold text-amber-500">{cls.rating} ★</span>
+            : <span className={`text-xs font-semibold ${cls.booked >= cls.capacity ? "text-orange-500" : "text-[#00aa13]"}`}>{cls.booked >= cls.capacity ? "Full" : `${cls.capacity - cls.booked} spaces`}</span>}
+          <button onClick={() => setEditing(true)}
+            className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-colors ${darkMode ? "border-gray-700 text-gray-300 hover:bg-gray-800" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}>
+            ✎ Edit
+          </button>
+        </div>
       </div>
       <div className="flex items-center justify-between mt-3 mb-1.5">
         <span className={`text-xs ${muted}`}>{cls.booked} / {cls.capacity} booked{cls.waitlist > 0 && ` · ${cls.waitlist} waitlist`}</span>
       </div>
       <CapacityBar booked={cls.booked} capacity={cls.capacity} darkMode={darkMode} />
+      {request && (
+        <div className={`mt-3 rounded-xl px-3 py-2.5 text-xs ${
+          request.status === "approved" ? (darkMode ? "bg-green-900/30 text-green-300" : "bg-[#e6f9e8] text-[#00852f]")
+          : request.status === "declined" ? (darkMode ? "bg-gray-800 text-gray-400" : "bg-gray-100 text-gray-600")
+          : (darkMode ? "bg-amber-900/30 text-amber-300" : "bg-amber-50 text-amber-700")}`}>
+          <p className="font-semibold">
+            {request.status === "approved" ? "✓ Studio owner approved your changes"
+              : request.status === "declined" ? "Studio owner declined your changes — edit to try again"
+              : "⏳ Changes sent to the studio owner for approval"}
+          </p>
+          <p className="mt-0.5 opacity-90">{request.summary}</p>
+        </div>
+      )}
+      {editing && <ClassEditModal cls={cls} darkMode={darkMode} existing={request?.status === "pending" ? request : null} onClose={() => setEditing(false)} onSubmit={changes.submit} />}
     </div>
   )
 

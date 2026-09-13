@@ -1277,12 +1277,21 @@ const OWNER_KPIS = [
   { label: "Classes this week", value: "84", Icon: Calendar, trend: 2, accent: "#0ea5e9" },
   { label: "Rider retention", value: "91%", Icon: Heart, trend: 4, accent: "#ec4899" },
 ]
-const OWNER_ALERTS_SEED = [
-  { id: "a1", Icon: AlertTriangle, c: "#ef4444", title: "Friday 6:30pm class has no instructor", sub: "Power Zone Ride · Hampstead · 18 booked", action: "Find cover", doneLabel: "Cover requested" },
-  { id: "a2", Icon: Users,         c: "#f59e0b", title: "18 members haven't attended in 14 days", sub: "At risk of churn — worth a re-engagement nudge", action: "Re-engage", doneLabel: "Re-engaged" },
-  { id: "a3", Icon: TrendingDown,  c: "#f59e0b", title: "Wednesday lunchtime ride only 42% full", sub: "Cadence Control · 12:30 · Shoreditch", action: "Promote", doneLabel: "Promoting" },
-  { id: "a4", Icon: Wrench,        c: "#0ea5e9", title: "Bike 12 maintenance overdue", sub: "Studio 1 · last serviced 92 days ago", action: "Log service", doneLabel: "Service logged" },
+// Studio tasks. category drives the tabs, priority "urgent" (or overdue) lands in Urgent, due = days from today
+const OWNER_TASKS_SEED = [
+  { id: "a1",  Icon: AlertTriangle, c: "#ef4444", category: "operations",  priority: "urgent", due: 0,  title: "Friday 6:30pm class has no instructor", sub: "Power Zone Ride · Hampstead · 18 booked", actions: [{ label: "Find cover", doneLabel: "Cover requested", c: "#ef4444" }] },
+  { id: "a10", Icon: Wrench,        c: "#ef4444", category: "maintenance", priority: "urgent", due: 1,  title: "Bikes 4 & 10 reported broken", sub: "Studio 1 · marked out of service for riders", actions: [{ label: "Book repair", doneLabel: "Repair booked", c: "#ef4444" }] },
+  { id: "a5",  Icon: Calendar,      c: "#8b5cf6", category: "approvals",   priority: "normal", due: 1,  title: "Confirm Saturday 10am Rhythm Ride", sub: "Requested by Zen Kiwi · Shoreditch · Studio 2", actions: [{ label: "Confirm", doneLabel: "Confirmed", c: GREEN }, { label: "Decline", doneLabel: "Declined", c: "#6b7280" }] },
+  { id: "a4",  Icon: Wrench,        c: "#0ea5e9", category: "maintenance", priority: "normal", due: -3, title: "Bike 12 maintenance overdue", sub: "Studio 1 · last serviced 92 days ago", actions: [{ label: "Log service", doneLabel: "Service logged", c: "#0ea5e9" }] },
+  { id: "a2",  Icon: Users,         c: "#f59e0b", category: "operations",  priority: "normal", due: 2,  title: "18 members haven't attended in 14 days", sub: "At risk of churn — worth a re-engagement nudge", actions: [{ label: "Re-engage", doneLabel: "Re-engaged", c: "#f59e0b" }] },
+  { id: "a3",  Icon: TrendingDown,  c: "#f59e0b", category: "operations",  priority: "normal", due: 5,  title: "Wednesday lunchtime ride only 42% full", sub: "Cadence Control · 12:30 · Shoreditch", actions: [{ label: "Promote", doneLabel: "Promoting", c: "#f59e0b" }] },
+  { id: "a7",  Icon: Wrench,        c: "#0ea5e9", category: "maintenance", priority: "normal", due: 10, title: "Quarterly service: Studio 2 bikes 1–10", sub: "Shoreditch · book the technician", actions: [{ label: "Schedule", doneLabel: "Scheduled", c: "#0ea5e9" }] },
+  { id: "a9",  Icon: Clock,         c: "#f59e0b", category: "operations",  priority: "normal", due: 12, title: "Renew music licence", sub: "Covers class playlists at both studios", actions: [{ label: "Renew", doneLabel: "Renewed", c: "#f59e0b" }] },
+  { id: "a8",  Icon: Wrench,        c: "#0ea5e9", category: "maintenance", priority: "normal", due: 24, title: "Replace worn pedal straps", sub: "Studio 1 · 6 bikes flagged by instructors", actions: [{ label: "Order", doneLabel: "Ordered", c: "#0ea5e9" }] },
+  { id: "a11", Icon: Sparkles,      c: "#8b5cf6", category: "operations",  priority: "normal", due: 45, title: "Plan the summer timetable", sub: "Review demand before instructors pick slots", actions: [{ label: "Start", doneLabel: "Started", c: "#8b5cf6" }] },
 ]
+const TASK_TABS   = [["all", "All"], ["urgent", "Urgent"], ["approvals", "Approvals"], ["operations", "Operations"], ["maintenance", "Maintenance"]]
+const TASK_RANGES = [[7, "Next 7 days"], [14, "Next 14 days"], [30, "Next month"], [90, "Next 3 months"]]
 const REVENUE = {
   total: "£25,300", trend: 9,
   monthLabels: ["Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun"],
@@ -1317,12 +1326,31 @@ const INSTRUCTOR_PERF = [
 ]
 
 // ── OVERVIEW ──
-export function OwnerOverviewPage({ darkMode, onToggleDarkMode, onNavigate }) {
+export function OwnerOverviewPage({ darkMode, onToggleDarkMode, onNavigate, changeRequests = [], onResolveChange }) {
   const t = tk(darkMode)
-  const [alerts, setAlerts] = useState(() => OWNER_ALERTS_SEED.map(a => ({ ...a, done: false })))
-  const resolve = id => setAlerts(s => s.map(a => a.id === id ? { ...a, done: true } : a))
-  const openCount = alerts.filter(a => !a.done).length
-  const ordered = [...alerts].sort((a, b) => (a.done ? 1 : 0) - (b.done ? 1 : 0))  // resolved sink to the bottom
+  const [tasks, setTasks] = useState(() => OWNER_TASKS_SEED.map(a => ({ ...a, doneLabel: null })))
+  const [tab, setTab]     = useState("all")
+  const [range, setRange] = useState(7)
+  const resolve = (id, label) => setTasks(s => s.map(a => a.id === id ? { ...a, doneLabel: label } : a))
+
+  // Instructor class edits arrive as approvals
+  const requestTasks = changeRequests.map(r => ({
+    id: r.id, Icon: Sparkles, c: "#8b5cf6", category: "approvals", priority: "normal", due: 2, isRequest: true,
+    title: `${r.instructor} wants to change ${r.className}`, sub: `${r.when} · ${r.studio} · ${r.summary}`, note: r.note,
+    actions: [{ label: "Approve", doneLabel: "Approved", status: "approved", c: GREEN }, { label: "Decline", doneLabel: "Declined", status: "declined", c: "#6b7280" }],
+    doneLabel: r.status === "approved" ? "Approved" : r.status === "declined" ? "Declined" : null,
+  }))
+  const isUrgent = a => a.priority === "urgent" || a.due < 0
+  const inRange  = [...requestTasks, ...tasks].filter(a => a.due <= range)
+  const matches  = (a, key) => key === "all" || (key === "urgent" ? isUrgent(a) : a.category === key)
+  const openIn   = key => inRange.filter(a => !a.doneLabel && matches(a, key)).length
+  const openCount = openIn("all")
+  // Open before done, urgent first, then soonest due
+  const shown = inRange.filter(a => matches(a, tab))
+    .sort((a, b) => (a.doneLabel ? 1 : 0) - (b.doneLabel ? 1 : 0) || Number(isUrgent(b)) - Number(isUrgent(a)) || a.due - b.due)
+  const dueLabel = d => d < 0 ? `Overdue by ${-d} day${d === -1 ? "" : "s"}` : d === 0 ? "Due today" : d === 1 ? "Due tomorrow" : `Due in ${d} days`
+  const act = (a, action) => a.isRequest ? onResolveChange?.(a.id, action.status) : resolve(a.id, action.doneLabel)
+  const rangeLabel = TASK_RANGES.find(([v]) => v === range)[1].toLowerCase()
   const links = [
     { key: "Revenue", label: "Revenue", sub: "Trends & breakdown", Icon: Wallet, c: GREEN },
     { key: "Classes", label: "Class performance", sub: "Occupancy & fixes", Icon: Activity, c: "#0ea5e9" },
@@ -1338,31 +1366,67 @@ export function OwnerOverviewPage({ darkMode, onToggleDarkMode, onNavigate }) {
       </div>
 
       <div className="grid lg:grid-cols-[1.5fr_1fr] gap-4">
-        {/* Alerts */}
+        {/* Studio tasks — tabs by type, filtered to a time window */}
         <div className={`${t.card} p-5`}>
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
             <div className="flex items-center gap-2">
               <span className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "#ef44441a", color: "#ef4444" }}><AlertTriangle size={15} /></span>
-              <p className={`text-sm font-semibold ${t.heading}`}>Operational alerts</p>
+              <p className={`text-sm font-semibold ${t.heading}`}>Studio tasks</p>
               {openCount > 0
                 ? <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/15 text-red-500">{openCount}</span>
                 : <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: "#00aa131a", color: GREEN }}>All clear ✓</span>}
             </div>
+            <label className="flex items-center gap-2">
+              <span className={`text-xs ${t.muted}`}>Show</span>
+              <select value={range} onChange={e => setRange(Number(e.target.value))}
+                className={`text-xs font-semibold rounded-lg px-2.5 py-1.5 border focus:outline-none focus:ring-2 focus:ring-[#00aa13] ${darkMode ? "bg-gray-800 border-gray-700 text-gray-200" : "bg-white border-gray-200 text-gray-700"}`}>
+                {TASK_RANGES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </label>
           </div>
+
+          <div role="tablist" aria-label="Task type" className="flex gap-1.5 overflow-x-auto pb-1 mb-3">
+            {TASK_TABS.map(([key, label]) => {
+              const on = tab === key, n = openIn(key)
+              return (
+                <button key={key} role="tab" aria-selected={on} onClick={() => setTab(key)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors
+                    ${on ? "text-white" : darkMode ? "bg-gray-800 text-gray-300 hover:bg-gray-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+                  style={on ? { background: key === "urgent" ? "#ef4444" : GREEN } : undefined}>
+                  {label}
+                  {n > 0 && <span className={`text-[10px] font-bold px-1.5 rounded-full ${on ? "bg-white/25" : key === "urgent" ? "bg-red-500/15 text-red-500" : darkMode ? "bg-gray-700" : "bg-white"}`}>{n}</span>}
+                </button>
+              )
+            })}
+          </div>
+
           <div className="flex flex-col gap-2.5">
-            {ordered.map(a => (
-              <div key={a.id} className={`flex items-center gap-3 rounded-xl p-3.5 transition-all ${t.subtle} ${a.done ? "opacity-55" : ""}`}>
-                <span className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: (a.done ? "#00aa13" : a.c) + "1a", color: a.done ? GREEN : a.c }}>
-                  {a.done ? <Check size={16} /> : <a.Icon size={16} />}
+            {shown.length === 0 && <p className={`text-sm text-center py-8 ${t.muted}`}>Nothing to do here in the {rangeLabel} ✓</p>}
+            {shown.map(a => (
+              <div key={a.id} className={`flex items-center gap-3 rounded-xl p-3.5 transition-all ${t.subtle} ${a.doneLabel ? "opacity-55" : ""}`}>
+                <span className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: (a.doneLabel ? "#00aa13" : a.c) + "1a", color: a.doneLabel ? GREEN : a.c }}>
+                  {a.doneLabel ? <Check size={16} /> : <a.Icon size={16} />}
                 </span>
                 <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-semibold ${t.heading} ${a.done ? "line-through" : ""}`}>{a.title}</p>
-                  <p className={`text-xs ${t.muted} ${a.done ? "line-through" : ""}`}>{a.sub}</p>
+                  <p className={`text-sm font-semibold ${t.heading} ${a.doneLabel ? "line-through" : ""}`}>{a.title}</p>
+                  <p className={`text-xs ${t.muted} ${a.doneLabel ? "line-through" : ""}`}>{a.sub}</p>
+                  {a.note && <p className={`text-xs italic mt-1 ${t.muted}`}>“{a.note}”</p>}
+                  {!a.doneLabel && (
+                    <p className={`text-[11px] font-semibold mt-1 ${a.due <= 0 ? "text-red-500" : a.due <= 2 ? "text-amber-500" : t.faint}`}>
+                      {dueLabel(a.due)}{a.priority === "urgent" ? " · Urgent" : ""}
+                    </p>
+                  )}
                 </div>
-                {a.done
+                {a.doneLabel
                   ? <span className="flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg flex-shrink-0" style={{ background: "#00aa131a", color: GREEN }}><Check size={13} /> {a.doneLabel}</span>
-                  : <button onClick={() => resolve(a.id)}
-                      className="text-xs font-semibold px-3 py-1.5 rounded-lg text-white flex-shrink-0 transition-colors hover:opacity-90" style={{ background: a.c }}>{a.action}</button>}
+                  : (
+                    <div className="flex flex-col sm:flex-row gap-1.5 flex-shrink-0">
+                      {a.actions.map(ac => (
+                        <button key={ac.label} onClick={() => act(a, ac)}
+                          className="text-xs font-semibold px-3 py-1.5 rounded-lg text-white transition-colors hover:opacity-90" style={{ background: ac.c }}>{ac.label}</button>
+                      ))}
+                    </div>
+                  )}
               </div>
             ))}
           </div>

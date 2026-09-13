@@ -34,6 +34,13 @@
       .segmented button { font: inherit; font-size: 13px; font-weight: 600; border: 0; background: transparent; color: var(--muted); padding: 6px 14px; border-radius: 999px; cursor: pointer; }
       .segmented button[aria-pressed="true"] { background: var(--brand); color: #fff; }
       .segmented button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+      .rotate {
+        font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+        padding: 6px 12px; border-radius: 999px; background: #fff; color: var(--text); border: 1px solid #e3e7ec; box-shadow: 0 1px 2px rgba(20,30,50,.05);
+      }
+      .rotate[aria-pressed="true"] { border-color: var(--brand); color: var(--brand); background: #e6f9e8; }
+      .rotate:disabled { opacity: .45; cursor: not-allowed; }
+      .rotate:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
       .readout { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 92px; }
       .stage-hint { position: absolute; left: 0; right: 0; bottom: 6px; text-align: center; font-size: 12px; color: var(--muted); pointer-events: none; }
       .divider { width: 1px; height: 22px; background: #dde2e8; }
@@ -90,6 +97,7 @@
       .variant { position: absolute; left: 0; right: 0; top: 0; opacity: 0; transition: opacity .25s; pointer-events: none; color: var(--ink); }
       .device[data-device="desktop"] .only-desktop,
       .device[data-device="tablet"] .only-tablet,
+      .device[data-device="tablet-landscape"] .only-tablet,
       .device[data-device="phone"] .only-phone { opacity: 1; }
 
       /* Mac: menu bar + browser toolbar */
@@ -112,6 +120,7 @@
 
       .home-indicator { position: absolute; left: 50%; bottom: 8px; height: 5px; border-radius: 3px; background: var(--ink-bottom, var(--ink)); transform: translateX(-50%); opacity: 0; transition: opacity .25s; }
       .device[data-device="tablet"] .home-indicator { width: 200px; opacity: .8; bottom: 7px; }
+      .device[data-device="tablet-landscape"] .home-indicator { width: 260px; opacity: .8; bottom: 7px; }
       .device[data-device="phone"] .home-indicator { width: 134px; opacity: .85; }
 
       /* Hardware details */
@@ -130,6 +139,7 @@
       .btn { background: var(--ring); border-radius: 2px; }
       .device[data-device="desktop"] .notch, .device[data-device="desktop"] .base,
       .device[data-device="tablet"] .ipad-cam, .device[data-device="tablet"] .btn-tablet,
+      .device[data-device="tablet-landscape"] .ipad-cam, .device[data-device="tablet-landscape"] .btn-tablet-l,
       .device[data-device="phone"] .island, .device[data-device="phone"] .btn-phone { opacity: 1; }
 
       /* ── Drag handles (sized in screen pixels regardless of device scale) ── */
@@ -174,6 +184,7 @@
           <button type="button" data-preset="tablet" aria-pressed="false">Tablet</button>
           <button type="button" data-preset="phone" aria-pressed="false">Phone</button>
         </div>
+        <button type="button" id="rotate" class="rotate" aria-pressed="false" title="Rotate the tablet"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg> Landscape</button>
         <span class="readout" id="readout"></span>
         <a class="open-link" href="./app.html" target="_blank" rel="noopener">Open full app ↗</a>
       </div>
@@ -195,6 +206,10 @@
         <div class="deco btn btn-tablet" style="top:-5px; right:90px; width:64px; height:5px"></div>
         <div class="deco btn btn-tablet" style="right:-5px; top:110px; width:5px; height:56px"></div>
         <div class="deco btn btn-tablet" style="right:-5px; top:180px; width:5px; height:56px"></div>
+        <!-- iPad buttons (landscape) -->
+        <div class="deco btn btn-tablet-l" style="left:-5px; top:90px; width:5px; height:64px"></div>
+        <div class="deco btn btn-tablet-l" style="top:-5px; left:110px; width:56px; height:5px"></div>
+        <div class="deco btn btn-tablet-l" style="top:-5px; left:180px; width:56px; height:5px"></div>
 
         <div class="screen">
           <div class="chrome-top">
@@ -247,19 +262,21 @@
       const DEVICES = {
         desktop: { label: "Desktop", sw: 1512, sh: 945,  bz: 16, r: 28, rb: 12, sr: 10, top: 69, bottom: 0,  frame: "#0d0e10", ring: "#3a3c40", ringw: 2, W: 1760, H: 1000, baseDrop: 22 },
         tablet:  { label: "Tablet",  sw: 820,  sh: 1180, bz: 24, r: 46, rb: 46, sr: 22, top: 24, bottom: 20, frame: "#121316", ring: "#c4c8ce", ringw: 4, W: 884,  H: 1240, baseDrop: 0 },
+        "tablet-landscape": { label: "Tablet landscape", sw: 1180, sh: 820, bz: 24, r: 46, rb: 46, sr: 22, top: 24, bottom: 20, frame: "#121316", ring: "#c4c8ce", ringw: 4, W: 1244, H: 884, baseDrop: 0 },
         phone:   { label: "Phone",   sw: 393,  sh: 852,  bz: 12, r: 62, rb: 62, sr: 50, top: 54, bottom: 30, frame: "#0b0b0c", ring: "#8d8f94", ringw: 4, W: 433,  H: 888,  baseDrop: 0 },
       }
-      const ORDER = ["phone", "tablet", "desktop"]
+      const ORDER = ["phone", "tablet", "tablet-landscape", "desktop"]
 
       const stage = document.getElementById("stage")
       const device = document.getElementById("device")
       const readout = document.getElementById("readout")
       const frame = device.querySelector("iframe")
       const presetButtons = document.querySelectorAll("[data-preset]")
+      const rotateBtn = document.getElementById("rotate")
 
       // The hash keeps the view shareable, e.g. #phone&roles=rider,owner (all roles when omitted)
       const ROLE_KEYS = ["rider", "instructor", "owner"]
-      const hashParams = new URLSearchParams(location.hash.slice(1).replace(/^(desktop|tablet|phone)(?=&|$)/, "device=$1"))
+      const hashParams = new URLSearchParams(location.hash.slice(1).replace(/^(desktop|tablet-landscape|tablet|phone)(?=&|$)/, "device=$1"))
       let current = ORDER.includes(hashParams.get("device")) ? hashParams.get("device") : "desktop"
       let roles = ROLE_KEYS.filter(k => (hashParams.get("roles") || "").split(",").includes(k))
       if (!roles.length) roles = [...ROLE_KEYS]
@@ -288,7 +305,10 @@
         set("--frame", d.frame); set("--ring", d.ring); set("--s", s); set("--dy", (-d.baseDrop / 2 * s) + "px")
         device.dataset.device = key
         readout.textContent = `${d.sw}px`
-        presetButtons.forEach(b => b.setAttribute("aria-pressed", String(b.dataset.preset === key)))
+        presetButtons.forEach(b => b.setAttribute("aria-pressed", String(b.dataset.preset === key.split("-")[0])))
+        rotateBtn.disabled = !key.startsWith("tablet")
+        rotateBtn.setAttribute("aria-pressed", String(key === "tablet-landscape"))
+        rotateBtn.lastChild.textContent = key === "tablet-landscape" ? " Portrait" : " Landscape"
         device.querySelectorAll(".handle").forEach(h => h.setAttribute("aria-valuetext", d.label))
         writeHash()
       }
@@ -323,7 +343,9 @@
           if (e.key === shrink && i > 0) { apply(ORDER[i - 1]); e.preventDefault() }
         })
       })
-      presetButtons.forEach(b => b.addEventListener("click", () => apply(b.dataset.preset)))
+      // Tablet keeps its current orientation; the rotate button flips it
+      presetButtons.forEach(b => b.addEventListener("click", () => apply(b.dataset.preset === "tablet" && current.startsWith("tablet") ? current : b.dataset.preset)))
+      rotateBtn.addEventListener("click", () => { if (current.startsWith("tablet")) apply(current === "tablet" ? "tablet-landscape" : "tablet") })
 
       // "View as" toggles: any combination of roles, but the last one can't be switched off
       const roleButtons = document.querySelectorAll("[data-role]")

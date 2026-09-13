@@ -2986,15 +2986,19 @@ function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onColla
   const weekDates   = getWeekDates(weekOffset)
   // Timetable + your schedule + changes — the same data the Calendar shows
   const daySessions = riderDay(selectedDate, riderChanges)
-  const [category, setCategory] = useState("All")   // browse by class brand — "All" is the full list
-  // Tags live behind a Filters button: pick several in the overlay, results update when you apply
-  const [tagFilter, setTagFilter]   = useState([])
-  const [filterOpen, setFilterOpen] = useState(false)
-  const [draftTags, setDraftTags]   = useState([])
-  const allTags   = categoryFilters(classTags).filter(f => f.key !== "All" && !BRANDS[f.key]).map(f => f.key)
-  const tagMatch  = (s, list) => !list.length || brandOf(s.name, classTags).tags.some(tag => list.includes(tag))
-  const openFilters = () => { setDraftTags(tagFilter); setFilterOpen(true) }
-  const dayData     = Object.fromEntries(["morning", "afternoon", "evening"].map(part => [part, daySessions.filter(s => s.part === part && inCategory(s, category, classTags) && tagMatch(s, tagFilter))]))
+  // Class types and tags live behind one Filters button: pick several in the sheet, results update when you apply.
+  // Empty list = everything. Within a group any pick matches; across groups both must match.
+  const [brandFilter, setBrandFilter] = useState([])
+  const [tagFilter, setTagFilter]     = useState([])
+  const [filterOpen, setFilterOpen]   = useState(false)
+  const [draftBrands, setDraftBrands] = useState([])
+  const [draftTags, setDraftTags]     = useState([])
+  const allTags    = categoryFilters(classTags).filter(f => f.key !== "All" && !BRANDS[f.key]).map(f => f.key)
+  const brandMatch = (s, list) => !list.length || list.includes(brandOf(s.name, classTags).name)
+  const tagMatch   = (s, list) => !list.length || brandOf(s.name, classTags).tags.some(tag => list.includes(tag))
+  const filterCount = brandFilter.length + tagFilter.length
+  const openFilters = () => { setDraftBrands(brandFilter); setDraftTags(tagFilter); setFilterOpen(true) }
+  const dayData     = Object.fromEntries(["morning", "afternoon", "evening"].map(part => [part, daySessions.filter(s => s.part === part && brandMatch(s, brandFilter) && tagMatch(s, tagFilter))]))
   const hasSessions = Object.values(dayData).some(arr => arr.length > 0)
   const monthCells  = getMonthGrid(monthView.year, monthView.month)
   const isPast      = selectedDate < BOOKING_TODAY
@@ -3299,59 +3303,76 @@ function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onColla
             })}
           </div>
 
-          {/* Browse by class type — "All" keeps the full list */}
+          {/* Filters — class type and tags share one sheet; the page only shows what's applied */}
           <div className="flex flex-wrap items-center gap-1.5 mb-3">
-          <div role="tablist" aria-label="Class type" className="contents">
-            {categoryFilters(classTags).filter(f => f.key === "All" || BRANDS[f.key]).map(f => {
-              const on = category === f.key
-              const count = daySessions.filter(s => inCategory(s, f.key, classTags) && tagMatch(s, tagFilter)).length
-              return (
-                <button key={f.key} role="tab" aria-selected={on} onClick={() => { setCategory(f.key); setSelectedSession(null) }}
-                  className={`flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors
-                    ${on ? "text-white border-transparent" : darkMode ? "border-gray-700 text-gray-300 hover:bg-gray-800" : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"}`}
-                  style={on ? { background: f.color } : undefined}>
-                  {f.key !== "All" && <span className="w-2 h-2 rounded-full" style={{ background: on ? "#fff" : f.color }} />}
-                  {f.key}
-                  <span className={on ? "opacity-80" : darkMode ? "text-gray-500" : "text-gray-400"}>{count}</span>
-                </button>
-              )
-            })}
-          </div>
-            {/* Tag filters — one button instead of a long row of tags */}
             <button onClick={openFilters} aria-haspopup="dialog" data-filter-button
               className={`flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors
-                ${tagFilter.length ? "bg-[#e6f9e8] border-[#00aa13] text-[#00aa13]" : darkMode ? "border-gray-700 text-gray-300 hover:bg-gray-800" : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"}`}>
+                ${filterCount ? "bg-[#e6f9e8] border-[#00aa13] text-[#00aa13]" : darkMode ? "border-gray-700 text-gray-300 hover:bg-gray-800" : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"}`}>
               <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden><path d="M2 4h12M4.5 8h7M7 12h2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
               Filters
-              {tagFilter.length > 0 && <span className="text-[10px] font-bold px-1.5 rounded-full bg-[#00aa13] text-white">{tagFilter.length}</span>}
+              {filterCount > 0 && <span className="text-[10px] font-bold px-1.5 rounded-full bg-[#00aa13] text-white">{filterCount}</span>}
             </button>
+            {brandFilter.map(key => (
+              <button key={key} onClick={() => { setBrandFilter(bf => bf.filter(x => x !== key)); setSelectedSession(null) }} aria-label={`Remove ${key} filter`}
+                className={`flex items-center gap-1.5 whitespace-nowrap px-2.5 py-1 rounded-full text-[11px] font-semibold ${darkMode ? "bg-gray-800 text-gray-200" : "bg-gray-100 text-gray-700"}`}>
+                <span className="w-2 h-2 rounded-full" style={{ background: BRANDS[key].color }} />{key} <span aria-hidden className="opacity-60">✕</span>
+              </button>
+            ))}
             {tagFilter.map(tag => (
               <button key={tag} onClick={() => { setTagFilter(tf => tf.filter(x => x !== tag)); setSelectedSession(null) }} aria-label={`Remove ${tag} filter`}
                 className={`flex items-center gap-1 whitespace-nowrap px-2.5 py-1 rounded-full text-[11px] font-medium ${darkMode ? "bg-gray-800 text-gray-300" : "bg-gray-100 text-gray-600"}`}>
                 {tag} <span aria-hidden className="opacity-60">✕</span>
               </button>
             ))}
+            {filterCount > 1 && (
+              <button onClick={() => { setBrandFilter([]); setTagFilter([]); setSelectedSession(null) }} className="text-[11px] font-semibold text-[#00aa13] px-1.5 hover:underline">Clear all</button>
+            )}
+            {filterCount === 0 && <span className={`text-xs ml-1 ${muted}`}>All {daySessions.length} classes</span>}
           </div>
 
           {/* Filters overlay: bottom sheet on phones, centred card on bigger screens */}
           {filterOpen && (() => {
-            const inBrand = daySessions.filter(s => inCategory(s, category, classTags))
-            const resultCount = inBrand.filter(s => tagMatch(s, draftTags)).length
+            const resultCount = daySessions.filter(s => brandMatch(s, draftBrands) && tagMatch(s, draftTags)).length
+            const sectionLabel = `text-[11px] font-semibold uppercase tracking-wider mb-2 ${muted}`
+            const pick = (on, extra = "") => `flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold border transition-colors ${extra}
+              ${on ? "" : darkMode ? "border-gray-700 text-gray-300 hover:bg-gray-800" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`
             return (
               <div className="fixed inset-0 z-[70] flex items-end md:items-center justify-center bg-black/40 backdrop-blur-[2px]" onClick={() => setFilterOpen(false)}>
-                <div role="dialog" aria-modal="true" aria-label="Filter by tags" onClick={e => e.stopPropagation()}
+                <div role="dialog" aria-modal="true" aria-label="Filters" onClick={e => e.stopPropagation()}
                   onKeyDown={e => e.key === "Escape" && setFilterOpen(false)}
-                  className={`w-full md:max-w-md rounded-t-3xl md:rounded-3xl p-5 pb-8 md:pb-5 shadow-2xl ${darkMode ? "bg-gray-900 text-white" : "bg-white text-gray-900"}`}>
+                  className={`w-full md:max-w-md max-h-[88dvh] overflow-y-auto rounded-t-3xl md:rounded-3xl p-5 pb-8 md:pb-5 shadow-2xl ${darkMode ? "bg-gray-900 text-white" : "bg-white text-gray-900"}`}>
                   <div className={`md:hidden mx-auto mb-4 w-10 h-1 rounded-full ${darkMode ? "bg-gray-700" : "bg-gray-200"}`} />
                   <div className="flex items-start justify-between gap-3 mb-1">
-                    <p className="text-base font-semibold">Filter by tags</p>
+                    <p className="text-base font-semibold">Filters</p>
                     <button onClick={() => setFilterOpen(false)} aria-label="Close filters" className={`w-8 h-8 -mt-1 -mr-1 rounded-full flex items-center justify-center ${darkMode ? "hover:bg-gray-800 text-gray-400" : "hover:bg-gray-100 text-gray-500"}`}>✕</button>
                   </div>
-                  <p className={`text-xs mb-4 ${muted}`}>Pick as many as you like — you'll see classes with any of them{category !== "All" ? ` · in ${category}` : ""}</p>
-                  <div className="flex flex-wrap gap-2 mb-5">
+                  <p className={`text-xs mb-4 ${muted}`}>Pick as many as you like</p>
+
+                  <p className={sectionLabel}>Class type</p>
+                  <div className="flex flex-wrap gap-2 mb-5" data-filter-group="brands">
+                    <button aria-pressed={!draftBrands.length} onClick={() => setDraftBrands([])}
+                      className={pick(!draftBrands.length, !draftBrands.length ? (darkMode ? "bg-white text-gray-900 border-white" : "bg-gray-900 text-white border-gray-900") : "")}>
+                      All <span className="opacity-60">{daySessions.filter(s => tagMatch(s, draftTags)).length}</span>
+                    </button>
+                    {Object.entries(BRANDS).map(([key, brand]) => {
+                      const on = draftBrands.includes(key)
+                      const n = daySessions.filter(s => brandOf(s.name, classTags).name === key && tagMatch(s, draftTags)).length
+                      return (
+                        <button key={key} aria-pressed={on} onClick={() => setDraftBrands(d => on ? d.filter(x => x !== key) : [...d, key])}
+                          className={pick(on, `${on ? "text-white border-transparent" : ""} ${!n && !on ? "opacity-50" : ""}`)} style={on ? { background: brand.color } : undefined}>
+                          <span className="w-2 h-2 rounded-full" style={{ background: on ? "#fff" : brand.color }} />
+                          {key}
+                          <span className={on ? "opacity-80" : darkMode ? "text-gray-500" : "text-gray-400"}>{n}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  <p className={sectionLabel}>Tags</p>
+                  <div className="flex flex-wrap gap-2 mb-5" data-filter-group="tags">
                     {allTags.map(tag => {
                       const on = draftTags.includes(tag)
-                      const n = inBrand.filter(s => brandOf(s.name, classTags).tags.includes(tag)).length
+                      const n = daySessions.filter(s => brandMatch(s, draftBrands) && brandOf(s.name, classTags).tags.includes(tag)).length
                       return (
                         <button key={tag} aria-pressed={on} onClick={() => setDraftTags(d => on ? d.filter(x => x !== tag) : [...d, tag])}
                           className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold border transition-colors
@@ -3364,9 +3385,9 @@ function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onColla
                     })}
                   </div>
                   <div className="flex items-center gap-3">
-                    <button onClick={() => setDraftTags([])} disabled={!draftTags.length}
-                      className={`px-4 py-2.5 rounded-xl text-sm font-semibold ${draftTags.length ? (darkMode ? "text-gray-200 hover:bg-gray-800" : "text-gray-700 hover:bg-gray-100") : "opacity-40"}`}>Clear all</button>
-                    <button onClick={() => { setTagFilter(draftTags); setFilterOpen(false); setSelectedSession(null) }}
+                    <button onClick={() => { setDraftBrands([]); setDraftTags([]) }} disabled={!draftTags.length && !draftBrands.length}
+                      className={`px-4 py-2.5 rounded-xl text-sm font-semibold ${draftTags.length || draftBrands.length ? (darkMode ? "text-gray-200 hover:bg-gray-800" : "text-gray-700 hover:bg-gray-100") : "opacity-40"}`}>Clear all</button>
+                    <button onClick={() => { setBrandFilter(draftBrands); setTagFilter(draftTags); setFilterOpen(false); setSelectedSession(null) }}
                       className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white bg-[#00aa13] hover:bg-[#008a0f] transition-colors">
                       {resultCount ? `Show ${resultCount} class${resultCount === 1 ? "" : "es"}` : "No classes match — show anyway"}
                     </button>
@@ -3394,10 +3415,10 @@ function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onColla
                   })
                 : <div className="flex flex-col items-center justify-center h-full py-16 gap-3">
                     <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-2xl ${darkMode ? "bg-gray-800" : "bg-gray-50"}`}>🗓️</div>
-                    <p className={`text-sm font-semibold ${heading}`}>{(category !== "All" || tagFilter.length) && daySessions.length ? `No ${[category !== "All" && category, ...tagFilter].filter(Boolean).join(" · ")} classes this day` : "No classes this day"}</p>
-                    <p className={`text-xs text-center max-w-xs ${muted}`}>{(category !== "All" || tagFilter.length) && daySessions.length ? "Try another day, or clear your filters." : "There aren't any classes on this day — try another date."}</p>
-                    {(category !== "All" || tagFilter.length > 0) && daySessions.length > 0 && (
-                      <button onClick={() => { setCategory("All"); setTagFilter([]) }} className="text-xs font-semibold text-[#00aa13] hover:underline">Show all {daySessions.length} classes</button>
+                    <p className={`text-sm font-semibold ${heading}`}>{filterCount && daySessions.length ? `No ${[...brandFilter, ...tagFilter].join(" · ")} classes this day` : "No classes this day"}</p>
+                    <p className={`text-xs text-center max-w-xs ${muted}`}>{filterCount && daySessions.length ? "Try another day, or clear your filters." : "There aren't any classes on this day — try another date."}</p>
+                    {filterCount > 0 && daySessions.length > 0 && (
+                      <button onClick={() => { setBrandFilter([]); setTagFilter([]) }} className="text-xs font-semibold text-[#00aa13] hover:underline">Show all {daySessions.length} classes</button>
                     )}
                   </div>
               }

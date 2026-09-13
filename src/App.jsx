@@ -656,7 +656,7 @@ function positionTier(pos, total) {
   return { color: null, tier: null }
 }
 
-const achievements = [
+const ACHIEVEMENTS_BASE = [
   // Earned
   { name: "Top 10%",          icon: "⭐", progress: 1,  total: 1,  unit: "",              earned: true,  description: "Finished in the top 10% on a ride" },
   { name: "Perfect Week",     icon: "📅", progress: 1,  total: 1,  unit: "",              earned: true,  description: "Rode every day for a full week" },
@@ -666,7 +666,8 @@ const achievements = [
   { name: "Early Bird",       icon: "🌅", progress: 3,  total: 5,  unit: "6am rides",     earned: false, description: "Complete 5 rides before 6am" },
   { name: "Energy Master",    icon: "⚡", progress: 8,  total: 10, unit: "kWh",           earned: false, description: "Burn 10 kWh across all rides" },
   // Locked — not yet started
-  { name: "Streak Collector", icon: "📈", progress: 0,  total: 5,  unit: "streaks",       earned: false, description: "Revisit 5 past rides and review your stats to collect streaks. Open any ride in your history to start." },
+  { name: "First Streak",     icon: "✨", progress: 0,  total: 1,  unit: "streak",        earned: false, description: "Collect a streak from any past ride in your history.", unlockText: "You collected your first streak — 4 more to become a Streak Collector." },
+  { name: "Streak Collector", icon: "📈", progress: 0,  total: 5,  unit: "streaks",       earned: false, description: "Revisit 5 past rides and review your stats to collect streaks. Open any ride in your history to start.", unlockText: "5 streaks collected — you really know your riding history." },
   { name: "50 Rides",         icon: "🏅", progress: 0,  total: 50, unit: "rides",         earned: false, description: "Complete 50 total rides" },
   { name: "Top 5%",           icon: "💎", progress: 0,  total: 1,  unit: "",              earned: false, description: "Finish in the top 5% on any ride" },
   { name: "Century Club",     icon: "💯", progress: 0,  total: 100, unit: "hours",        earned: false, description: "Accumulate 100 total ride hours" },
@@ -771,6 +772,7 @@ function achGradient(name) {
     "Energy Master":    ["#28B8F0", "#083060"],
     "Perfect Week":     ["#28D870", "#083A20"],
     "Streak Collector": ["#28D8E8", "#081E52"],
+    "First Streak":     ["#FFB23E", "#7A3A00"],
     "50 Rides":         ["#F09030", "#6A2008"],
     "Top 5%":           ["#B050F8", "#280860"],
     "Century Club":     ["#F03030", "#580808"],
@@ -780,6 +782,91 @@ function achGradient(name) {
     "Data Explorer":    ["#28D898", "#083028"],
   }
   return g[name] || ["#28D870", "#083A20"]
+}
+
+// Streak badges fill in from the streaks you collect on the Rides page
+const STREAK_GOAL = 5
+function achievementsFor(streaks = 0) {
+  return ACHIEVEMENTS_BASE.map(a =>
+    a.name === "First Streak"     ? { ...a, progress: Math.min(streaks, 1), earned: streaks >= 1 } :
+    a.name === "Streak Collector" ? { ...a, progress: Math.min(streaks, STREAK_GOAL), earned: streaks >= STREAK_GOAL } : a)
+}
+
+// ─── Badge unlocked: a huge shining badge with confetti ─────────────────────
+const UNLOCK_CSS = `
+  @keyframes bu-fade { from { opacity: 0 } to { opacity: 1 } }
+  @keyframes bu-pop { 0% { transform: scale(.15) rotate(-30deg); opacity: 0 } 55% { transform: scale(1.15) rotate(8deg); opacity: 1 } 78% { transform: scale(.95) rotate(-3deg) } 100% { transform: scale(1) rotate(0) } }
+  @keyframes bu-rays { to { transform: rotate(360deg) } }
+  @keyframes bu-pulse { 0%, 100% { transform: scale(.95); opacity: .7 } 50% { transform: scale(1.1); opacity: 1 } }
+  @keyframes bu-fall { from { transform: translate3d(0, -12vh, 0) rotate(0) } to { transform: translate3d(var(--dx), 112vh, 0) rotate(var(--rot)) } }
+  @keyframes bu-rise { from { transform: translateY(18px); opacity: 0 } to { transform: none; opacity: 1 } }
+  @keyframes bu-twinkle { 0%, 100% { transform: translate(-50%, -50%) scale(0); opacity: 0 } 50% { transform: translate(-50%, -50%) scale(1); opacity: 1 } }
+  @media (prefers-reduced-motion: reduce) { [data-badge-unlocked] * { animation-duration: .01s !important; animation-iteration-count: 1 !important } }
+`
+const UNLOCK_CONFETTI = ["#FFD23F", "#FF6B6B", "#4ADE80", "#38BDF8", "#A78BFA", "#F472B6", "#FFFFFF"]
+
+function BadgeUnlocked({ badge, onClose, onView }) {
+  const [px] = useState(() => Math.round(Math.min(window.innerWidth * 0.6, window.innerHeight * 0.36, 260)))
+  const [pieces] = useState(() => Array.from({ length: 140 }, (_, i) => ({
+    left: Math.random() * 100, delay: (i % 2 ? 0.9 : 0) + Math.random() * 0.8, dur: 2.6 + Math.random() * 1.8,
+    size: 6 + Math.random() * 8, color: UNLOCK_CONFETTI[i % UNLOCK_CONFETTI.length], round: Math.random() < 0.3,
+    dx: (Math.random() - 0.5) * 30, rot: (Math.random() - 0.5) * 1080,
+  })))
+  useEffect(() => {
+    const onKey = e => e.key === "Escape" && onClose()
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [onClose])
+  const colors = achGradient(badge.name)
+  return (
+    <div role="dialog" aria-modal="true" aria-label={`Badge unlocked: ${badge.name}`} onClick={onClose} data-badge-unlocked
+      className="fixed inset-0 z-[90] flex items-center justify-center p-6 overflow-hidden"
+      style={{ background: "radial-gradient(circle at 50% 40%, rgba(40,28,0,.78), rgba(0,0,0,.92) 70%)", animation: "bu-fade .3s ease-out both" }}>
+      <style>{UNLOCK_CSS}</style>
+      {/* Confetti — two bursts falling across the whole screen */}
+      <div className="absolute inset-0 pointer-events-none" aria-hidden>
+        {pieces.map((p, i) => (
+          <span key={i} className="absolute top-0" style={{
+            left: `${p.left}%`, width: p.size, height: p.round ? p.size : p.size * 0.45, background: p.color, borderRadius: p.round ? "50%" : 2,
+            "--dx": `${p.dx}vw`, "--rot": `${p.rot}deg`, animation: `bu-fall ${p.dur}s cubic-bezier(.25,.6,.5,1) ${p.delay}s 2 both`,
+          }} />
+        ))}
+      </div>
+      <div className="relative flex flex-col items-center text-center" onClick={e => e.stopPropagation()}>
+        <div className="relative flex items-center justify-center" style={{ width: px * 1.2, height: px * 1.2 }}>
+          {/* Light rays + glow behind the badge */}
+          <div aria-hidden className="absolute rounded-full pointer-events-none" style={{
+            inset: "-45%", background: "repeating-conic-gradient(from 0deg, rgba(255,214,90,.38) 0deg 8deg, transparent 8deg 24deg)",
+            WebkitMaskImage: "radial-gradient(circle, #000 20%, transparent 68%)", maskImage: "radial-gradient(circle, #000 20%, transparent 68%)",
+            animation: "bu-rays 16s linear infinite",
+          }} />
+          <div aria-hidden className="absolute rounded-full pointer-events-none" style={{
+            width: px * 1.15, height: px * 1.15, background: `radial-gradient(circle, ${colors[0]}cc, rgba(255,200,60,.35) 45%, transparent 70%)`,
+            filter: "blur(8px)", animation: "bu-pulse 2.4s ease-in-out infinite",
+          }} />
+          <div style={{ animation: "bu-pop .9s cubic-bezier(.2,.9,.3,1.25) both" }}>
+            <PremiumBadge icon={badge.icon} colors={colors} size={px} earned />
+          </div>
+          {[...Array(8)].map((_, i) => {
+            const a = i / 8 * Math.PI * 2, r = px * 0.72
+            return (
+              <span key={i} aria-hidden className="absolute text-yellow-200 pointer-events-none" style={{
+                left: `calc(50% + ${Math.cos(a) * r}px)`, top: `calc(50% + ${Math.sin(a) * r}px)`, fontSize: 14 + (i % 3) * 8,
+                textShadow: "0 0 12px rgba(255,220,120,.9)", animation: `bu-twinkle 1.8s ease-in-out ${0.6 + i * 0.22}s infinite both`,
+              }}>✦</span>
+            )
+          })}
+        </div>
+        <p className="mt-6 text-xs font-bold uppercase tracking-[0.3em] text-yellow-300" style={{ animation: "bu-rise .5s ease-out .45s both" }}>Badge unlocked</p>
+        <h2 className="mt-2 text-3xl md:text-5xl font-bold text-white" style={{ animation: "bu-rise .5s ease-out .6s both", textShadow: "0 4px 24px rgba(0,0,0,.5)" }}>{badge.name}</h2>
+        <p className="mt-2 text-sm md:text-base text-white/75 max-w-sm" style={{ animation: "bu-rise .5s ease-out .75s both" }}>{badge.unlockText || badge.description}</p>
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-3" style={{ animation: "bu-rise .5s ease-out .9s both" }}>
+          <button onClick={onView} className="px-5 py-3 rounded-2xl bg-white text-gray-900 text-sm font-semibold hover:bg-gray-100 active:scale-95 transition">View achievements</button>
+          <button onClick={onClose} className="px-5 py-3 rounded-2xl text-white/85 text-sm font-semibold hover:bg-white/10 active:scale-95 transition">Keep riding</button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function PremiumBadge({ icon, colors, size = 56, earned = true, darkMode = false }) {
@@ -1152,6 +1239,16 @@ export default function App() {
 
   // Brand + tags per class — set by instructors when they publish; used for rider browsing and owner insights
   const [classTags, setClassTags] = useState(CLASS_BRAND)
+  // Streaks collected from past rides — shared so Rides, Home, Profile and Achievements agree, and new badges celebrate
+  const [streaks, setStreaks]         = useState(() => new Set())
+  const [badgeUnlock, setBadgeUnlock] = useState(null)
+  function collectStreak(key) {
+    if (streaks.has(key)) return
+    const before = achievementsFor(streaks.size), after = achievementsFor(streaks.size + 1)
+    setStreaks(s => new Set([...s, key]))
+    const unlocked = after.find((a, i) => a.earned && !before[i].earned)
+    if (unlocked) setTimeout(() => setBadgeUnlock({ ...unlocked, id: Date.now() }), 2600)   // once the gold-tyre ride has crossed the screen
+  }
   function publishClass(cls) {
     if (cls.brand) setClassTags(t => ({ ...t, [cls.name]: [cls.brand, ...(cls.tags || [])] }))
     setBuiltClasses(prev => {
@@ -1242,11 +1339,12 @@ export default function App() {
       <ChangeRequestsContext.Provider value={{ requests: changeRequests, submit: submitChange }}>
       <main ref={mainRef} className="flex-1 overflow-y-auto pb-24 md:pb-0">
         {/* Rider */}
-        {activePage === "Home"         && <HomePage         darkMode={darkMode} onToggleDarkMode={dm} />}
+        {activePage === "Home"         && <HomePage         darkMode={darkMode} onToggleDarkMode={dm} streakCount={streaks.size} />}
         {activePage === "Bookings"     && <BookingsPage     key={bookingsDate || "today"} initialDate={bookingsDate} darkMode={darkMode} onToggleDarkMode={dm} navExpanded={navExpanded} onCollapseNav={() => setNavExpanded(false)} riderChanges={riderChanges} setRiderChanges={setRiderChanges} classTags={classTags} />}
         {activePage === "Calendar"     && <CalendarPage     darkMode={darkMode} onToggleDarkMode={dm} onFindClass={ds => { setBookingsDate(ds); setActivePage("Bookings") }} riderChanges={riderChanges} setRiderChanges={setRiderChanges} />}
-        {activePage === "Rides"        && <RidesPage        darkMode={darkMode} onToggleDarkMode={dm} navExpanded={navExpanded} onCollapseNav={() => setNavExpanded(false)} />}
-        {activePage === "Achievements" && <AchievementsPage darkMode={darkMode} onToggleDarkMode={dm} onNavigate={setActivePage} classTags={classTags} />}
+        {activePage === "Rides"        && <RidesPage        darkMode={darkMode} onToggleDarkMode={dm} navExpanded={navExpanded} onCollapseNav={() => setNavExpanded(false)} collectedStreaks={streaks} onCollectStreak={collectStreak} />}
+        {badgeUnlock && <BadgeUnlocked key={badgeUnlock.id} badge={badgeUnlock} onClose={() => setBadgeUnlock(null)} onView={() => { setBadgeUnlock(null); setActivePage("Achievements") }} />}
+        {activePage === "Achievements" && <AchievementsPage darkMode={darkMode} onToggleDarkMode={dm} onNavigate={setActivePage} classTags={classTags} streakCount={streaks.size} />}
         {/* Instructor */}
         {activePage === "Studio Home"   && <InstructorHomePage    darkMode={darkMode} onToggleDarkMode={dm} onOpenRoster={openRoster} onNavigate={navTo} templates={templates} onOpenBuilder={openInBuilder} />}
         {activePage === "My Classes"    && <InstructorClassesPage key={rosterClass ? rosterClass.name + rosterClass.time : "all"} darkMode={darkMode} onToggleDarkMode={dm} initialClass={rosterClass} navExpanded={navExpanded} onCollapseNav={() => setNavExpanded(false)} />}
@@ -1263,7 +1361,7 @@ export default function App() {
         {activePage === "Instructors"   && <OwnerInstructorsPage  darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
         {activePage === "Riders"        && <RidersCRMPage         darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
         {/* Shared */}
-        {activePage === "Profile"      && <ProfilePage  darkMode={darkMode} onToggleDarkMode={dm} />}
+        {activePage === "Profile"      && <ProfilePage  darkMode={darkMode} onToggleDarkMode={dm} streakCount={streaks.size} />}
         {activePage === "Settings"     && <SettingsPage darkMode={darkMode} onToggleDarkMode={dm} />}
         {activePage === "Log out"      && <LogOutPage   darkMode={darkMode} onLogout={() => setAuthed(false)} onStay={() => setActivePage(roles[0].home)} />}
       </main>
@@ -1871,7 +1969,8 @@ function SessionPlanModal({ session, darkMode, onClose }) {
   )
 }
 
-function HomePage({ darkMode, onToggleDarkMode }) {
+function HomePage({ darkMode, onToggleDarkMode, streakCount = 0 }) {
+  const achievements = achievementsFor(streakCount)
   const card    = `rounded-2xl border p-6 transition-colors ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`
   const heading = darkMode ? "text-white"    : "text-gray-900"
   const muted   = darkMode ? "text-gray-400" : "text-gray-500"
@@ -4699,9 +4798,8 @@ function RideVsClass({ ride, darkMode }) {
   )
 }
 
-function RidesPage({ darkMode, onToggleDarkMode, navExpanded = false, onCollapseNav }) {
+function RidesPage({ darkMode, onToggleDarkMode, navExpanded = false, onCollapseNav, collectedStreaks = new Set(), onCollectStreak }) {
   const [selectedRide, setSelectedRide]       = useState(ridesData[0])
-  const [collectedStreaks, setCollectedStreaks] = useState(new Set())
   const [flourishNode, playFlourish] = useFlourish(darkMode)
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false)
   const [chartModalOpen, setChartModalOpen]   = useState(false)
@@ -4709,7 +4807,7 @@ function RidesPage({ darkMode, onToggleDarkMode, navExpanded = false, onCollapse
   useListFirstOnTablet(navExpanded, !!selectedRide, () => setSelectedRide(null), onCollapseNav)
 
   function collectStreak(ride) {
-    setCollectedStreaks(prev => new Set([...prev, ride.date + ride.name]))
+    onCollectStreak?.(ride.date + ride.name)   // App counts it and celebrates any badge it unlocks
     playFlourish("streak")
   }
 
@@ -4822,7 +4920,7 @@ function RidesPage({ darkMode, onToggleDarkMode, navExpanded = false, onCollapse
                     <span style={{ fontSize: 15 }}>📈</span>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-semibold" style={{ color: "#06B6D4" }}>Streak collected</p>
-                      <p className={`text-xs ${muted}`}>Counts toward Streak Collector badge</p>
+                      <p className={`text-xs ${muted}`}>{Math.min(collectedStreaks.size, STREAK_GOAL)} of {STREAK_GOAL} toward Streak Collector badge</p>
                     </div>
                     <span className="text-xs font-bold" style={{ color: "#06B6D4" }}>✓</span>
                   </div>
@@ -5022,7 +5120,7 @@ function RidesPage({ darkMode, onToggleDarkMode, navExpanded = false, onCollapse
                       <span style={{ fontSize: 15 }}>📈</span>
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-semibold" style={{ color: "#06B6D4" }}>Streak collected</p>
-                        <p className={`text-xs ${muted}`}>Counts toward Streak Collector badge</p>
+                        <p className={`text-xs ${muted}`}>{Math.min(collectedStreaks.size, STREAK_GOAL)} of {STREAK_GOAL} toward Streak Collector badge</p>
                       </div>
                       <span className="text-xs font-bold" style={{ color: "#06B6D4" }}>✓</span>
                     </div>
@@ -5172,7 +5270,8 @@ const BRAND_ICON = { Power: "💪", Endurance: "🛣️", HIIT: "🔥", Rhythm: 
 const BRAND_TIERS = [{ name: "Bronze", total: 5 }, { name: "Silver", total: 15 }, { name: "Gold", total: 30 }]
 const darken = (hex, k = 0.45) => "#" + [1, 3, 5].map(i => Math.round(parseInt(hex.slice(i, i + 2), 16) * k).toString(16).padStart(2, "0")).join("")
 
-function AchievementsPage({ darkMode, onToggleDarkMode, onNavigate, classTags = CLASS_BRAND }) {
+function AchievementsPage({ darkMode, onToggleDarkMode, onNavigate, classTags = CLASS_BRAND, streakCount = 0 }) {
+  const achievements = achievementsFor(streakCount)
   const card    = `rounded-2xl border p-6 transition-colors ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`
   const heading = darkMode ? "text-white"    : "text-gray-900"
   const muted   = darkMode ? "text-gray-400" : "text-gray-500"
@@ -5503,7 +5602,8 @@ function SettingsPage({ darkMode, onToggleDarkMode }) {
 
 // ─── PROFILE PAGE ───────────────────────────────────────────────────────────
 
-function ProfilePage({ darkMode, onToggleDarkMode }) {
+function ProfilePage({ darkMode, onToggleDarkMode, streakCount = 0 }) {
+  const achievements = achievementsFor(streakCount)
   const heading  = darkMode ? "text-white"    : "text-gray-900"
   const muted    = darkMode ? "text-gray-400" : "text-gray-500"
   const card     = `rounded-2xl border transition-colors ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`

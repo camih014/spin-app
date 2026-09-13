@@ -2628,7 +2628,30 @@ function OccRow({ c, darkMode }) {
     </div>
   )
 }
-export function OwnerClassesPage({ darkMode, onToggleDarkMode, onNavigate, ops = EMPTY_OPS, setOps }) {
+// Demo average fill per class type, and bookings grouped by brand / instructor tag across both studios' timetables
+const fillOf = name => 55 + (seedNum(name) * 7) % 44
+function brandTagStats(classTags) {
+  const slots = OP_STUDIOS.flatMap(studio => STUDIO_TIMETABLE[studio].flat().map(entry => ({ name: entry.split(" ").slice(1).join(" "), cap: studio === "Studio 1" ? 24 : 20 })))
+  const group = keysOf => {
+    const groups = {}
+    slots.forEach(s => {
+      for (const key of keysOf(s)) {
+        const g = (groups[key] ||= { key, slots: 0, fillSum: 0, riders: 0 })
+        const fill = fillOf(s.name)
+        g.slots++; g.fillSum += fill; g.riders += Math.round(s.cap * fill / 100)
+      }
+    })
+    return Object.values(groups).map(g => ({ ...g, fill: Math.round(g.fillSum / g.slots) })).sort((a, b) => b.fill - a.fill)
+  }
+  const tagsOf = name => classTags[name] || []
+  return {
+    brands: group(s => [tagsOf(s.name)[0] || "Signature"]),
+    tags: group(s => tagsOf(s.name).slice(1)),
+    avg: Math.round(slots.reduce((sum, s) => sum + fillOf(s.name), 0) / slots.length),
+  }
+}
+
+export function OwnerClassesPage({ darkMode, onToggleDarkMode, onNavigate, ops = EMPTY_OPS, setOps, classTags = {}, brandColors = {} }) {
   const t = tk(darkMode)
   const [applying, setApplying] = useState(null)   // recommendation whose confirm dialog is open
   const appliedLabel = id => ops.done?.[id]
@@ -2658,6 +2681,49 @@ export function OwnerClassesPage({ darkMode, onToggleDarkMode, onNavigate, ops =
           <div className="flex flex-col gap-2.5">{CLASS_LOW.map((c, i) => <OccRow key={i} c={c} darkMode={darkMode} />)}</div>
         </div>
       </div>
+
+      {/* What riders book most — brands, and the tags instructors add when they publish */}
+      {(() => {
+        const stats = brandTagStats(classTags)
+        const best = stats.tags[0]
+        const row = (g, i, color) => (
+          <div key={g.key} className="py-1.5">
+            <div className="flex items-center justify-between gap-2 text-xs mb-1">
+              <span className={`flex items-center gap-1.5 font-semibold min-w-0 ${t.heading}`}>
+                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: color }} />
+                <span className="truncate">{g.key}</span>
+                {i === 0 && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0" style={{ background: GREEN + "1a", color: GREEN }}>Most popular</span>}
+              </span>
+              <span className={`flex-shrink-0 ${t.muted}`}>{g.slots}/wk · {g.riders} riders · <span className={`font-bold ${t.heading}`}>{g.fill}%</span></span>
+            </div>
+            <div className={`h-2 rounded-full overflow-hidden ${darkMode ? "bg-gray-800" : "bg-gray-100"}`}>
+              <div className="h-full rounded-full" style={{ width: `${g.fill}%`, background: color }} />
+            </div>
+          </div>
+        )
+        return (
+          <div className={`${t.card} p-5 mb-4`}>
+            <div className="flex items-center gap-2 mb-1"><span className="w-6 h-6 rounded-lg flex items-center justify-center" style={{ background: "#0ea5e91a", color: "#0ea5e9" }}><Award size={14} /></span><p className={`text-sm font-semibold ${t.heading}`}>What riders book most</p></div>
+            <p className={`text-xs mb-4 ${t.muted}`}>Average fill by class brand and by the tags instructors add · studio average {stats.avg}%</p>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              <div>
+                <p className={`text-[11px] font-bold uppercase tracking-wider mb-1 ${t.muted}`}>Brands</p>
+                {stats.brands.map((g, i) => row(g, i, brandColors[g.key] || "#6b7280"))}
+              </div>
+              <div>
+                <p className={`text-[11px] font-bold uppercase tracking-wider mb-1 ${t.muted}`}>Tags</p>
+                {stats.tags.length ? stats.tags.map((g, i) => row(g, i, GREEN)) : <p className={`text-xs ${t.muted}`}>No tags yet — instructors add them when they publish a class.</p>}
+              </div>
+            </div>
+            {best && (
+              <p className={`text-xs mt-4 rounded-xl px-3 py-2.5 ${t.subtle} ${t.muted}`}>
+                <span className="font-semibold" style={{ color: GREEN }}>Insight: </span>
+                {best.key} classes average {best.fill}% full{best.fill > stats.avg ? `, ${best.fill - stats.avg} points above the studio average` : ""} — a good type to add more of.
+              </p>
+            )}
+          </div>
+        )
+      })()}
 
       <div className={`${t.card} p-5`}>
         <div className="flex items-center gap-2 mb-4"><span className="w-6 h-6 rounded-lg flex items-center justify-center text-white" style={{ background: "#8b5cf6" }}><Sparkles size={13} /></span><p className={`text-sm font-semibold ${t.heading}`}>Recommendations</p></div>

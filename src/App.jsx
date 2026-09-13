@@ -1148,7 +1148,10 @@ export default function App() {
   const submitChange  = req => setChangeRequests(rs => [{ ...req, id: "cr" + Date.now(), status: "pending" }, ...rs.filter(r => r.classKey !== req.classKey)])
   const resolveChange = (id, status) => setChangeRequests(rs => rs.map(r => r.id === id ? { ...r, status } : r))
 
+  // Brand + tags per class — set by instructors when they publish; used for rider browsing and owner insights
+  const [classTags, setClassTags] = useState(CLASS_BRAND)
   function publishClass(cls) {
+    if (cls.brand) setClassTags(t => ({ ...t, [cls.name]: [cls.brand, ...(cls.tags || [])] }))
     setBuiltClasses(prev => {
       const without = prev.filter(c => c.name !== cls.name)
       return [{ name: cls.name, length: cls.length, social: cls.social, series: cls.series, weeks: cls.weeks || 1 }, ...without]
@@ -1238,14 +1241,14 @@ export default function App() {
       <main ref={mainRef} className="flex-1 overflow-y-auto pb-24 md:pb-0">
         {/* Rider */}
         {activePage === "Home"         && <HomePage         darkMode={darkMode} onToggleDarkMode={dm} />}
-        {activePage === "Bookings"     && <BookingsPage     key={bookingsDate || "today"} initialDate={bookingsDate} darkMode={darkMode} onToggleDarkMode={dm} navExpanded={navExpanded} onCollapseNav={() => setNavExpanded(false)} riderChanges={riderChanges} setRiderChanges={setRiderChanges} />}
+        {activePage === "Bookings"     && <BookingsPage     key={bookingsDate || "today"} initialDate={bookingsDate} darkMode={darkMode} onToggleDarkMode={dm} navExpanded={navExpanded} onCollapseNav={() => setNavExpanded(false)} riderChanges={riderChanges} setRiderChanges={setRiderChanges} classTags={classTags} />}
         {activePage === "Calendar"     && <CalendarPage     darkMode={darkMode} onToggleDarkMode={dm} onFindClass={ds => { setBookingsDate(ds); setActivePage("Bookings") }} riderChanges={riderChanges} setRiderChanges={setRiderChanges} />}
         {activePage === "Rides"        && <RidesPage        darkMode={darkMode} onToggleDarkMode={dm} navExpanded={navExpanded} onCollapseNav={() => setNavExpanded(false)} />}
-        {activePage === "Achievements" && <AchievementsPage darkMode={darkMode} onToggleDarkMode={dm} onNavigate={setActivePage} />}
+        {activePage === "Achievements" && <AchievementsPage darkMode={darkMode} onToggleDarkMode={dm} onNavigate={setActivePage} classTags={classTags} />}
         {/* Instructor */}
         {activePage === "Studio Home"   && <InstructorHomePage    darkMode={darkMode} onToggleDarkMode={dm} onOpenRoster={openRoster} onNavigate={navTo} templates={templates} onOpenBuilder={openInBuilder} />}
         {activePage === "My Classes"    && <InstructorClassesPage key={rosterClass ? rosterClass.name + rosterClass.time : "all"} darkMode={darkMode} onToggleDarkMode={dm} initialClass={rosterClass} navExpanded={navExpanded} onCollapseNav={() => setNavExpanded(false)} />}
-        {activePage === "Class Builder" && <ClassBuilderPage      key={builderRide ? builderRide.key : "blank"} darkMode={darkMode} onToggleDarkMode={dm} onPublish={publishClass} initialRide={builderRide} onSaveTemplate={saveTemplate} />}
+        {activePage === "Class Builder" && <ClassBuilderPage      key={builderRide ? builderRide.key : "blank"} darkMode={darkMode} onToggleDarkMode={dm} onPublish={publishClass} initialRide={builderRide} onSaveTemplate={saveTemplate} classTags={classTags} />}
         {activePage === "Live Mode"     && <LiveModePage          darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
         {activePage === "Schedule"      && <InstructorSchedulePage darkMode={darkMode} onToggleDarkMode={dm} builtClasses={builtClasses} />}
         {activePage === "Insights"      && <InstructorStatsPage   darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
@@ -1254,7 +1257,7 @@ export default function App() {
         {activePage === "Overview"      && <OwnerOverviewPage     darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} changeRequests={changeRequests} onResolveChange={resolveChange} ops={ownerOps} setOps={setOwnerOps} />}
         {activePage === "Studio Calendar" && <OwnerCalendarPage   darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} changeRequests={changeRequests} ops={ownerOps} />}
         {activePage === "Revenue"       && <OwnerRevenuePage      darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
-        {activePage === "Classes"       && <OwnerClassesPage      darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} ops={ownerOps} setOps={setOwnerOps} />}
+        {activePage === "Classes"       && <OwnerClassesPage      darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} ops={ownerOps} setOps={setOwnerOps} classTags={classTags} brandColors={BRAND_COLORS} />}
         {activePage === "Instructors"   && <OwnerInstructorsPage  darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
         {activePage === "Riders"        && <RidersCRMPage         darkMode={darkMode} onToggleDarkMode={dm} onNavigate={navTo} />}
         {/* Shared */}
@@ -2919,22 +2922,34 @@ const BRANDS = {
   Recovery:  { color: "#14b8a6", blurb: "Easy spins to reset" },
   Technique: { color: "#eab308", blurb: "Cadence and form drills" },
 }
+// Seed data: [brand, ...tags] per class. Instructors change these when they publish from the Class Builder.
 const CLASS_BRAND = {
-  "Sunrise Power": ["Power"], "Power Tempo": ["Power"], "Power Zone Ride": ["Power"], "Power Ride": ["Power"], "Threshold Push": ["Power"], "Climb Intervals": ["Power"],
-  "HIIT Blast": ["HIIT"], "Saturday HIIT": ["HIIT"], "Midday Burn": ["HIIT"], "Lunch Sprint": ["HIIT"],
-  "Endurance Builder": ["Endurance"], "Easy Endurance": ["Endurance", "Beginner-friendly"], "Tempo Foundation": ["Endurance", "Beginner-friendly"], "Night Ride": ["Endurance"], "Sunrise Endurance": ["Endurance"],
-  "Rhythm Ride": ["Rhythm", "Beginner-friendly"], "Evening Flow": ["Rhythm", "Beginner-friendly"], "Rhythm Stat": ["Rhythm"],
-  "Recovery Ride": ["Recovery", "Beginner-friendly"],
+  "Sunrise Power": ["Power", "Early bird"], "Power Tempo": ["Power"], "Power Zone Ride": ["Power"], "Power Ride": ["Power"], "Threshold Push": ["Power", "Advanced"], "Climb Intervals": ["Power", "Climb"],
+  "HIIT Blast": ["HIIT", "Advanced"], "Saturday HIIT": ["HIIT", "Advanced"], "Midday Burn": ["HIIT"], "Lunch Sprint": ["HIIT"],
+  "Endurance Builder": ["Endurance", "Climb"], "Easy Endurance": ["Endurance", "Beginner-friendly", "Low impact"], "Tempo Foundation": ["Endurance", "Beginner-friendly"], "Night Ride": ["Endurance", "Music-led"], "Sunrise Endurance": ["Endurance", "Early bird"],
+  "Rhythm Ride": ["Rhythm", "Beginner-friendly", "Music-led"], "Evening Flow": ["Rhythm", "Beginner-friendly", "Music-led"], "Rhythm Stat": ["Rhythm", "Music-led"],
+  "Recovery Ride": ["Recovery", "Beginner-friendly", "Low impact"],
   "Cadence Control": ["Technique"], "Core + Ride": ["Technique", "Beginner-friendly"],
 }
-function brandOf(name) {
-  const [brand = "Signature", ...tags] = CLASS_BRAND[name] || []
+const TAG_OPTIONS = ["Beginner-friendly", "Advanced", "Low impact", "Music-led", "Climb", "Early bird"]
+const BRAND_COLORS = Object.fromEntries(Object.entries(BRANDS).map(([key, b]) => [key, b.color]))
+function brandOf(name, map = CLASS_BRAND) {
+  const [brand = "Signature", ...tags] = map[name] || []
   return { name: brand, color: BRANDS[brand]?.color || "#6b7280", tags }
 }
-const BRAND_FILTERS = [{ key: "All", color: "#374151" }, ...Object.entries(BRANDS).map(([key, b]) => ({ key, color: b.color })), { key: "Beginner-friendly", color: "#00aa13" }]
-const inCategory = (s, key) => key === "All" || (key === "Beginner-friendly" ? brandOf(s.name).tags.includes(key) : brandOf(s.name).name === key)
+// Filter chips: every brand, then every tag in use (presets first, then instructors' own tags)
+function categoryFilters(map = CLASS_BRAND) {
+  const used = [...new Set(Object.values(map).flatMap(([, ...tags]) => tags))]
+  const tags = [...TAG_OPTIONS.filter(t => used.includes(t)), ...used.filter(t => !TAG_OPTIONS.includes(t))]
+  return [{ key: "All", color: "#374151" }, ...Object.entries(BRANDS).map(([key, b]) => ({ key, color: b.color })), ...tags.map(key => ({ key, color: "#00aa13" }))]
+}
+const inCategory = (s, key, map = CLASS_BRAND) => {
+  if (key === "All") return true
+  const b = brandOf(s.name, map)
+  return BRANDS[key] ? b.name === key : b.tags.includes(key)
+}
 
-function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onCollapseNav, initialDate, riderChanges = {}, setRiderChanges }) {
+function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onCollapseNav, initialDate, riderChanges = {}, setRiderChanges, classTags = CLASS_BRAND }) {
   const [selectedSession, setSelectedSession] = useState(null)
   const [selectedBike, setSelectedBike]       = useState(null)
   const bookingDrag = useDragToDismiss(() => { setSelectedSession(null); setShowPlan(false) })
@@ -2956,7 +2971,7 @@ function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onColla
   // Timetable + your schedule + changes — the same data the Calendar shows
   const daySessions = riderDay(selectedDate, riderChanges)
   const [category, setCategory] = useState("All")   // browse by class brand / tag — "All" is the full list
-  const dayData     = Object.fromEntries(["morning", "afternoon", "evening"].map(part => [part, daySessions.filter(s => s.part === part && inCategory(s, category))]))
+  const dayData     = Object.fromEntries(["morning", "afternoon", "evening"].map(part => [part, daySessions.filter(s => s.part === part && inCategory(s, category, classTags))]))
   const hasSessions = Object.values(dayData).some(arr => arr.length > 0)
   const monthCells  = getMonthGrid(monthView.year, monthView.month)
   const isPast      = selectedDate < BOOKING_TODAY
@@ -3032,7 +3047,7 @@ function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onColla
     const isBooked   = session.state === "booked"
     const isSelected = selectedSession?.name === session.name && selectedSession?.time === session.time
     const myBike     = isBooked && !isSocialClass(session.name) ? seatPlan(session).mine : null
-    const brand      = brandOf(session.name)
+    const brand      = brandOf(session.name, classTags)
     return (
       <div
         onClick={() => { setSelectedSession(session); setSelectedBike(null) }}
@@ -3045,9 +3060,9 @@ function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onColla
             <p className={`text-xs mb-1 flex flex-wrap items-center gap-x-2 gap-y-1 ${muted}`}>
               <span>{session.time}</span>
               <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: brand.color }}>{brand.name}</span>
-              {brand.tags.includes("Beginner-friendly") && (
-                <span className={`text-[10px] font-medium px-1.5 rounded-full ${darkMode ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-500"}`}>Beginner-friendly</span>
-              )}
+              {brand.tags.slice(0, 2).map(tag => (
+                <span key={tag} className={`text-[10px] font-medium px-1.5 rounded-full ${darkMode ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-500"}`}>{tag}</span>
+              ))}
             </p>
             <p className={`text-sm font-medium ${isSelected ? "text-[#00aa13]" : heading}`}>{session.name}</p>
             <p className={`text-xs ${muted}`}>{session.instructor} · 45 mins · {session.studio}</p>
@@ -3265,10 +3280,23 @@ function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onColla
           </div>
 
           {/* Browse by class type — "All" keeps the full list */}
-          <div role="tablist" aria-label="Class type" className="flex gap-1.5 overflow-x-auto pb-1 mb-3">
-            {BRAND_FILTERS.map(f => {
+          <div role="tablist" aria-label="Class type" className="flex flex-wrap gap-1.5 mb-3">
+            {categoryFilters(classTags).map((f, i, all) => {
               const on = category === f.key
-              const count = daySessions.filter(s => inCategory(s, f.key)).length
+              const count = daySessions.filter(s => inCategory(s, f.key, classTags)).length
+              const isTag = f.key !== "All" && !BRANDS[f.key]
+              // Tags sit on their own line as lighter # chips; empty ones are hidden so the row stays short
+              if (isTag && !count && !on) return null
+              if (isTag) return (
+                <React.Fragment key={f.key}>
+                  {BRANDS[all[i - 1]?.key] && <div className="basis-full h-0" aria-hidden />}
+                  <button role="tab" aria-selected={on} onClick={() => { setCategory(on ? "All" : f.key); setSelectedSession(null) }}
+                    className={`whitespace-nowrap px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors
+                      ${on ? "bg-[#e6f9e8] border-[#00aa13] text-[#00aa13]" : darkMode ? "border-transparent bg-gray-800 text-gray-400 hover:text-gray-200" : "border-transparent bg-gray-100 text-gray-500 hover:text-gray-800"}`}>
+                    # {f.key} <span className="opacity-70">{count}</span>
+                  </button>
+                </React.Fragment>
+              )
               return (
                 <button key={f.key} role="tab" aria-selected={on} onClick={() => { setCategory(f.key); setSelectedSession(null) }}
                   className={`flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors
@@ -5055,10 +5083,22 @@ function RidesPage({ darkMode, onToggleDarkMode, navExpanded = false, onCollapse
 
 // ─── ACHIEVEMENTS PAGE ──────────────────────────────────────────────────────
 
-function AchievementsPage({ darkMode, onToggleDarkMode, onNavigate }) {
+// Class-type badges: ride a brand enough times to climb its tiers
+const BRAND_ICON = { Power: "💪", Endurance: "🛣️", HIIT: "🔥", Rhythm: "🎵", Recovery: "🌿", Technique: "🎯" }
+const BRAND_TIERS = [{ name: "Bronze", total: 5 }, { name: "Silver", total: 15 }, { name: "Gold", total: 30 }]
+const darken = (hex, k = 0.45) => "#" + [1, 3, 5].map(i => Math.round(parseInt(hex.slice(i, i + 2), 16) * k).toString(16).padStart(2, "0")).join("")
+
+function AchievementsPage({ darkMode, onToggleDarkMode, onNavigate, classTags = CLASS_BRAND }) {
   const card    = `rounded-2xl border p-6 transition-colors ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`
   const heading = darkMode ? "text-white"    : "text-gray-900"
   const muted   = darkMode ? "text-gray-400" : "text-gray-500"
+  const brandRides = Object.keys(BRANDS).map(key => {
+    const done = ridesData.filter(r => brandOf(r.name, classTags).name === key).length
+    const next = BRAND_TIERS.find(t => done < t.total)
+    const earned = [...BRAND_TIERS].reverse().find(t => done >= t.total)
+    return { key, done, next, earned, color: BRANDS[key].color }
+  })
+  const triedBrands = brandRides.filter(b => b.done > 0).length
 
   return (
     <div className="p-4 md:p-8">
@@ -5106,6 +5146,38 @@ function AchievementsPage({ darkMode, onToggleDarkMode, onNavigate }) {
                 <div className="h-2 rounded-full transition-all" style={{ width: `${(a.progress/a.total)*100}%`, background: c1 }} />
               </div>
               <p className={`text-xs mt-2 text-right ${muted}`}>{Math.round((a.progress/a.total)*100)}%</p>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Class types */}
+      <h2 className={`font-semibold mb-1 ${heading}`}>Class types</h2>
+      <p className={`text-sm mb-4 ${muted}`}>Ride {BRAND_TIERS.map(t => t.total).join(" / ")} classes of a type for Bronze, Silver and Gold · {triedBrands} of {brandRides.length} types tried</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+        {brandRides.map(b => {
+          const goal = b.next?.total ?? BRAND_TIERS.at(-1).total
+          return (
+            <div key={b.key} className={`${card} !p-5`} style={{ boxShadow: `inset 3px 0 0 ${b.color}` }} data-brand-badge={b.key}>
+              <div className="flex items-center gap-4 mb-3">
+                <PremiumBadge icon={BRAND_ICON[b.key]} colors={[b.color, darken(b.color)]} size={52} earned={!!b.earned} darkMode={darkMode} />
+                <div className="min-w-0">
+                  <p className={`font-semibold ${heading}`}>{b.key} {b.next ? b.next.name : "Gold"}</p>
+                  <p className={`text-xs mt-0.5 ${muted}`}>
+                    {b.earned ? <span className="font-medium" style={{ color: b.color }}>{b.earned.name} earned ✓ · </span> : null}
+                    {b.next ? `${b.done} of ${goal} ${b.key} classes` : `All ${goal} ${b.key} classes done`}
+                  </p>
+                </div>
+              </div>
+              <div className={`w-full rounded-full h-2 ${darkMode ? "bg-gray-700" : "bg-gray-100"}`}>
+                <div className="h-2 rounded-full transition-all" style={{ width: `${Math.min(100, b.done / goal * 100)}%`, background: b.color }} />
+              </div>
+              <div className="flex items-center justify-between mt-2">
+                {b.done === 0
+                  ? <button onClick={() => onNavigate("Bookings")} className="text-xs font-semibold" style={{ color: b.color }}>Find a {b.key} class →</button>
+                  : <span className={`text-xs ${muted}`}>{b.next ? `${goal - b.done} to go` : "Maxed out"}</span>}
+                <span className={`text-xs ${muted}`}>{Math.round(Math.min(100, b.done / goal * 100))}%</span>
+              </div>
             </div>
           )
         })}
@@ -6966,7 +7038,7 @@ function ZoneMixDonut({ segments, darkMode }) {
   )
 }
 
-function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish, initialRide, onSaveTemplate }) {
+function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish, initialRide, onSaveTemplate, classTags = CLASS_BRAND }) {
   const heading = darkMode ? "text-white"    : "text-gray-900"
   const muted   = darkMode ? "text-gray-400" : "text-gray-500"
   const card    = `rounded-2xl border transition-colors ${darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`
@@ -6986,6 +7058,11 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish, initialRide, 
   const [query, setQuery]     = useState("")
   const [crossfade, setCrossfade] = useState(true)
   const [published, setPublished] = useState(false)
+  // Brand + tags riders will browse by (pre-filled when editing a class that already has them)
+  const savedTags = classTags[ir?.name] || []
+  const [brand, setBrand]     = useState(savedTags[0] || "Power")
+  const [tags, setTags]       = useState(savedTags.slice(1))
+  const [newTag, setNewTag]   = useState("")
   const [brush, setBrush]     = useState(30)          // seconds added per tap
   const [cadence, setCadence] = useState(1)           // index into CADENCE_BANDS
   const [strokes, setStrokes] = useState(ir?.strokes || [])          // [secs, zone, cadenceIdx]
@@ -7223,7 +7300,7 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish, initialRide, 
 
   function publish() {
     if (!total) return
-    onPublish?.({ name, length, social, series: programme, weeks: programme ? weeks : 1 })
+    onPublish?.({ name, length, social, series: programme, weeks: programme ? weeks : 1, brand, tags })
     setPublished(true)
     setTimeout(() => setPublished(false), 2500)
   }
@@ -7888,6 +7965,44 @@ function ClassBuilderPage({ darkMode, onToggleDarkMode, onPublish, initialRide, 
             </div>
           </div>
         )}
+      </div>
+
+      {/* Brand & tags — how riders find this class, and what the studio owner learns from */}
+      <div className={`${card} p-5 mb-5`}>
+        <p className={`text-sm font-semibold mb-1 ${heading}`}>Brand & tags</p>
+        <p className={`text-xs mb-3 ${muted}`}>Riders browse and filter classes by these, and the studio owner sees which ones fill up best</p>
+        <p className={`text-[11px] font-semibold uppercase tracking-wider mb-2 ${muted}`}>Brand</p>
+        <div className="flex flex-wrap gap-2 mb-4">
+          {Object.entries(BRANDS).map(([key, b]) => (
+            <button key={key} onClick={() => setBrand(key)} title={b.blurb} aria-pressed={brand === key}
+              className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors
+                ${brand === key ? "text-white border-transparent" : darkMode ? "border-gray-700 text-gray-300 hover:bg-gray-800" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}
+              style={brand === key ? { background: b.color } : undefined}>
+              <span className="w-2 h-2 rounded-full" style={{ background: brand === key ? "#fff" : b.color }} />{key}
+            </button>
+          ))}
+        </div>
+        <p className={`text-[11px] font-semibold uppercase tracking-wider mb-2 ${muted}`}>Tags <span className="normal-case font-normal tracking-normal">· pick any that fit, or add your own</span></p>
+        <div className="flex flex-wrap items-center gap-2">
+          {[...TAG_OPTIONS, ...tags.filter(tag => !TAG_OPTIONS.includes(tag))].map(tag => {
+            const on = tags.includes(tag)
+            return (
+              <button key={tag} onClick={() => setTags(ts => on ? ts.filter(x => x !== tag) : [...ts, tag])} aria-pressed={on}
+                className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${on ? "bg-[#e6f9e8] border-[#00aa13] text-[#00aa13] font-semibold" : darkMode ? "border-gray-700 text-gray-400 hover:bg-gray-800" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}>
+                {on ? "✓ " : ""}{tag}
+              </button>
+            )
+          })}
+          <form onSubmit={e => { e.preventDefault(); const tag = newTag.trim().replace(/\s+/g, " "); if (tag && !tags.includes(tag)) setTags(ts => [...ts, tag]); setNewTag("") }}>
+            <input value={newTag} onChange={e => setNewTag(e.target.value)} placeholder="+ Add your own tag" maxLength={24} aria-label="Add your own tag"
+              className={`w-40 px-3 py-1.5 rounded-full border text-xs focus:outline-none focus:ring-2 focus:ring-[#00aa13] ${darkMode ? "bg-gray-800 border-gray-700 text-white placeholder-gray-500" : "bg-white border-gray-200 text-gray-900 placeholder-gray-400"}`} />
+          </form>
+        </div>
+        <div className={`mt-4 rounded-xl px-3 py-2.5 text-xs flex flex-wrap items-center gap-1.5 ${darkMode ? "bg-gray-800" : "bg-gray-50"}`} style={{ boxShadow: `inset 3px 0 0 ${BRANDS[brand].color}` }}>
+          <span className={muted}>Riders will see:</span>
+          <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: BRANDS[brand].color }}>{brand}</span>
+          {tags.map(tag => <span key={tag} className={`text-[10px] font-medium px-1.5 rounded-full ${darkMode ? "bg-gray-700 text-gray-300" : "bg-white text-gray-500"}`}>{tag}</span>)}
+        </div>
       </div>
 
       {/* Instructor quote */}

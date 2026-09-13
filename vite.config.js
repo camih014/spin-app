@@ -11,8 +11,9 @@ export default defineConfig({
   build: {
     rolldownOptions: {
       input: {
+        // Home page shows the app inside MacBook / iPad / iPhone frames; the app itself lives at app.html
         main: resolve(import.meta.dirname, 'index.html'),
-        prototype: resolve(import.meta.dirname, 'prototype.html'),
+        app: resolve(import.meta.dirname, 'app.html'),
       },
     },
   },

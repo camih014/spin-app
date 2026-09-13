@@ -1030,13 +1030,16 @@ const OWNER_NAV = [
 // Instructor pages reachable but not in the sidebar (e.g. via a dashboard widget)
 const INSTRUCTOR_EXTRA_PAGES = ["Subs"]
 
-// Roles the signed-in person holds. This demo user is a rider, an instructor AND a studio owner, so
-// they get a workspace switcher. A rider-only account would have a single role and no toggle.
+// Every role a person can hold. The demo user holds all three by default; ?roles=rider,owner (or the
+// prototype's "View as" toggles) narrows it. With a single role there's no workspace switcher.
 const USER_ROLES = [
   { key: "rider",      label: "Rider",        icon: Bike,            nav: RIDER_NAV,      home: "Home" },
   { key: "instructor", label: "Instructor",   icon: LayoutDashboard, nav: INSTRUCTOR_NAV, home: "Studio Home" },
   { key: "owner",      label: "Studio Owner", icon: Building2,        nav: OWNER_NAV,      home: "Overview" },
 ]
+
+// Which workspace a page belongs to (shared pages like Profile belong to none)
+const workspaceOf = page => INSTRUCTOR_EXTRA_PAGES.includes(page) ? "instructor" : USER_ROLES.find(r => r.nav.some(n => n.label === page))?.key
 
 // Saved / AI-built ride templates surfaced on the Instructor Overview. Segments carry the structure so
 // "Open in Class Builder" can pre-fill the existing builder.
@@ -1077,7 +1080,28 @@ function rideToStrokes(ride) {
 const nearestLen = m => [30, 45, 60].reduce((a, b) => Math.abs(b - m) < Math.abs(a - m) ? b : a, 45)
 
 export default function App() {
-  const [activePage, setActivePage] = useState("Home")
+  const [roleKeys, setRoleKeys] = useState(() => {
+    const fromUrl = (new URLSearchParams(window.location.search).get("roles") || "").split(",").filter(k => USER_ROLES.some(r => r.key === k))
+    return fromUrl.length ? fromUrl : USER_ROLES.map(r => r.key)
+  })
+  const roles = USER_ROLES.filter(r => roleKeys.includes(r.key))
+  const [activePage, setActivePage] = useState(() => roles[0].home)
+  // The device-frame prototype changes roles live; leave any page that belongs to a role that was switched off
+  useEffect(() => {
+    function onMessage(e) {
+      if (e.origin !== window.location.origin || e.data?.type !== "cyclehq:roles") return
+      const next = USER_ROLES.filter(r => e.data.roles?.includes(r.key))
+      if (!next.length) return
+      setRoleKeys(next.map(r => r.key))
+      setActivePage(page => { const ws = workspaceOf(page); return ws && !next.some(r => r.key === ws) ? next[0].home : page })
+      const url = new URL(window.location.href)
+      url.searchParams.set("roles", next.map(r => r.key).join(","))
+      window.history.replaceState(null, "", url)
+    }
+    window.addEventListener("message", onMessage)
+    if (window.parent !== window) window.parent.postMessage({ type: "cyclehq:ready" }, window.location.origin)
+    return () => window.removeEventListener("message", onMessage)
+  }, [])
   const [darkMode, setDarkMode]     = useState(false)
   const [authed, setAuthed]         = useState(true)
   const [openSections, setOpenSections] = useState({ rider: true, instructor: true, owner: true })
@@ -1110,7 +1134,7 @@ export default function App() {
     setRosterClass(null); setActivePage("Class Builder")
   }
 
-  if (!authed) return <AuthPage onAuth={() => { setAuthed(true); setActivePage("Home") }} />
+  if (!authed) return <AuthPage onAuth={() => { setAuthed(true); setActivePage(roles[0].home) }} />
 
   const bottomItems = [
     { label: "Profile",  icon: User     },
@@ -1118,15 +1142,18 @@ export default function App() {
     { label: "Log out",  icon: LogOut   },
   ]
 
-  // Which workspace each page belongs to, so the mobile nav + role toggle stay in sync with the page
-  const workspaceOf = page => INSTRUCTOR_EXTRA_PAGES.includes(page) ? "instructor" : USER_ROLES.find(r => r.nav.some(n => n.label === page))?.key
-  const workspace = workspaceOf(activePage) || "rider"
-  const mobileNav = (USER_ROLES.find(r => r.key === workspace) || USER_ROLES[0]).nav
+  // Keep the mobile nav + role toggle in sync with the page, limited to the roles this person holds
+  const workspace = roleKeys.includes(workspaceOf(activePage)) ? workspaceOf(activePage) : roles[0].key
+  const mobileNav = roles.find(r => r.key === workspace).nav
 
   function openRoster(cls) { setRosterClass(cls); setActivePage("My Classes") }
-  function navTo(page) { setRosterClass(null); setBuilderRide(null); setActivePage(page) }
+  function navTo(page) {
+    // A page from a role this person doesn't hold falls back to their first workspace
+    const ws = workspaceOf(page)
+    setRosterClass(null); setBuilderRide(null); setActivePage(ws && !roleKeys.includes(ws) ? roles[0].home : page)
+  }
   function switchWorkspace(key) {
-    const r = USER_ROLES.find(x => x.key === key); if (!r) return
+    const r = roles.find(x => x.key === key); if (!r) return
     setRosterClass(null); setActivePage(r.home)
   }
 
@@ -1159,15 +1186,11 @@ export default function App() {
 
         {/* Workspaces */}
         <div className="flex flex-col gap-2 flex-1 overflow-y-auto">
-          <NavSection title="Rider" icon={Bike} items={RIDER_NAV} expanded={navExpanded}
-            activePage={activePage} onSelect={navTo} darkMode={darkMode}
-            open={openSections.rider} onToggle={() => toggle("rider")} />
-          <NavSection title="Instructor" icon={LayoutDashboard} items={INSTRUCTOR_NAV} expanded={navExpanded}
-            activePage={activePage} onSelect={navTo} darkMode={darkMode}
-            open={openSections.instructor} onToggle={() => toggle("instructor")} />
-          <NavSection title="Studio Owner" icon={Building2} items={OWNER_NAV} expanded={navExpanded}
-            activePage={activePage} onSelect={navTo} darkMode={darkMode}
-            open={openSections.owner} onToggle={() => toggle("owner")} />
+          {roles.map(r => (
+            <NavSection key={r.key} title={r.label} icon={r.icon} items={r.nav} expanded={navExpanded}
+              activePage={activePage} onSelect={navTo} darkMode={darkMode}
+              open={openSections[r.key]} onToggle={() => toggle(r.key)} />
+          ))}
         </div>
 
         {/* Bottom nav */}
@@ -1205,16 +1228,16 @@ export default function App() {
         {/* Shared */}
         {activePage === "Profile"      && <ProfilePage  darkMode={darkMode} onToggleDarkMode={dm} />}
         {activePage === "Settings"     && <SettingsPage darkMode={darkMode} onToggleDarkMode={dm} />}
-        {activePage === "Log out"      && <LogOutPage   darkMode={darkMode} onLogout={() => setAuthed(false)} onStay={() => setActivePage("Home")} />}
+        {activePage === "Log out"      && <LogOutPage   darkMode={darkMode} onLogout={() => setAuthed(false)} onStay={() => setActivePage(roles[0].home)} />}
       </main>
 
       {/* ── Mobile bottom navigation ── */}
       <div className="fixed bottom-0 left-0 right-0 md:hidden z-40">
         {/* Workspace switcher — only shown when the person holds more than one role */}
-        {USER_ROLES.length > 1 && (
+        {roles.length > 1 && (
           <div className="flex justify-center mb-1.5">
             <div className={`inline-flex rounded-full p-0.5 border shadow-lg ${darkMode ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
-              {USER_ROLES.map(r => {
+              {roles.map(r => {
                 const on = r.key === workspace
                 return (
                   <button key={r.key} onClick={() => switchWorkspace(r.key)}

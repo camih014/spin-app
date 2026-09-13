@@ -35,7 +35,25 @@
       .segmented button[aria-pressed="true"] { background: var(--brand); color: #fff; }
       .segmented button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
       .readout { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 92px; }
-      .hint { font-size: 12px; color: var(--muted); }
+      .stage-hint { position: absolute; left: 0; right: 0; bottom: 6px; text-align: center; font-size: 12px; color: var(--muted); pointer-events: none; }
+      .divider { width: 1px; height: 22px; background: #dde2e8; }
+
+      /* "View as" role toggles — any combination, at least one on */
+      .roles { display: flex; align-items: center; gap: 8px; }
+      .group-label { font-size: 12px; font-weight: 500; color: var(--muted); }
+      .role-toggles { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+      .role-toggles button {
+        font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+        display: inline-flex; align-items: center; gap: 7px; padding: 5px 12px 5px 7px; border-radius: 999px;
+        background: #fff; color: var(--muted); border: 1px solid #e3e7ec; box-shadow: 0 1px 2px rgba(20,30,50,.05);
+        transition: background .15s, border-color .15s, color .15s;
+      }
+      .role-toggles .tick { width: 17px; height: 17px; border-radius: 50%; border: 1.5px solid #cbd2da; display: grid; place-items: center; transition: background .15s, border-color .15s; }
+      .role-toggles button[aria-pressed="true"] { color: var(--text); background: #e6f9e8; border-color: var(--brand); }
+      .role-toggles button[aria-pressed="true"] .tick { background: var(--brand); border-color: var(--brand); }
+      .role-toggles button[aria-pressed="false"] .tick svg { visibility: hidden; }
+      .role-toggles button[aria-disabled="true"] { cursor: not-allowed; }
+      .role-toggles button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
       .open-link { font-size: 13px; font-weight: 600; color: var(--brand); text-decoration: none; }
       .open-link:hover { text-decoration: underline; }
 
@@ -46,7 +64,7 @@
       .device {
         --app-top: #f9fafb; --app-bottom: #ffffff; --ink: #111827;
         --menubar: #ececef; --pill: rgba(0,0,0,.06); --hair: rgba(0,0,0,.08);
-        position: absolute; left: 50%; top: 50%;
+        position: absolute; left: 50%; top: calc(50% - 14px); /* leaves room for the hint underneath */
         width: calc(var(--sw) + 2 * var(--bz)); height: calc(var(--sh) + 2 * var(--bz));
         padding: var(--bz);
         border-radius: var(--r) var(--r) var(--rb) var(--rb);
@@ -142,18 +160,27 @@
         </div>
       </div>
       <div class="controls">
+        <div class="roles" role="group" aria-label="View as">
+          <span class="group-label">View as</span>
+          <div class="role-toggles">
+            <button type="button" data-role="rider" aria-pressed="true"><span class="tick"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg></span>Rider</button>
+            <button type="button" data-role="instructor" aria-pressed="true"><span class="tick"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg></span>Instructor</button>
+            <button type="button" data-role="owner" aria-pressed="true"><span class="tick"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg></span>Studio Owner</button>
+          </div>
+        </div>
+        <span class="divider" aria-hidden="true"></span>
         <div class="segmented" role="group" aria-label="Device">
           <button type="button" data-preset="desktop" aria-pressed="true">Desktop</button>
           <button type="button" data-preset="tablet" aria-pressed="false">Tablet</button>
           <button type="button" data-preset="phone" aria-pressed="false">Phone</button>
         </div>
         <span class="readout" id="readout"></span>
-        <span class="hint">Drag a device edge to switch</span>
         <a class="open-link" href="./app.html" target="_blank" rel="noopener">Open full app ↗</a>
       </div>
     </header>
 
     <main class="stage" id="stage">
+      <p class="stage-hint">Drag a device edge to switch between desktop, tablet and phone</p>
       <div class="device no-anim" id="device" data-device="desktop">
         <div class="deco notch"></div>
         <div class="deco island"></div>
@@ -206,7 +233,7 @@
               </div>
             </div>
           </div>
-          <iframe src="./app.html" title="CycleHQ app"></iframe>
+          <iframe title="CycleHQ app"></iframe>
           <div class="chrome-bottom"><div class="home-indicator"></div></div>
         </div>
 
@@ -230,7 +257,15 @@
       const frame = device.querySelector("iframe")
       const presetButtons = document.querySelectorAll("[data-preset]")
 
-      let current = ORDER.includes(location.hash.slice(1)) ? location.hash.slice(1) : "desktop"
+      // The hash keeps the view shareable, e.g. #phone&roles=rider,owner (all roles when omitted)
+      const ROLE_KEYS = ["rider", "instructor", "owner"]
+      const hashParams = new URLSearchParams(location.hash.slice(1).replace(/^(desktop|tablet|phone)(?=&|$)/, "device=$1"))
+      let current = ORDER.includes(hashParams.get("device")) ? hashParams.get("device") : "desktop"
+      let roles = ROLE_KEYS.filter(k => (hashParams.get("roles") || "").split(",").includes(k))
+      if (!roles.length) roles = [...ROLE_KEYS]
+      const appUrl = () => "./app.html?roles=" + roles.join(",")
+      const writeHash = () => history.replaceState(null, "", "#" + current + (roles.length < ROLE_KEYS.length ? "&roles=" + roles.join(",") : ""))
+      frame.src = appUrl()
 
       const STATUS_ICONS = `
         <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg>
@@ -240,7 +275,7 @@
 
       function scaleFor(key) {
         const d = DEVICES[key], r = stage.getBoundingClientRect()
-        return Math.max(0.15, Math.min((r.width - 140) / d.W, (r.height - 48) / d.H, 1))
+        return Math.max(0.15, Math.min((r.width - 140) / d.W, (r.height - 84) / d.H, 1))
       }
       // Distance from the stage centre to a device's drag handle, in screen pixels
       const handleDistance = key => (DEVICES[key].sw / 2 + DEVICES[key].bz) * scaleFor(key) + 26
@@ -252,10 +287,10 @@
         for (const k of ["sw", "sh", "bz", "r", "rb", "sr", "top", "bottom", "ringw"]) set("--" + k, d[k] + "px")
         set("--frame", d.frame); set("--ring", d.ring); set("--s", s); set("--dy", (-d.baseDrop / 2 * s) + "px")
         device.dataset.device = key
-        readout.textContent = `${d.label} · ${d.sw}px`
+        readout.textContent = `${d.sw}px`
         presetButtons.forEach(b => b.setAttribute("aria-pressed", String(b.dataset.preset === key)))
         device.querySelectorAll(".handle").forEach(h => h.setAttribute("aria-valuetext", d.label))
-        history.replaceState(null, "", "#" + key)
+        writeHash()
       }
 
       // Drag either edge: the device whose edge is nearest the pointer takes over
@@ -289,6 +324,31 @@
         })
       })
       presetButtons.forEach(b => b.addEventListener("click", () => apply(b.dataset.preset)))
+
+      // "View as" toggles: any combination of roles, but the last one can't be switched off
+      const roleButtons = document.querySelectorAll("[data-role]")
+      const openLink = document.querySelector(".open-link")
+      function renderRoles() {
+        roleButtons.forEach(b => {
+          const on = roles.includes(b.dataset.role), last = on && roles.length === 1
+          b.setAttribute("aria-pressed", String(on))
+          b.setAttribute("aria-disabled", String(last))
+          b.title = last ? "At least one role is needed" : ""
+        })
+        openLink.href = appUrl()
+        writeHash()
+      }
+      const sendRoles = () => { try { frame.contentWindow.postMessage({ type: "cyclehq:roles", roles }, location.origin) } catch { /* app not loaded yet */ } }
+      roleButtons.forEach(b => b.addEventListener("click", () => {
+        const key = b.dataset.role
+        const next = roles.includes(key) ? roles.filter(k => k !== key) : ROLE_KEYS.filter(k => k === key || roles.includes(k))
+        if (!next.length) return
+        roles = next
+        renderRoles()
+        sendRoles()
+      }))
+      // The app says when it's ready, so roles changed while it was still loading aren't lost
+      window.addEventListener("message", e => { if (e.source === frame.contentWindow && e.data?.type === "cyclehq:ready") sendRoles() })
 
       // Tint the status bar / browser bar to match the app (light or dark mode), like Safari does
       // Computed colours can be oklch() etc. (Tailwind v4), so resolve them to RGB through a 1×1 canvas
@@ -347,7 +407,9 @@
       }
       tick(); setInterval(tick, 30000)
 
-      window.addEventListener("resize", () => apply(current))
+      // Refit whenever the stage changes size (window resize, or the toolbar wrapping onto two lines)
+      new ResizeObserver(() => apply(current)).observe(stage)
+      renderRoles()
       apply(current)
       requestAnimationFrame(() => requestAnimationFrame(() => device.classList.remove("no-anim")))
     </script>

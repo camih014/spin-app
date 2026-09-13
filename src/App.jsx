@@ -808,11 +808,12 @@ function PremiumBadge({ icon, colors, size = 56, earned = true, darkMode = false
   }
 
   return (
-    <div style={{
+    <div className="badge-glint" style={{
       width: size, height: size, borderRadius: "50%", flexShrink: 0,
       padding: ring,
       background: "linear-gradient(145deg, #F8E878 0%, #D4A018 35%, #8B6000 65%, #C8980C 100%)",
       boxShadow: "0 2px 8px rgba(0,0,0,0.18), 0 1px 2px rgba(0,0,0,0.10)",
+      "--glint-delay": `-${(String(icon).codePointAt(0) || 0) % 40 / 10}s`,   // badges shimmer out of step with each other
     }}>
       <div style={{
         width: "100%", height: "100%", borderRadius: "50%",
@@ -825,6 +826,7 @@ function PremiumBadge({ icon, colors, size = 56, earned = true, darkMode = false
           background: "linear-gradient(170deg, rgba(255,255,255,0.28) 0%, transparent 48%)",
           pointerEvents: "none",
         }} />
+        <div className="badge-sheen" />
         <span style={{ fontSize: size * 0.42, lineHeight: 1 }}>{icon}</span>
       </div>
     </div>
@@ -1527,6 +1529,20 @@ const SCROLL_HINT_CSS = `
   }
   .app-sticky { transition: box-shadow .2s ease }
   main[data-scrolled="1"] .app-sticky { box-shadow: 0 12px 20px -16px rgba(15,23,42,.4) }
+  /* Earned badges: a slow coin-like twist left and right, with a glint of light passing over */
+  @keyframes badge-twist {
+    0%, 100% { transform: perspective(220px) rotateY(0) rotate(0) }
+    22% { transform: perspective(220px) rotateY(-22deg) rotate(-4deg) }
+    50% { transform: perspective(220px) rotateY(0) rotate(0) }
+    72% { transform: perspective(220px) rotateY(22deg) rotate(4deg) }
+  }
+  @keyframes badge-sheen { 0%, 58% { transform: translateX(-160%) skewX(-20deg) } 82%, 100% { transform: translateX(260%) skewX(-20deg) } }
+  .badge-glint { animation: badge-twist 4.2s ease-in-out infinite; animation-delay: var(--glint-delay, 0s) }
+  .badge-sheen { position: absolute; inset: 0; border-radius: 50%; overflow: hidden; pointer-events: none }
+  .badge-sheen::after { content: ""; position: absolute; top: -10%; bottom: -10%; left: 0; width: 40%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.8), transparent);
+    animation: badge-sheen 4.2s ease-in-out infinite; animation-delay: var(--glint-delay, 0s) }
+  @media (prefers-reduced-motion: reduce) { .badge-glint, .badge-sheen::after { animation: none } }
 `
 
 function useScrollHints(mainRef) {
@@ -2970,8 +2986,15 @@ function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onColla
   const weekDates   = getWeekDates(weekOffset)
   // Timetable + your schedule + changes — the same data the Calendar shows
   const daySessions = riderDay(selectedDate, riderChanges)
-  const [category, setCategory] = useState("All")   // browse by class brand / tag — "All" is the full list
-  const dayData     = Object.fromEntries(["morning", "afternoon", "evening"].map(part => [part, daySessions.filter(s => s.part === part && inCategory(s, category, classTags))]))
+  const [category, setCategory] = useState("All")   // browse by class brand — "All" is the full list
+  // Tags live behind a Filters button: pick several in the overlay, results update when you apply
+  const [tagFilter, setTagFilter]   = useState([])
+  const [filterOpen, setFilterOpen] = useState(false)
+  const [draftTags, setDraftTags]   = useState([])
+  const allTags   = categoryFilters(classTags).filter(f => f.key !== "All" && !BRANDS[f.key]).map(f => f.key)
+  const tagMatch  = (s, list) => !list.length || brandOf(s.name, classTags).tags.some(tag => list.includes(tag))
+  const openFilters = () => { setDraftTags(tagFilter); setFilterOpen(true) }
+  const dayData     = Object.fromEntries(["morning", "afternoon", "evening"].map(part => [part, daySessions.filter(s => s.part === part && inCategory(s, category, classTags) && tagMatch(s, tagFilter))]))
   const hasSessions = Object.values(dayData).some(arr => arr.length > 0)
   const monthCells  = getMonthGrid(monthView.year, monthView.month)
   const isPast      = selectedDate < BOOKING_TODAY
@@ -3277,23 +3300,11 @@ function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onColla
           </div>
 
           {/* Browse by class type — "All" keeps the full list */}
-          <div role="tablist" aria-label="Class type" className="flex flex-wrap gap-1.5 mb-3">
-            {categoryFilters(classTags).map((f, i, all) => {
+          <div className="flex flex-wrap items-center gap-1.5 mb-3">
+          <div role="tablist" aria-label="Class type" className="contents">
+            {categoryFilters(classTags).filter(f => f.key === "All" || BRANDS[f.key]).map(f => {
               const on = category === f.key
-              const count = daySessions.filter(s => inCategory(s, f.key, classTags)).length
-              const isTag = f.key !== "All" && !BRANDS[f.key]
-              // Tags sit on their own line as lighter # chips; empty ones are hidden so the row stays short
-              if (isTag && !count && !on) return null
-              if (isTag) return (
-                <React.Fragment key={f.key}>
-                  {BRANDS[all[i - 1]?.key] && <div className="basis-full h-0" aria-hidden />}
-                  <button role="tab" aria-selected={on} onClick={() => { setCategory(on ? "All" : f.key); setSelectedSession(null) }}
-                    className={`whitespace-nowrap px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors
-                      ${on ? "bg-[#e6f9e8] border-[#00aa13] text-[#00aa13]" : darkMode ? "border-transparent bg-gray-800 text-gray-400 hover:text-gray-200" : "border-transparent bg-gray-100 text-gray-500 hover:text-gray-800"}`}>
-                    # {f.key} <span className="opacity-70">{count}</span>
-                  </button>
-                </React.Fragment>
-              )
+              const count = daySessions.filter(s => inCategory(s, f.key, classTags) && tagMatch(s, tagFilter)).length
               return (
                 <button key={f.key} role="tab" aria-selected={on} onClick={() => { setCategory(f.key); setSelectedSession(null) }}
                   className={`flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors
@@ -3306,6 +3317,64 @@ function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onColla
               )
             })}
           </div>
+            {/* Tag filters — one button instead of a long row of tags */}
+            <button onClick={openFilters} aria-haspopup="dialog" data-filter-button
+              className={`flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors
+                ${tagFilter.length ? "bg-[#e6f9e8] border-[#00aa13] text-[#00aa13]" : darkMode ? "border-gray-700 text-gray-300 hover:bg-gray-800" : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"}`}>
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden><path d="M2 4h12M4.5 8h7M7 12h2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
+              Filters
+              {tagFilter.length > 0 && <span className="text-[10px] font-bold px-1.5 rounded-full bg-[#00aa13] text-white">{tagFilter.length}</span>}
+            </button>
+            {tagFilter.map(tag => (
+              <button key={tag} onClick={() => { setTagFilter(tf => tf.filter(x => x !== tag)); setSelectedSession(null) }} aria-label={`Remove ${tag} filter`}
+                className={`flex items-center gap-1 whitespace-nowrap px-2.5 py-1 rounded-full text-[11px] font-medium ${darkMode ? "bg-gray-800 text-gray-300" : "bg-gray-100 text-gray-600"}`}>
+                {tag} <span aria-hidden className="opacity-60">✕</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Filters overlay: bottom sheet on phones, centred card on bigger screens */}
+          {filterOpen && (() => {
+            const inBrand = daySessions.filter(s => inCategory(s, category, classTags))
+            const resultCount = inBrand.filter(s => tagMatch(s, draftTags)).length
+            return (
+              <div className="fixed inset-0 z-[70] flex items-end md:items-center justify-center bg-black/40 backdrop-blur-[2px]" onClick={() => setFilterOpen(false)}>
+                <div role="dialog" aria-modal="true" aria-label="Filter by tags" onClick={e => e.stopPropagation()}
+                  onKeyDown={e => e.key === "Escape" && setFilterOpen(false)}
+                  className={`w-full md:max-w-md rounded-t-3xl md:rounded-3xl p-5 pb-8 md:pb-5 shadow-2xl ${darkMode ? "bg-gray-900 text-white" : "bg-white text-gray-900"}`}>
+                  <div className={`md:hidden mx-auto mb-4 w-10 h-1 rounded-full ${darkMode ? "bg-gray-700" : "bg-gray-200"}`} />
+                  <div className="flex items-start justify-between gap-3 mb-1">
+                    <p className="text-base font-semibold">Filter by tags</p>
+                    <button onClick={() => setFilterOpen(false)} aria-label="Close filters" className={`w-8 h-8 -mt-1 -mr-1 rounded-full flex items-center justify-center ${darkMode ? "hover:bg-gray-800 text-gray-400" : "hover:bg-gray-100 text-gray-500"}`}>✕</button>
+                  </div>
+                  <p className={`text-xs mb-4 ${muted}`}>Pick as many as you like — you'll see classes with any of them{category !== "All" ? ` · in ${category}` : ""}</p>
+                  <div className="flex flex-wrap gap-2 mb-5">
+                    {allTags.map(tag => {
+                      const on = draftTags.includes(tag)
+                      const n = inBrand.filter(s => brandOf(s.name, classTags).tags.includes(tag)).length
+                      return (
+                        <button key={tag} aria-pressed={on} onClick={() => setDraftTags(d => on ? d.filter(x => x !== tag) : [...d, tag])}
+                          className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold border transition-colors
+                            ${on ? "bg-[#e6f9e8] border-[#00aa13] text-[#00aa13]" : darkMode ? "border-gray-700 text-gray-300 hover:bg-gray-800" : "border-gray-200 text-gray-600 hover:bg-gray-50"} ${!n && !on ? "opacity-50" : ""}`}>
+                          <span className={`w-4 h-4 rounded flex items-center justify-center text-[10px] border ${on ? "bg-[#00aa13] border-[#00aa13] text-white" : darkMode ? "border-gray-600" : "border-gray-300"}`}>{on ? "✓" : ""}</span>
+                          {tag}
+                          <span className={on ? "opacity-70" : darkMode ? "text-gray-500" : "text-gray-400"}>{n}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => setDraftTags([])} disabled={!draftTags.length}
+                      className={`px-4 py-2.5 rounded-xl text-sm font-semibold ${draftTags.length ? (darkMode ? "text-gray-200 hover:bg-gray-800" : "text-gray-700 hover:bg-gray-100") : "opacity-40"}`}>Clear all</button>
+                    <button onClick={() => { setTagFilter(draftTags); setFilterOpen(false); setSelectedSession(null) }}
+                      className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white bg-[#00aa13] hover:bg-[#008a0f] transition-colors">
+                      {resultCount ? `Show ${resultCount} class${resultCount === 1 ? "" : "es"}` : "No classes match — show anyway"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
 
           {/* Sessions list + Detail panel */}
           <div className="flex flex-col md:flex-row gap-4 md:gap-6 flex-1 md:overflow-hidden md:min-h-0">
@@ -3325,10 +3394,10 @@ function BookingsPage({ darkMode, onToggleDarkMode, navExpanded = false, onColla
                   })
                 : <div className="flex flex-col items-center justify-center h-full py-16 gap-3">
                     <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-2xl ${darkMode ? "bg-gray-800" : "bg-gray-50"}`}>🗓️</div>
-                    <p className={`text-sm font-semibold ${heading}`}>{category !== "All" && daySessions.length ? `No ${category} classes this day` : "No classes this day"}</p>
-                    <p className={`text-xs text-center max-w-xs ${muted}`}>{category !== "All" && daySessions.length ? "Try another day, or browse every class." : "There aren't any classes on this day — try another date."}</p>
-                    {category !== "All" && daySessions.length > 0 && (
-                      <button onClick={() => setCategory("All")} className="text-xs font-semibold text-[#00aa13] hover:underline">Show all {daySessions.length} classes</button>
+                    <p className={`text-sm font-semibold ${heading}`}>{(category !== "All" || tagFilter.length) && daySessions.length ? `No ${[category !== "All" && category, ...tagFilter].filter(Boolean).join(" · ")} classes this day` : "No classes this day"}</p>
+                    <p className={`text-xs text-center max-w-xs ${muted}`}>{(category !== "All" || tagFilter.length) && daySessions.length ? "Try another day, or clear your filters." : "There aren't any classes on this day — try another date."}</p>
+                    {(category !== "All" || tagFilter.length > 0) && daySessions.length > 0 && (
+                      <button onClick={() => { setCategory("All"); setTagFilter([]) }} className="text-xs font-semibold text-[#00aa13] hover:underline">Show all {daySessions.length} classes</button>
                     )}
                   </div>
               }
@@ -5097,10 +5166,7 @@ function AchievementsPage({ darkMode, onToggleDarkMode, onNavigate, classTags = 
   return (
     <div className="p-4 md:p-8">
       <div className={`${stickyHeader(darkMode)} flex items-center justify-between mb-6 md:mb-8`}>
-        <div>
-          <h1 className={`text-xl font-semibold ${heading}`}>Achievements</h1>
-          <p className={`text-sm ${muted}`}>Track your progress and milestones</p>
-        </div>
+        <h1 className={`text-lg md:text-xl font-semibold whitespace-nowrap mr-3 ${heading}`}>Achievements</h1>
         <div className="flex items-center gap-3">
           <span className={`hidden sm:inline text-sm ${muted}`}>eenieJIM</span>
           <Avatar name="eenieJIM" size={32} user />
@@ -6341,7 +6407,7 @@ function ClassEditModal({ cls, darkMode, existing, onClose, onSubmit }) {
 
   function submit() {
     onSubmit({
-      classKey: cls.dateIso + cls.time + cls.name, className: cls.name, when: `${cls.dateLabel} · ${cls.time}`, studio: cls.studio, instructor: "JIM",
+      classKey: cls.dateIso + cls.time + cls.name, className: cls.name, when: `${cls.dateLabel} · ${cls.time}`, studio: cls.studio, location: cls.location, instructor: "JIM",
       note: note.trim(), summary: [...summary, scope === "future" ? "Future classes" : "This class only"].join(" · "),
       changes: { blocks, originalBlocks, difficulty, originalDifficulty, songs, scope, removed, added },
     })

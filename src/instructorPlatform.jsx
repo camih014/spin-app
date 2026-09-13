@@ -5,7 +5,7 @@ import {
   Gauge, Zap, Activity, Radio, Bell, Award, Trophy, Target, Flame, TrendingUp,
   TrendingDown, ThumbsUp, MessageSquare, Sparkles, Wand2, Pencil, Save,
   Check, Plus, ChevronRight, Users, Clock, Calendar, Sun, Moon, SlidersHorizontal as SlidersIcon,
-  AlertTriangle, Wallet, Wrench, ArrowUpRight, Building2,
+  AlertTriangle, Wallet, Wrench, ArrowUpRight, Building2, MapPin,
 } from "lucide-react"
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -1083,7 +1083,8 @@ export function GrowthDashboardPage({ darkMode, onToggleDarkMode, onNavigate, em
               <div key={i} className={`pop-in flex flex-col items-center text-center gap-2 rounded-2xl p-3.5 border transition-all ${b.on ? "hover:-translate-y-0.5 hover:shadow-md" : ""} ${darkMode ? "border-gray-800" : "border-gray-100"}`} style={{ animationDelay: `${i * 50}ms` }}>
                 <div className="relative" style={{ width: 56, height: 56 }}>
                   <Ring pct={pct} size={56} stroke={4} color={ring} darkMode={darkMode}>
-                    <div className="w-10 h-10 rounded-full flex items-center justify-center text-white" style={{ background: b.on ? `linear-gradient(135deg,${b.c},${b.c}cc)` : (darkMode ? "#374151" : "#e5e7eb"), boxShadow: b.on ? `0 4px 12px ${b.c}55` : "none" }}>
+                    <div className={`relative w-10 h-10 rounded-full flex items-center justify-center text-white ${b.on ? "badge-glint" : ""}`} style={{ background: b.on ? `linear-gradient(135deg,${b.c},${b.c}cc)` : (darkMode ? "#374151" : "#e5e7eb"), boxShadow: b.on ? `0 4px 12px ${b.c}55` : "none", "--glint-delay": `-${i * 0.7}s` }}>
+                      {b.on && <span className="badge-sheen" />}
                       <b.Icon size={18} className={b.on ? "" : (darkMode ? "text-gray-500" : "text-gray-400")} />
                     </div>
                   </Ring>
@@ -1301,17 +1302,33 @@ const OWNER_KPIS = [
   { label: "Classes this week", value: "84", Icon: Calendar, trend: 2, accent: "#0ea5e9" },
   { label: "Rider retention", value: "91%", Icon: Heart, trend: 4, accent: "#ec4899" },
 ]
+// The owner runs two sites; Overview can show both together or one at a time (Studio 1 = Hampstead, Studio 2 = Shoreditch)
+const OWNER_SITES = [["all", "Both studios"], ["Hampstead", "Hampstead"], ["Shoreditch", "Shoreditch"]]
+const SITE_STUDIO = { Hampstead: "Studio 1", Shoreditch: "Studio 2" }
+const SITE_STATS = {
+  Hampstead:  { revenue: 14800, revTrend: 11, attendance: [89, 4], members: [368, 6], classes: [46, 3], retention: [92, 5] },
+  Shoreditch: { revenue: 10500, revTrend: 6,  attendance: [84, 1], members: [274, 3], classes: [38, 1], retention: [89, 2] },
+}
+const siteKpis = site => site === "all" ? OWNER_KPIS : (s => [
+  { ...OWNER_KPIS[0], value: `£${s.revenue.toLocaleString("en-GB")}`, trend: s.revTrend },
+  { ...OWNER_KPIS[1], value: `${s.attendance[0]}%`, trend: s.attendance[1] },
+  { ...OWNER_KPIS[2], value: String(s.members[0]), trend: s.members[1] },
+  { ...OWNER_KPIS[3], value: String(s.classes[0]), trend: s.classes[1] },
+  { ...OWNER_KPIS[4], value: `${s.retention[0]}%`, trend: s.retention[1] },
+])(SITE_STATS[site])
+// Which site a task or instructor request belongs to (null = both)
+const siteOfText = text => /Shoreditch/.test(text || "") ? "Shoreditch" : /Hampstead/.test(text || "") ? "Hampstead" : null
 // Studio tasks. category drives the tabs, priority "urgent" (or overdue) lands in Urgent, due = days from today
 const OWNER_TASKS_SEED = [
-  { id: "a1",  Icon: AlertTriangle, c: "#ef4444", category: "operations",  priority: "urgent", due: 0,  title: "Friday 6:30pm class has no instructor", sub: "Power Zone Ride · Hampstead · 18 booked", actions: [{ label: "Find cover", doneLabel: "Cover requested", c: "#ef4444" }] },
-  { id: "a10", Icon: Wrench,        c: "#ef4444", category: "maintenance", priority: "urgent", due: 1,  title: "Bikes 4 & 10 reported broken", sub: "Studio 1 · marked out of service for riders", actions: [{ label: "Book repair", doneLabel: "Repair booked", c: "#ef4444" }] },
-  { id: "a5",  Icon: Calendar,      c: "#8b5cf6", category: "approvals",   priority: "normal", due: 1,  title: "Confirm Saturday 10am Rhythm Ride", sub: "Requested by Zen Kiwi · Shoreditch · Studio 2", actions: [{ label: "Confirm", doneLabel: "Confirmed", c: GREEN }, { label: "Decline", doneLabel: "Declined", c: "#6b7280" }] },
-  { id: "a4",  Icon: Wrench,        c: "#0ea5e9", category: "maintenance", priority: "normal", due: -3, title: "Bike 12 maintenance overdue", sub: "Studio 1 · last serviced 92 days ago", actions: [{ label: "Log service", doneLabel: "Service logged", c: "#0ea5e9" }] },
+  { id: "a1",  site: "Hampstead",  Icon: AlertTriangle, c: "#ef4444", category: "operations",  priority: "urgent", due: 0,  title: "Friday 6:30pm class has no instructor", sub: "Power Zone Ride · Hampstead · 18 booked", actions: [{ label: "Find cover", doneLabel: "Cover requested", c: "#ef4444" }] },
+  { id: "a10", site: "Hampstead",  Icon: Wrench,        c: "#ef4444", category: "maintenance", priority: "urgent", due: 1,  title: "Bikes 4 & 10 reported broken", sub: "Hampstead · Studio 1 · marked out of service for riders", actions: [{ label: "Book repair", doneLabel: "Repair booked", c: "#ef4444" }] },
+  { id: "a5",  site: "Shoreditch", Icon: Calendar,      c: "#8b5cf6", category: "approvals",   priority: "normal", due: 1,  title: "Confirm Saturday 10am Rhythm Ride", sub: "Requested by Zen Kiwi · Shoreditch · Studio 2", actions: [{ label: "Confirm", doneLabel: "Confirmed", c: GREEN }, { label: "Decline", doneLabel: "Declined", c: "#6b7280" }] },
+  { id: "a4",  site: "Hampstead",  Icon: Wrench,        c: "#0ea5e9", category: "maintenance", priority: "normal", due: -3, title: "Bike 12 maintenance overdue", sub: "Hampstead · Studio 1 · last serviced 92 days ago", actions: [{ label: "Log service", doneLabel: "Service logged", c: "#0ea5e9" }] },
   { id: "a2",  Icon: Users,         c: "#f59e0b", category: "operations",  priority: "normal", due: 2,  title: "18 members haven't attended in 14 days", sub: "At risk of churn — worth a re-engagement nudge", actions: [{ label: "Re-engage", doneLabel: "Re-engaged", c: "#f59e0b" }] },
-  { id: "a3",  Icon: TrendingDown,  c: "#f59e0b", category: "operations",  priority: "normal", due: 5,  title: "Wednesday lunchtime ride only 42% full", sub: "Cadence Control · 12:30 · Shoreditch", actions: [{ label: "Promote", doneLabel: "Promoting", c: "#f59e0b" }] },
-  { id: "a7",  Icon: Wrench,        c: "#0ea5e9", category: "maintenance", priority: "normal", due: 10, title: "Quarterly service: Studio 2 bikes 1–10", sub: "Shoreditch · book the technician", actions: [{ label: "Schedule", doneLabel: "Scheduled", c: "#0ea5e9" }] },
+  { id: "a3",  site: "Shoreditch", Icon: TrendingDown,  c: "#f59e0b", category: "operations",  priority: "normal", due: 5,  title: "Wednesday lunchtime ride only 42% full", sub: "Cadence Control · 12:30 · Shoreditch", actions: [{ label: "Promote", doneLabel: "Promoting", c: "#f59e0b" }] },
+  { id: "a7",  site: "Shoreditch", Icon: Wrench,        c: "#0ea5e9", category: "maintenance", priority: "normal", due: 10, title: "Quarterly service: Studio 2 bikes 1–10", sub: "Shoreditch · book the technician", actions: [{ label: "Schedule", doneLabel: "Scheduled", c: "#0ea5e9" }] },
   { id: "a9",  Icon: Clock,         c: "#f59e0b", category: "operations",  priority: "normal", due: 12, title: "Renew music licence", sub: "Covers class playlists at both studios", actions: [{ label: "Renew", doneLabel: "Renewed", c: "#f59e0b" }] },
-  { id: "a8",  Icon: Wrench,        c: "#0ea5e9", category: "maintenance", priority: "normal", due: 24, title: "Replace worn pedal straps", sub: "Studio 1 · 6 bikes flagged by instructors", actions: [{ label: "Order", doneLabel: "Ordered", c: "#0ea5e9" }] },
+  { id: "a8",  site: "Hampstead",  Icon: Wrench,        c: "#0ea5e9", category: "maintenance", priority: "normal", due: 24, title: "Replace worn pedal straps", sub: "Hampstead · Studio 1 · 6 bikes flagged by instructors", actions: [{ label: "Order", doneLabel: "Ordered", c: "#0ea5e9" }] },
   { id: "a11", Icon: Sparkles,      c: "#8b5cf6", category: "operations",  priority: "normal", due: 45, title: "Plan the summer timetable", sub: "Review demand before instructors pick slots", actions: [{ label: "Start", doneLabel: "Started", c: "#8b5cf6" }] },
 ]
 const TASK_TABS   = [["all", "All"], ["urgent", "Urgent"], ["approvals", "Approvals"], ["operations", "Operations"], ["maintenance", "Maintenance"]]
@@ -2240,7 +2257,7 @@ export function OwnerCalendarPage({ darkMode, onToggleDarkMode, onNavigate, ops 
   const t = tk(darkMode)
   const [view, setView]     = useState("week")
   const [anchor, setAnchor] = useState(OWNER_TODAY)
-  const [studio, setStudio] = useState("all")
+  const [studio, setStudio] = useState(SITE_STUDIO[ops.site] || "all")   // opens on the site picked in Overview
   const [hidden, setHidden] = useState([])
   const [picked, setPicked] = useState(null)   // { item } or { day }
 
@@ -2418,6 +2435,10 @@ export function OwnerOverviewPage({ darkMode, onToggleDarkMode, onNavigate, chan
   const [tab, setTab]           = useState("all")
   const [range, setRange]       = useState(7)
   const [openTask, setOpenTask] = useState(null)   // task whose detail overlay is open
+  // Which studio you're managing — kept in App (ops) so the choice sticks across owner pages
+  const site = ops.site || "all"
+  const setSite = s => setOps?.(o => ({ ...o, site: s }))
+  const atSite = a => site === "all" || !a.site || a.site === site
   // Task progress lives in App (ops), so it survives page changes and feeds the studio calendar
   const tasks = OWNER_TASKS_SEED.map(a => ({ ...a, kind: TASK_KINDS[a.id], doneLabel: ops.done[a.id] || null }))
   const finish = (id, label, extra = {}) => setOps?.(o => ({
@@ -2430,12 +2451,16 @@ export function OwnerOverviewPage({ darkMode, onToggleDarkMode, onNavigate, chan
   // Instructor class edits arrive as approvals
   const requestTasks = changeRequests.map(r => ({
     id: r.id, Icon: Sparkles, c: "#8b5cf6", category: "approvals", priority: "normal", due: 2, kind: "change-request", request: r,
+    site: siteOfText(r.location) || (r.studio === "Studio 2" ? "Shoreditch" : "Hampstead"),
     title: `${r.instructor} wants to change ${r.className}`, sub: `${r.when} · ${r.studio} · ${r.summary}`, note: r.note,
     actions: [{ label: "Review", c: "#8b5cf6" }],
     doneLabel: r.status === "approved" ? "Approved" : r.status === "declined" ? "Declined" : null,
   }))
   const isUrgent = a => a.priority === "urgent" || a.due < 0
-  const inRange  = [...requestTasks, ...tasks].filter(a => a.due <= range)
+  const inRange  = [...requestTasks, ...tasks].filter(a => a.due <= range && atSite(a))
+  const openAt   = s => [...requestTasks, ...tasks].filter(a => a.due <= range && !a.doneLabel && (s === "all" || !a.site || a.site === s)).length
+  const siteRev  = site === "all" ? null : SITE_STATS[site]
+  const revShare = siteRev ? siteRev.revenue / 25300 : 1
   const matches  = (a, key) => key === "all" || (key === "urgent" ? isUrgent(a) : a.category === key)
   const openIn   = key => inRange.filter(a => !a.doneLabel && matches(a, key)).length
   const openCount = openIn("all")
@@ -2450,14 +2475,33 @@ export function OwnerOverviewPage({ darkMode, onToggleDarkMode, onNavigate, chan
     { key: "Revenue", label: "Revenue", sub: "Trends & breakdown", Icon: Wallet, c: GREEN },
     { key: "Classes", label: "Class performance", sub: "Occupancy & fixes", Icon: Activity, c: "#0ea5e9" },
     { key: "Instructors", label: "Instructors", sub: "Leaderboard & ratings", Icon: Award, c: "#8b5cf6" },
-    { key: "Riders", label: "Rider CRM", sub: "642 members", Icon: Users, c: "#ec4899" },
+    { key: "Riders", label: "Rider CRM", sub: `${siteRev ? siteRev.members[0] : 642} members`, Icon: Users, c: "#ec4899" },
   ]
   return (
     <Shell>
-      <OwnerHead darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} title="Studio Overview" sub="CycleHQ · Hampstead & Shoreditch" />
+      <OwnerHead darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} title="Studio Overview" sub={`CycleHQ · ${site === "all" ? "Hampstead & Shoreditch" : site}`} />
+
+      {/* Studio switcher — both sites together, or one at a time */}
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
+        <div role="tablist" aria-label="Studio" className={`flex w-full sm:inline-flex sm:w-auto rounded-xl p-1 ${darkMode ? "bg-gray-800" : "bg-gray-100"}`}>
+          {OWNER_SITES.map(([key, label]) => {
+            const on = site === key, n = openAt(key)
+            return (
+              <button key={key} role="tab" aria-selected={on} onClick={() => setSite(key)}
+                className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors
+                  ${on ? (darkMode ? "bg-gray-700 text-white shadow-sm" : "bg-white text-gray-900 shadow-sm") : darkMode ? "text-gray-400 hover:text-gray-200" : "text-gray-500 hover:text-gray-800"}`}>
+                {key === "all" ? <Building2 size={13} className="hidden sm:block" /> : <MapPin size={13} className="hidden sm:block" style={on ? { color: GREEN } : undefined} />}
+                {key === "all" ? <><span className="sm:hidden">Both</span><span className="hidden sm:inline">{label}</span></> : label}
+                {n > 0 && <span className={`text-[10px] font-bold px-1.5 rounded-full ${on ? "bg-red-500/15 text-red-500" : darkMode ? "bg-gray-700 text-gray-400" : "bg-white text-gray-500"}`}>{n}</span>}
+              </button>
+            )
+          })}
+        </div>
+        {site !== "all" && <p className={`text-xs ${t.muted}`}>Showing {site} only · <button onClick={() => setSite("all")} className="font-semibold" style={{ color: GREEN }}>see both</button></p>}
+      </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-5">
-        {OWNER_KPIS.map((k, i) => <div key={i} className="pop-in" style={{ animationDelay: `${i * 60}ms` }}><StatCard darkMode={darkMode} {...k} /></div>)}
+        {siteKpis(site).map((k, i) => <div key={site + i} className="pop-in" style={{ animationDelay: `${i * 60}ms` }}><StatCard darkMode={darkMode} {...k} /></div>)}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[1.5fr_1fr] gap-4">
@@ -2530,10 +2574,10 @@ export function OwnerOverviewPage({ darkMode, onToggleDarkMode, onNavigate, chan
           <button onClick={() => onNavigate("Revenue")} className={`${t.card} p-5 text-left hover:shadow-lg transition-all`}>
             <div className="flex items-center justify-between mb-1">
               <p className={`text-sm font-semibold ${t.heading}`}>Revenue this month</p>
-              <span className="flex items-center gap-0.5 text-xs font-semibold text-[#00aa13]"><TrendingUp size={12} />9%</span>
+              <span className="flex items-center gap-0.5 text-xs font-semibold text-[#00aa13]"><TrendingUp size={12} />{siteRev ? siteRev.revTrend : 9}%</span>
             </div>
-            <p className={`text-3xl font-bold tracking-tight ${t.heading} mb-2`}>£25,300</p>
-            <AreaTrend points={REVENUE.monthly} labels={REVENUE.monthLabels} valueFmt={v => `£${v}k`} darkMode={darkMode} color={GREEN} height={90} />
+            <p className={`text-3xl font-bold tracking-tight ${t.heading} mb-2`}>£{(siteRev ? siteRev.revenue : 25300).toLocaleString("en-GB")}</p>
+            <AreaTrend key={site} points={REVENUE.monthly.map(v => Math.round(v * revShare * 10) / 10)} labels={REVENUE.monthLabels} valueFmt={v => `£${v}k`} darkMode={darkMode} color={GREEN} height={90} />
             <p className="text-xs font-semibold text-[#00aa13] mt-2">View revenue →</p>
           </button>
           <div className={`${t.card} p-3`}>
